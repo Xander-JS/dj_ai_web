@@ -11,6 +11,26 @@
   font-weight: var(--font-weight-medium);
 }
 
+.input-field-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.input-field-with-icon {
+  padding-left: 38px;
+}
+
 .input-field {
   width: 100%;
   height: var(--size-md);

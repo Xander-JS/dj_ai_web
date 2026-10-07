@@ -14,7 +14,7 @@
   position: relative;
   display: inline-block;
   width: 44px;
-  height: 24px;
+  height: var(--size-xs);
 }
 
 .switch input {

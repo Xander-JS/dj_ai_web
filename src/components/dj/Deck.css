@@ -150,8 +150,8 @@
 
 /* Button overrides for DJ feel */
 .btn-dj {
-  width: 64px;
-  height: 48px;
+  width: var(--space-16);
+  height: var(--size-lg);
   font-weight: var(--font-weight-bold);
   font-size: var(--text-sm);
   border-radius: var(--radius-md);
@@ -215,4 +215,12 @@
 .deck-pitch-slider-wrapper {
   flex: 1;
   padding: var(--space-2) 0;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes moveWave {
+  100% { background-position: 100px 0; }
 }

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
 import { MOCK_LIBRARY } from '../mock/library';
+import '../components/ui/Table.css';
 import './Library.css';
 import { clsx } from 'clsx';
 
@@ -36,10 +37,11 @@ export const Library: React.FC = () => {
         <h2 className="library-title">{t('library.title')}</h2>
         
         <div className="library-toolbar">
-          <div className="library-search-container">
-            <Search size={18} className="library-search-icon" />
-            <Input placeholder={t('library.search_tracks')} className="library-search-input" />
-          </div>
+          <Input 
+            placeholder={t('library.search_tracks')} 
+            icon={<Search size={18} />}
+            wrapperClassName="library-search-container" 
+          />
           
           <div className="library-filters">
             <Button 

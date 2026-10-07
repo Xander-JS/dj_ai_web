@@ -111,11 +111,6 @@ export const Deck: React.FC<DeckProps> = ({
 
       </div>
 
-      {/* CSS Animations directly in a style tag for simplicity of the mockup */}
-      <style>{`
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-        @keyframes moveWave { 100% { background-position: 100px 0; } }
-      `}</style>
     </div>
   );
 };

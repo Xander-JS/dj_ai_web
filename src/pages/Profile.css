@@ -111,8 +111,8 @@
 }
 
 .achievement-icon {
-  width: 48px;
-  height: 48px;
+  width: var(--size-lg);
+  height: var(--size-lg);
   background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
   color: var(--color-warning);
   border-radius: var(--radius-full);

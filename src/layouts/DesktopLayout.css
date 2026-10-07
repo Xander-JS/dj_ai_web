@@ -96,21 +96,6 @@
   margin: 0 var(--space-8);
 }
 
-.header-search-inner {
-  position: relative;
-}
-
-.header-search-icon {
-  position: absolute;
-  left: 12px;
-  top: 11px;
-  color: var(--text-tertiary);
-}
-
-.header-search-input {
-  padding-left: 38px;
-}
-
 .header-actions {
   display: flex;
   align-items: center;

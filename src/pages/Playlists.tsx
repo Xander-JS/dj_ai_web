@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { StateView } from '../components/ui/StateView';
 import { MOCK_PLAYLISTS } from '../mock/playlists';
 import { clsx } from 'clsx';
+import '../components/ui/Table.css';
 import './Playlists.css';
 
 export const Playlists: React.FC = () => {

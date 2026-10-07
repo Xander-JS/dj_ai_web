@@ -20,12 +20,11 @@ export const Header: React.FC = () => {
         </Link>
       </div>
       
-      <div className="header-search-container">
-        <div className="header-search-inner">
-          <Search size={18} className="header-search-icon" />
-          <Input placeholder={t('common.search')} className="header-search-input" />
-        </div>
-      </div>
+      <Input 
+        placeholder={t('common.search')} 
+        icon={<Search size={18} />}
+        wrapperClassName="header-search-container" 
+      />
 
       <div className="header-actions">
         <IconButton 

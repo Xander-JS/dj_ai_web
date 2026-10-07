@@ -1,0 +1,133 @@
+.playlists-container {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.playlists-sidebar {
+  width: 300px;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+}
+
+.playlists-sidebar-header {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.playlists-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.playlist-item:hover {
+  background-color: var(--bg-surface-hover);
+}
+
+.playlist-item.active {
+  background-color: var(--bg-surface-active);
+}
+
+.playlist-cover-mini {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.playlist-info-mini {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.playlist-name-mini {
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-count-mini {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.playlist-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-base);
+  overflow: hidden;
+}
+
+.playlist-detail-header {
+  padding: var(--space-8);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+}
+
+.playlist-cover-large {
+  width: 200px;
+  height: 200px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.playlist-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.playlist-detail-title {
+  font-size: var(--text-4xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.playlist-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.playlist-detail-actions {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.playlist-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  gap: var(--space-4);
+}

@@ -37,5 +37,13 @@
     "col_key": "Tono",
     "col_energy": "Energía",
     "col_duration": "Duración"
+  },
+  "playlists": {
+    "title": "Mis Playlists",
+    "create": "Nueva Playlist",
+    "empty_title": "No hay playlist seleccionada",
+    "empty_desc": "Selecciona una playlist de la izquierda o crea una nueva.",
+    "tracks_count": "{{count}} pistas",
+    "total_duration": "Duración total: {{time}}"
   }
 }

@@ -37,5 +37,13 @@
     "col_key": "Key",
     "col_energy": "Energy",
     "col_duration": "Time"
+  },
+  "playlists": {
+    "title": "My Playlists",
+    "create": "New Playlist",
+    "empty_title": "No playlist selected",
+    "empty_desc": "Select a playlist from the left or create a new one.",
+    "tracks_count": "{{count}} tracks",
+    "total_duration": "Total time: {{time}}"
   }
 }

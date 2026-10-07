@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Settings as SettingsIcon, Palette, Globe, Volume2, PlayCircle, Keyboard, Library } from 'lucide-react';
 import { Switch } from '../components/ui/Switch';

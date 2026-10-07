@@ -1,13 +1,10 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import { Deck } from '../components/dj/Deck';
 import { MixerConsole } from '../components/dj/MixerConsole';
 import { MOCK_LIBRARY } from '../mock/library';
 import './Mixer.css';
 
 export const Mixer: React.FC = () => {
-  const { t } = useTranslation();
-
   const trackA = MOCK_LIBRARY[0];
   const trackB = MOCK_LIBRARY[1];
 

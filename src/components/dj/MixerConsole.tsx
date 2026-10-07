@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
 import './MixerConsole.css';
 
-const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean }> = ({ channelName, isPlaying }) => {
+const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean; vuLevel: number }> = ({ channelName, isPlaying, vuLevel }) => {
   const { t } = useTranslation();
   
   // Simulated state for visual feedback
@@ -58,7 +58,7 @@ const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean }> = ({ 
           <div 
             className="vu-meter-fill" 
             style={{ 
-              height: isPlaying ? `${Math.random() * 30 + 50}%` : '0%',
+              height: isPlaying ? `${vuLevel}%` : '0%',
               transition: 'height 0.1s ease'
             }}
           ></div>
@@ -68,13 +68,20 @@ const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean }> = ({ 
   );
 };
 
+const VU_UPDATE_INTERVAL_MS = 150;
+const VU_MIN_LEVEL = 50;
+const VU_LEVEL_RANGE = 30;
+
 export const MixerConsole: React.FC = () => {
   const [crossfader, setCrossfader] = useState(50);
-  // Just simulating random interval for VU meters
-  const [tick, setTick] = useState(0);
+  // Simulated VU meter level, refreshed on an interval (randomness kept out of render)
+  const [vuLevel, setVuLevel] = useState(VU_MIN_LEVEL);
 
-  React.useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 150);
+  useEffect(() => {
+    const interval = setInterval(
+      () => setVuLevel(Math.random() * VU_LEVEL_RANGE + VU_MIN_LEVEL),
+      VU_UPDATE_INTERVAL_MS
+    );
     return () => clearInterval(interval);
   }, []);
 
@@ -82,9 +89,8 @@ export const MixerConsole: React.FC = () => {
     <div className="mixer-console">
       
       <div className="mixer-channels-area">
-        {/* We pass tick just to force a re-render for the simulated VU meter animation */}
-        <ChannelStrip channelName="1" isPlaying={true} key={`ch1-${tick}`} />
-        <ChannelStrip channelName="2" isPlaying={false} key={`ch2-${tick}`} />
+        <ChannelStrip channelName="1" isPlaying={true} vuLevel={vuLevel} />
+        <ChannelStrip channelName="2" isPlaying={false} vuLevel={vuLevel} />
       </div>
 
       <div className="mixer-crossfader-area">

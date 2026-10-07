@@ -1,4 +1,4 @@
-import React, { InputHTMLAttributes } from 'react';
+import React, { type InputHTMLAttributes } from 'react';
 import { clsx } from 'clsx';
 import './Slider.css';
 

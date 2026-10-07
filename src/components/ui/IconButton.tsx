@@ -1,4 +1,4 @@
-import React, { ButtonHTMLAttributes } from 'react';
+import React, { type ButtonHTMLAttributes } from 'react';
 import { clsx } from 'clsx';
 import './Button.css'; // Reuses the button styles
 import './IconButton.css'; // Adds specific icon button padding

@@ -1,0 +1,182 @@
+.dj-deck {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  height: 100%;
+}
+
+.deck-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--bg-surface-hover);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.deck-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.deck-track-title {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-base);
+  color: var(--color-primary-500);
+}
+
+.deck-track-artist {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.deck-stats {
+  display: flex;
+  gap: var(--space-4);
+  font-family: var(--font-family-mono);
+  font-size: var(--text-sm);
+}
+
+.deck-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.deck-stat-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+.deck-waveform-container {
+  height: 80px;
+  background-color: var(--bg-base);
+  border-bottom: 1px solid var(--border-subtle);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Simulated Waveform */
+.deck-waveform-mock {
+  width: 100%;
+  height: 60%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-primary-500) 0%,
+    var(--color-primary-500) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  opacity: 0.8;
+}
+
+.deck-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  background-color: var(--color-error);
+  z-index: 10;
+}
+
+.deck-controls {
+  display: flex;
+  flex: 1;
+  padding: var(--space-4);
+  gap: var(--space-4);
+}
+
+.deck-jog-wheel-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deck-jog-wheel {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 4px solid var(--border-strong);
+  background-color: var(--bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: var(--shadow-inner);
+}
+
+.deck-jog-wheel-inner {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--bg-surface-hover) 0deg, var(--bg-surface) 360deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deck-jog-marker {
+  position: absolute;
+  top: 10px;
+  width: 4px;
+  height: 20px;
+  background-color: var(--color-primary-500);
+  border-radius: var(--radius-full);
+}
+
+.deck-transport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.deck-pitch-slider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  padding-bottom: var(--space-4);
+}
+
+/* Button overrides for DJ feel */
+.btn-dj {
+  width: 64px;
+  height: 48px;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+  text-transform: uppercase;
+}
+
+.btn-dj-play {
+  background-color: var(--color-success);
+  color: var(--bg-base);
+}
+
+.btn-dj-play:hover {
+  filter: brightness(1.1);
+}
+
+.btn-dj-cue {
+  background-color: var(--color-warning);
+  color: var(--bg-base);
+}
+
+.btn-dj-cue:hover {
+  filter: brightness(1.1);
+}
+
+.btn-dj-sync {
+  background-color: var(--color-primary-500);
+  color: var(--text-inverse);
+}

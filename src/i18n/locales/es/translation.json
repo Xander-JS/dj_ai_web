@@ -55,5 +55,14 @@
     "repeat": "Repetir",
     "volume": "Volumen",
     "queue": "Cola de reproducción"
+  },
+  "dj": {
+    "deck_a": "DECK A",
+    "deck_b": "DECK B",
+    "sync": "SYNC",
+    "cue": "CUE",
+    "play": "PLAY",
+    "tempo": "TEMPO",
+    "key_lock": "KEY"
   }
 }

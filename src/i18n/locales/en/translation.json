@@ -55,5 +55,14 @@
     "repeat": "Repeat",
     "volume": "Volume",
     "queue": "Playback queue"
+  },
+  "dj": {
+    "deck_a": "DECK A",
+    "deck_b": "DECK B",
+    "sync": "SYNC",
+    "cue": "CUE",
+    "play": "PLAY",
+    "tempo": "TEMPO",
+    "key_lock": "KEY"
   }
 }

@@ -1,0 +1,24 @@
+.mixer-page-container {
+  display: flex;
+  height: 100%;
+  padding: var(--space-4);
+  gap: var(--space-4);
+  background-color: var(--bg-base);
+}
+
+.deck-container {
+  flex: 2;
+  min-width: 400px;
+}
+
+.mixer-console-placeholder {
+  flex: 1;
+  min-width: 250px;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+}

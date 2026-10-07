@@ -90,7 +90,7 @@ export const Library: React.FC = () => {
               const isSelected = selectedTracks.has(track.id);
               return (
                 <tr key={track.id} className={clsx(isSelected && 'selected')}>
-                  <td className="col-checkbox cursor-pointer" onClick={() => toggleSelection(track.id)}>
+                  <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
                     {isSelected ? <CheckSquare size={16} color="var(--color-primary-500)" /> : <Square size={16} color="var(--text-tertiary)" />}
                   </td>
                   <td>
@@ -100,7 +100,7 @@ export const Library: React.FC = () => {
                     </div>
                   </td>
                   <td>{track.artist}</td>
-                  <td className="text-secondary">{track.album}</td>
+                  <td className="track-album">{track.album}</td>
                   <td>{track.bpm}</td>
                   <td>
                     <Badge variant="outline">{track.key}</Badge>
@@ -113,7 +113,7 @@ export const Library: React.FC = () => {
                       <span className="energy-bar-value">{track.energy}</span>
                     </div>
                   </td>
-                  <td className="text-secondary">{track.duration}</td>
+                  <td className="track-duration">{track.duration}</td>
                   <td className="col-actions">
                     <div className="track-actions-container">
                       <IconButton icon={<Play size={16} />} size="sm" />

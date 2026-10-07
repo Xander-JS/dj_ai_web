@@ -48,13 +48,13 @@ export const PlayerBar: React.FC = () => {
             <IconButton 
               icon={<Shuffle size={18} />} 
               title={t('player.shuffle')}
-              className={clsx('player-btn', isShuffle ? 'active-icon' : 'inactive-icon')}
+              className={clsx('player-btn player-btn-subtle', isShuffle && 'active')}
               onClick={() => setIsShuffle(!isShuffle)}
             />
             <IconButton 
               icon={<SkipBack size={20} />} 
               title={t('player.prev')} 
-              className="player-btn text-primary"
+              className="player-btn"
             />
             
             <button 
@@ -68,12 +68,12 @@ export const PlayerBar: React.FC = () => {
             <IconButton 
               icon={<SkipForward size={20} />} 
               title={t('player.next')} 
-              className="player-btn text-primary"
+              className="player-btn"
             />
             <IconButton 
               icon={<Repeat size={18} />} 
               title={t('player.repeat')}
-              className={clsx('player-btn', isRepeat ? 'active-icon' : 'inactive-icon')}
+              className={clsx('player-btn player-btn-subtle', isRepeat && 'active')}
               onClick={() => setIsRepeat(!isRepeat)}
             />
           </div>
@@ -95,13 +95,13 @@ export const PlayerBar: React.FC = () => {
           <IconButton 
             icon={<ListMusic size={18} />} 
             title={t('player.queue')} 
-            className="player-btn inactive-icon"
+            className="player-btn player-btn-subtle"
           />
           <div className="player-volume-container">
             <IconButton 
               icon={isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />} 
               size="sm" 
-              className="player-btn inactive-icon"
+              className="player-btn player-btn-subtle"
               onClick={toggleMute}
               title={t('player.volume')}
             />

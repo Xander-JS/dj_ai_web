@@ -70,14 +70,41 @@
   background-color: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
 }
 
-.col-actions {
+/* Columns & cells (shared by every view that renders a .library-table) */
+.library-table .col-actions {
   width: 60px;
   text-align: center;
 }
 
-.col-checkbox {
+.library-table .col-checkbox {
   width: 40px;
   text-align: center;
+}
+
+.library-table td.col-checkbox {
+  cursor: pointer;
+}
+
+.library-table .col-index {
+  width: 40px;
+}
+
+.library-table .col-duration {
+  text-align: right;
+}
+
+.library-table .track-index {
+  color: var(--text-tertiary);
+}
+
+.library-table .track-title {
+  font-weight: var(--font-weight-medium);
+}
+
+.library-table .track-artist,
+.library-table .track-album,
+.library-table .track-duration {
+  color: var(--text-secondary);
 }
 
 .energy-bar-container {
@@ -120,18 +147,10 @@
   padding-left: 38px;
 }
 
-.cursor-pointer {
-  cursor: pointer;
-}
-
 .track-title-container {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.text-secondary {
-  color: var(--text-secondary);
 }
 
 .energy-bar-value {

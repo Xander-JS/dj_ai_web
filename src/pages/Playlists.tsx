@@ -92,7 +92,7 @@ export const Playlists: React.FC = () => {
                         <td className="track-title">{track.title}</td>
                         <td className="track-artist">{track.artist}</td>
                         <td>{track.bpm}</td>
-                        <td className="track-duration">{track.duration}</td>
+                        <td className="track-duration col-duration">{track.duration}</td>
                       </tr>
                     ))}
                   </tbody>

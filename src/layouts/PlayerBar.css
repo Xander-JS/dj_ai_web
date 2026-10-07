@@ -111,16 +111,13 @@
   width: 120px;
 }
 
-.active-icon {
-  color: var(--color-primary-500);
-}
-
-.inactive-icon {
+/* Secondary player controls (shuffle, repeat, queue, volume) */
+.player-btn.player-btn-subtle {
   color: var(--text-secondary);
 }
 
-.text-primary {
-  color: var(--text-primary);
+.player-btn.active {
+  color: var(--color-primary-500);
 }
 
 .play-icon-offset {

@@ -1,111 +1,201 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap');
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  /* ==========================================================================
+     DESIGN SYSTEM TOKENS
+     ========================================================================== */
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* TYPOGRAPHY */
+  --font-family-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family-heading: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 1.875rem;   /* 30px */
+  --text-4xl: 2.25rem;    /* 36px */
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-none: 1;
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-loose: 2;
+
+  /* SPACING (Base 4px) */
+  --space-0: 0;
+  --space-1: 0.25rem; /* 4px */
+  --space-2: 0.5rem;  /* 8px */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem;    /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem;  /* 24px */
+  --space-8: 2rem;    /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem;   /* 48px */
+  --space-16: 4rem;   /* 64px */
+
+  /* SIZING (Component dimensions) */
+  --size-xs: 1.5rem;  /* 24px */
+  --size-sm: 2rem;    /* 32px */
+  --size-md: 2.5rem;  /* 40px */
+  --size-lg: 3rem;    /* 48px */
+  --size-xl: 3.5rem;  /* 56px */
+
+  /* BORDER RADIUS */
+  --radius-none: 0;
+  --radius-sm: 0.25rem; /* 4px */
+  --radius-md: 0.375rem; /* 6px */
+  --radius-lg: 0.5rem;   /* 8px */
+  --radius-xl: 0.75rem;  /* 12px */
+  --radius-2xl: 1rem;    /* 16px */
+  --radius-full: 9999px;
+
+  /* SHADOWS & ELEVATION */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+
+  /* OPACITY & STATES */
+  --opacity-hover: 0.85;
+  --opacity-active: 0.7;
+  --opacity-disabled: 0.5;
+
+  /* TRANSITIONS */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+/* ==========================================================================
+   THEME COLORS (LIGHT - Default)
+   ========================================================================== */
+:root {
+  /* Brand Hues (Purple/Pink modern tech vibe) */
+  --hue-primary: 260;    
+  --hue-secondary: 320;  
+  --hue-neutral: 240;
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+  /* Brand Colors */
+  --color-primary-300: hsl(var(--hue-primary), 80%, 70%);
+  --color-primary-500: hsl(var(--hue-primary), 70%, 55%);
+  --color-primary-600: hsl(var(--hue-primary), 75%, 45%);
+  
+  --color-secondary-500: hsl(var(--hue-secondary), 75%, 55%);
+
+  /* Semantic Colors */
+  --color-success: hsl(142, 70%, 45%);
+  --color-warning: hsl(38, 90%, 50%);
+  --color-error: hsl(348, 80%, 50%);
+
+  /* Backgrounds & Surfaces (Light) */
+  --bg-base: hsl(var(--hue-neutral), 10%, 97%);
+  --bg-surface: hsl(0, 0%, 100%);
+  --bg-surface-hover: hsl(var(--hue-neutral), 15%, 94%);
+  --bg-surface-active: hsl(var(--hue-neutral), 15%, 90%);
+  --bg-elevated: hsl(0, 0%, 100%);
+  
+  /* Text & Content (Light) */
+  --text-primary: hsl(var(--hue-neutral), 20%, 10%);
+  --text-secondary: hsl(var(--hue-neutral), 10%, 40%);
+  --text-tertiary: hsl(var(--hue-neutral), 10%, 60%);
+  --text-inverse: hsl(0, 0%, 100%);
+
+  /* Borders & Dividers (Light) */
+  --border-subtle: hsl(var(--hue-neutral), 15%, 90%);
+  --border-base: hsl(var(--hue-neutral), 15%, 85%);
+  --border-strong: hsl(var(--hue-neutral), 20%, 70%);
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+/* ==========================================================================
+   THEME COLORS (DARK)
+   ========================================================================== */
+[data-theme='dark'] {
+  /* Backgrounds & Surfaces (Dark - DJ App Style: Very Dark/Sleek) */
+  --bg-base: hsl(var(--hue-neutral), 10%, 6%);
+  --bg-surface: hsl(var(--hue-neutral), 10%, 10%);
+  --bg-surface-hover: hsl(var(--hue-neutral), 10%, 14%);
+  --bg-surface-active: hsl(var(--hue-neutral), 10%, 18%);
+  --bg-elevated: hsl(var(--hue-neutral), 12%, 16%);
+  
+  /* Text & Content (Dark) */
+  --text-primary: hsl(0, 0%, 98%);
+  --text-secondary: hsl(var(--hue-neutral), 10%, 70%);
+  --text-tertiary: hsl(var(--hue-neutral), 10%, 50%);
+  --text-inverse: hsl(var(--hue-neutral), 20%, 10%);
+
+  /* Borders & Dividers (Dark) */
+  --border-subtle: hsl(var(--hue-neutral), 10%, 14%);
+  --border-base: hsl(var(--hue-neutral), 10%, 20%);
+  --border-strong: hsl(var(--hue-neutral), 15%, 35%);
+
+  /* Update shadow for dark mode */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.8), 0 4px 6px -4px rgb(0 0 0 / 0.8);
+}
+
+/* ==========================================================================
+   GLOBAL RESET & BASE STYLES
+   ========================================================================== */
+*, *::before, *::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
 }
 
 body {
+  font-family: var(--font-family-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  line-height: var(--line-height-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input, optgroup, select, textarea {
+  font-family: inherit;
+  font-size: 100%;
+  line-height: 1.15;
   margin: 0;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+/* Base Root Layout */
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* For desktop app feel */
 }

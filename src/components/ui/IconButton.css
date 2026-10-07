@@ -1,0 +1,38 @@
+.icon-btn {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full); /* Usually icon buttons are circular */
+}
+
+/* Sizes override */
+.icon-btn-sm {
+  width: var(--size-sm);
+  height: var(--size-sm);
+}
+
+.icon-btn-sm svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn-md {
+  width: var(--size-md);
+  height: var(--size-md);
+}
+
+.icon-btn-md svg {
+  width: 20px;
+  height: 20px;
+}
+
+.icon-btn-lg {
+  width: var(--size-lg);
+  height: var(--size-lg);
+}
+
+.icon-btn-lg svg {
+  width: 24px;
+  height: 24px;
+}

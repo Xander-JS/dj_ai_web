@@ -1,0 +1,22 @@
+.card {
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+
+.card:hover.card-hoverable {
+  border-color: var(--border-base);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-elevated {
+  box-shadow: var(--shadow-md);
+  background-color: var(--bg-elevated);
+}
+
+.card-body {
+  padding: var(--space-4);
+}

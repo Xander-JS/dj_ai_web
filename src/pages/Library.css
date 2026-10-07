@@ -67,7 +67,7 @@
 
 /* Selected row */
 .library-table tbody tr.selected {
-  background-color: rgba(var(--color-primary-500), 0.1);
+  background-color: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
 }
 
 .col-actions {

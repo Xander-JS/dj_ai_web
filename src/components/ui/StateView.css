@@ -43,22 +43,22 @@
 }
 
 .state-loading .state-icon-wrapper {
-  background-color: rgba(var(--color-primary-500), 0.1);
+  background-color: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
   color: var(--color-primary-500);
 }
 
 .state-error .state-icon-wrapper {
-  background-color: rgba(var(--color-error), 0.1);
+  background-color: color-mix(in srgb, var(--color-error) 10%, transparent);
   color: var(--color-error);
 }
 
 .state-success .state-icon-wrapper {
-  background-color: rgba(var(--color-success), 0.1);
+  background-color: color-mix(in srgb, var(--color-success) 10%, transparent);
   color: var(--color-success);
 }
 
 .state-warning .state-icon-wrapper {
-  background-color: rgba(var(--color-warning), 0.1);
+  background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
   color: var(--color-warning);
 }
 

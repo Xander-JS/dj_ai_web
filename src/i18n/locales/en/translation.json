@@ -79,5 +79,31 @@
     "error_desc": "We couldn't process the request.",
     "empty_title": "No results",
     "empty_desc": "We couldn't find any data to display."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "general": "General",
+      "appearance": "Appearance",
+      "language": "Language",
+      "audio": "Audio",
+      "playback": "Playback",
+      "shortcuts": "Shortcuts",
+      "library": "Library"
+    },
+    "appearance_title": "Application Appearance",
+    "theme_dark": "Dark mode",
+    "language_title": "Interface Language",
+    "language_es": "Spanish",
+    "language_en": "English"
+  },
+  "profile": {
+    "title": "My Profile",
+    "followers": "Followers",
+    "following": "Following",
+    "sessions": "Recorded Sessions",
+    "achievements": "Achievements",
+    "history": "Activity History",
+    "edit": "Edit Profile"
   }
 }

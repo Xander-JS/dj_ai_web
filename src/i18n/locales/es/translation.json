@@ -79,5 +79,31 @@
     "error_desc": "No se ha podido procesar la solicitud.",
     "empty_title": "No hay resultados",
     "empty_desc": "No encontramos datos para mostrar."
+  },
+  "settings": {
+    "title": "Configuración",
+    "tabs": {
+      "general": "General",
+      "appearance": "Apariencia",
+      "language": "Idioma",
+      "audio": "Audio",
+      "playback": "Reproducción",
+      "shortcuts": "Atajos",
+      "library": "Biblioteca"
+    },
+    "appearance_title": "Apariencia de la aplicación",
+    "theme_dark": "Modo oscuro",
+    "language_title": "Idioma de la interfaz",
+    "language_es": "Español",
+    "language_en": "Inglés"
+  },
+  "profile": {
+    "title": "Mi Perfil",
+    "followers": "Seguidores",
+    "following": "Siguiendo",
+    "sessions": "Sesiones grabadas",
+    "achievements": "Logros",
+    "history": "Historial de actividad",
+    "edit": "Editar perfil"
   }
 }

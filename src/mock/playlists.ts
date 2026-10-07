@@ -1,4 +1,4 @@
-import { Track, MOCK_LIBRARY } from './library';
+import { type Track, MOCK_LIBRARY } from './library';
 
 export interface Playlist {
   id: string;

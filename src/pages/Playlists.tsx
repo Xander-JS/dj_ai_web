@@ -5,7 +5,7 @@ import { IconButton } from '../components/ui/IconButton';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { StateView } from '../components/ui/StateView';
-import { MOCK_PLAYLISTS, Playlist } from '../mock/playlists';
+import { MOCK_PLAYLISTS } from '../mock/playlists';
 import { clsx } from 'clsx';
 import './Playlists.css';
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { clsx } from 'clsx';
-import { AlertCircle, CheckCircle, SearchX, Loader2, AlertTriangle, LucideIcon } from 'lucide-react';
+import { AlertCircle, CheckCircle, SearchX, Loader2, AlertTriangle, type LucideIcon } from 'lucide-react';
 import './StateView.css';
 
 export type StatusType = 'loading' | 'empty' | 'error' | 'success' | 'warning';

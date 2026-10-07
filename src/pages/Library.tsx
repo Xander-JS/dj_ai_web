@@ -5,7 +5,7 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
-import { MOCK_LIBRARY, Track } from '../mock/library';
+import { MOCK_LIBRARY } from '../mock/library';
 import './Library.css';
 import { clsx } from 'clsx';
 

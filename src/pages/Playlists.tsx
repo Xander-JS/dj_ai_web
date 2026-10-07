@@ -4,6 +4,7 @@ import { Plus, Play, MoreHorizontal, ListMusic } from 'lucide-react';
 import { IconButton } from '../components/ui/IconButton';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { StateView } from '../components/ui/StateView';
 import { MOCK_PLAYLISTS, Playlist } from '../mock/playlists';
 import { clsx } from 'clsx';
 import './Playlists.css';
@@ -97,19 +98,22 @@ export const Playlists: React.FC = () => {
                   </tbody>
                 </table>
               ) : (
-                <div className="playlist-empty-state" style={{ height: '200px' }}>
-                  <ListMusic size={48} />
-                  <p>{t('playlists.empty_desc')}</p>
-                </div>
+                <StateView 
+                  status="empty" 
+                  icon={ListMusic} 
+                  title={t('playlists.empty_title')}
+                  description={t('playlists.empty_desc')} 
+                />
               )}
             </div>
           </>
         ) : (
-          <div className="playlist-empty-state">
-            <ListMusic size={64} />
-            <h2>{t('playlists.empty_title')}</h2>
-            <p>{t('playlists.empty_desc')}</p>
-          </div>
+          <StateView 
+            status="empty" 
+            icon={ListMusic} 
+            title={t('playlists.empty_title')}
+            description={t('playlists.empty_desc')} 
+          />
         )}
       </div>
 

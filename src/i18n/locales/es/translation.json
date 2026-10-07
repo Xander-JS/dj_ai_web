@@ -72,5 +72,12 @@
     "low": "LOW",
     "filter": "FILTER",
     "master": "MASTER"
+  },
+  "states": {
+    "loading": "Cargando...",
+    "error_title": "Ocurrió un error",
+    "error_desc": "No se ha podido procesar la solicitud.",
+    "empty_title": "No hay resultados",
+    "empty_desc": "No encontramos datos para mostrar."
   }
 }

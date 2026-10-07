@@ -1,0 +1,72 @@
+.state-view-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+}
+
+.state-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-2);
+}
+
+.state-view-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.state-view-desc {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  max-width: 400px;
+  margin: 0;
+}
+
+/* Status variants */
+.state-empty .state-icon-wrapper {
+  background-color: var(--bg-surface-active);
+  color: var(--text-tertiary);
+}
+
+.state-loading .state-icon-wrapper {
+  background-color: rgba(var(--color-primary-500), 0.1);
+  color: var(--color-primary-500);
+}
+
+.state-error .state-icon-wrapper {
+  background-color: rgba(var(--color-error), 0.1);
+  color: var(--color-error);
+}
+
+.state-success .state-icon-wrapper {
+  background-color: rgba(var(--color-success), 0.1);
+  color: var(--color-success);
+}
+
+.state-warning .state-icon-wrapper {
+  background-color: rgba(var(--color-warning), 0.1);
+  color: var(--color-warning);
+}
+
+/* Simple CSS spinner for loading */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}

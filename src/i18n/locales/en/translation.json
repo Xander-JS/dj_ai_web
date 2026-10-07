@@ -72,5 +72,12 @@
     "low": "LOW",
     "filter": "FILTER",
     "master": "MASTER"
+  },
+  "states": {
+    "loading": "Loading...",
+    "error_title": "An error occurred",
+    "error_desc": "We couldn't process the request.",
+    "empty_title": "No results",
+    "empty_desc": "We couldn't find any data to display."
   }
 }

@@ -180,3 +180,39 @@
   background-color: var(--color-primary-500);
   color: var(--text-inverse);
 }
+
+.deck-key-str {
+  color: var(--color-primary-500);
+}
+
+.playing-anim-wave {
+  animation: moveWave 2s linear infinite;
+}
+
+.playing-anim-spin {
+  animation: spin 1.8s linear infinite;
+}
+
+.deck-jog-wheel-text {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--border-strong);
+}
+
+.deck-pitch-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.deck-pitch-label.top {
+  margin-bottom: var(--space-2);
+}
+
+.deck-pitch-label.bottom {
+  margin-top: var(--space-2);
+}
+
+.deck-pitch-slider-wrapper {
+  flex: 1;
+  padding: var(--space-2) 0;
+}

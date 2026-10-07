@@ -11,23 +11,23 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <header className="layout-header" style={{ justifyContent: 'space-between' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-        <Link to="/dashboard" style={{ textDecoration: 'none' }}>
-          <h1 style={{ fontSize: 'var(--text-xl)', margin: 0, color: 'var(--color-primary-500)' }}>
+    <header className="layout-header layout-header-spaced">
+      <div className="header-logo-container">
+        <Link to="/dashboard" className="header-logo-link">
+          <h1 className="header-logo-text">
             SYSTEM DJ
           </h1>
         </Link>
       </div>
       
-      <div style={{ flex: 1, maxWidth: '400px', margin: '0 var(--space-8)' }}>
-        <div style={{ position: 'relative' }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '11px', color: 'var(--text-tertiary)' }} />
-          <Input placeholder={t('common.search')} style={{ paddingLeft: '38px' }} />
+      <div className="header-search-container">
+        <div className="header-search-inner">
+          <Search size={18} className="header-search-icon" />
+          <Input placeholder={t('common.search')} className="header-search-input" />
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <div className="header-actions">
         <IconButton 
           icon={<Bell size={20} />} 
           title={t('common.notifications')} 
@@ -38,7 +38,7 @@ export const Header: React.FC = () => {
           onClick={() => navigate('/settings')}
         />
         <div 
-          style={{ marginLeft: 'var(--space-2)', cursor: 'pointer' }}
+          className="header-profile"
           onClick={() => navigate('/profile')}
           title={t('navigation.profile')}
         >

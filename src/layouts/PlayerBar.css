@@ -110,3 +110,25 @@
   gap: var(--space-2);
   width: 120px;
 }
+
+.active-icon {
+  color: var(--color-primary-500);
+}
+
+.inactive-icon {
+  color: var(--text-secondary);
+}
+
+.text-primary {
+  color: var(--text-primary);
+}
+
+.play-icon-offset {
+  margin-left: 2px;
+}
+
+.player-timeline-slider-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}

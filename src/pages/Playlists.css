@@ -131,3 +131,53 @@
   color: var(--text-tertiary);
   gap: var(--space-4);
 }
+
+.playlists-title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.playlist-badge {
+  width: fit-content;
+}
+
+.playlist-detail-desc {
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.playlist-detail-author {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.playlist-tracks-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.col-index {
+  width: 40px;
+}
+
+.col-duration {
+  text-align: right;
+}
+
+.track-index {
+  color: var(--text-tertiary);
+}
+
+.track-title {
+  font-weight: var(--font-weight-medium);
+}
+
+.track-artist {
+  color: var(--text-secondary);
+}
+
+.track-duration {
+  text-align: right;
+  color: var(--text-secondary);
+}

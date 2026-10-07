@@ -17,12 +17,12 @@ export const Dashboard: React.FC = () => {
       {/* Header Area */}
       <div className="dashboard-header">
         <div>
-          <h2 style={{ fontSize: 'var(--text-3xl)', margin: 0 }}>{t('dashboard.welcome')}</h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 'var(--space-2)' }}>
+          <h2 className="dashboard-title">{t('dashboard.welcome')}</h2>
+          <p className="dashboard-subtitle">
             DJ_System v1.0
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
+        <div className="dashboard-actions">
           <Button variant="outline">{t('common.mix')}</Button>
           <Button variant="primary">
             <Play size={18} />
@@ -37,19 +37,19 @@ export const Dashboard: React.FC = () => {
         {/* Recent Tracks */}
         <Card elevated>
           <CardBody>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-              <h3 style={{ margin: 0 }}>{t('dashboard.recent')}</h3>
-              <span style={{ color: 'var(--color-primary-500)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
+            <div className="dashboard-section-header">
+              <h3 className="dashboard-section-title">{t('dashboard.recent')}</h3>
+              <span className="dashboard-view-all">
                 {t('common.view_all')}
               </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <div className="dashboard-track-list">
               {MOCK_RECENT_TRACKS.map(track => (
                 <div key={track.id} className="track-item">
                   <div className="track-info">
-                    <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--border-strong)', borderRadius: 'var(--radius-sm)' }}></div>
+                    <div className="track-cover-mini"></div>
                     <div>
-                      <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{track.title}</div>
+                      <div className="track-title">{track.title}</div>
                       <div className="track-meta">
                         <span>{track.artist}</span>
                         <span>•</span>
@@ -67,10 +67,10 @@ export const Dashboard: React.FC = () => {
         </Card>
 
         {/* Stats & Recommendations */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+        <div className="dashboard-stats-col">
           
           <Card>
-            <CardBody style={{ display: 'flex', justifyContent: 'space-around', padding: 'var(--space-6) 0' }}>
+            <CardBody className="dashboard-stats-card">
               <div className="stat-card">
                 <span className="stat-value">{MOCK_STATS.tracksPlayed}</span>
                 <span className="stat-label">{t('dashboard.tracks_played')}</span>
@@ -84,15 +84,15 @@ export const Dashboard: React.FC = () => {
 
           <Card elevated>
             <CardBody>
-              <h3 style={{ margin: '0 0 var(--space-4) 0' }}>{t('dashboard.recommendations')}</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <h3 className="dashboard-rec-title">{t('dashboard.recommendations')}</h3>
+              <div className="dashboard-rec-list">
                 {MOCK_RECOMMENDATIONS.map(rec => (
-                  <div key={rec.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-2) 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-                      <div style={{ width: '48px', height: '48px', backgroundColor: 'var(--border-base)', borderRadius: 'var(--radius-md)' }}></div>
+                  <div key={rec.id} className="dashboard-rec-item">
+                    <div className="dashboard-rec-info">
+                      <div className="dashboard-rec-cover"></div>
                       <div>
-                        <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{rec.title}</div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+                        <div className="dashboard-rec-name">{rec.title}</div>
+                        <div className="dashboard-rec-meta">
                           {rec.tracks} {t('common.tracks', 'pistas')}
                         </div>
                       </div>

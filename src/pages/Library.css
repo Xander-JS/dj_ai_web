@@ -98,3 +98,48 @@
   height: 100%;
   background-color: var(--color-primary-500);
 }
+
+.library-title {
+  font-size: var(--text-3xl);
+  margin: 0;
+}
+
+.library-search-container {
+  position: relative;
+  width: 300px;
+}
+
+.library-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 11px;
+  color: var(--text-tertiary);
+}
+
+.library-search-input {
+  padding-left: 38px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.track-title-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.energy-bar-value {
+  font-size: var(--text-xs);
+  width: 15px;
+}
+
+.track-actions-container {
+  display: flex;
+  gap: var(--space-1);
+}

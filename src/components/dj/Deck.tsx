@@ -43,10 +43,10 @@ export const Deck: React.FC<DeckProps> = ({
           </div>
           <div className="deck-stat-item">
             <span className="deck-stat-label">{t('dj.key_lock')}</span>
-            <span style={{ color: 'var(--color-primary-500)' }}>{keyStr}</span>
+            <span className="deck-key-str">{keyStr}</span>
           </div>
           <div className="deck-stat-item">
-            <span className="deck-stat-label">TIME</span>
+            <span className="deck-stat-label">{t('dj.time')}</span>
             <span>{timeRemaining}</span>
           </div>
         </div>
@@ -54,7 +54,7 @@ export const Deck: React.FC<DeckProps> = ({
 
       {/* Waveform Placeholder */}
       <div className="deck-waveform-container">
-        <div className="deck-waveform-mock" style={{ animation: isPlaying ? 'moveWave 2s linear infinite' : 'none' }}></div>
+        <div className={clsx("deck-waveform-mock", isPlaying && "playing-anim-wave")}></div>
         <div className="deck-playhead"></div>
       </div>
 
@@ -77,15 +77,15 @@ export const Deck: React.FC<DeckProps> = ({
             className={clsx('btn btn-dj', isPlaying ? 'btn-dj-play' : 'btn-outline')}
             onClick={() => setIsPlaying(!isPlaying)}
           >
-            {isPlaying ? 'PAUSE' : t('dj.play')}
+            {isPlaying ? t('player.pause').toUpperCase() : t('dj.play')}
           </button>
         </div>
 
         {/* Jog Wheel */}
         <div className="deck-jog-wheel-container">
-          <div className="deck-jog-wheel" style={{ animation: isPlaying ? 'spin 1.8s linear infinite' : 'none' }}>
+          <div className={clsx("deck-jog-wheel", isPlaying && "playing-anim-spin")}>
             <div className="deck-jog-wheel-inner">
-              <span style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--font-weight-bold)', color: 'var(--border-strong)' }}>
+              <span className="deck-jog-wheel-text">
                 {deckName}
               </span>
             </div>
@@ -95,15 +95,15 @@ export const Deck: React.FC<DeckProps> = ({
 
         {/* Pitch Slider */}
         <div className="deck-pitch-slider">
-          <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>-8%</span>
-          <div style={{ flex: 1, padding: 'var(--space-2) 0' }}>
+          <span className="deck-pitch-label top">-8%</span>
+          <div className="deck-pitch-slider-wrapper">
             <Slider 
               orientation="vertical" 
               value={pitch} 
               onChange={(e) => setPitch(Number(e.target.value))} 
             />
           </div>
-          <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: 'var(--space-2)' }}>+8%</span>
+          <span className="deck-pitch-label bottom">+8%</span>
         </div>
 
       </div>

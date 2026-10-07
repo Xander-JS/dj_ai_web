@@ -63,7 +63,8 @@
     "cue": "CUE",
     "play": "PLAY",
     "tempo": "TEMPO",
-    "key_lock": "KEY"
+    "key_lock": "KEY",
+    "time": "TIME"
   },
   "mixer": {
     "gain": "GAIN",
@@ -93,9 +94,11 @@
     },
     "appearance_title": "Apariencia de la aplicación",
     "theme_dark": "Modo oscuro",
+    "theme_dark_desc": "Activar o desactivar el tema oscuro.",
     "language_title": "Idioma de la interfaz",
     "language_es": "Español",
-    "language_en": "Inglés"
+    "language_en": "Inglés",
+    "under_construction": "Opciones de configuración de {{tab}} en construcción."
   },
   "profile": {
     "title": "Mi Perfil",

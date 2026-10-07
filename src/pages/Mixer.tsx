@@ -27,7 +27,7 @@ export const Mixer: React.FC = () => {
       </div>
 
       {/* Mixer Central Console */}
-      <div style={{ flex: 1, minWidth: '300px' }}>
+      <div className="mixer-console-container">
         <MixerConsole />
       </div>
 

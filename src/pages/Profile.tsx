@@ -52,15 +52,15 @@ export const Profile: React.FC = () => {
         <div className="profile-section">
           <h2 className="profile-section-title">{t('profile.achievements')}</h2>
           <Card>
-            <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <CardBody className="profile-achievements-list">
               {MOCK_PROFILE.achievements.map(ach => (
                 <div key={ach.id} className="achievement-item">
                   <div className="achievement-icon">
                     <Award size={24} />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 'var(--font-weight-bold)' }}>{ach.title}</div>
-                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{ach.description}</div>
+                    <div className="achievement-title">{ach.title}</div>
+                    <div className="achievement-desc">{ach.description}</div>
                   </div>
                 </div>
               ))}
@@ -72,15 +72,15 @@ export const Profile: React.FC = () => {
         <div className="profile-section">
           <h2 className="profile-section-title">{t('profile.history')}</h2>
           <Card>
-            <CardBody style={{ display: 'flex', flexDirection: 'column' }}>
+            <CardBody className="profile-history-list">
               {MOCK_PROFILE.history.map(item => (
                 <div key={item.id} className="history-item">
                   <div className="history-bullet"></div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{item.action}</div>
-                    <div style={{ color: 'var(--color-primary-500)', fontSize: 'var(--text-sm)' }}>{item.target}</div>
+                  <div className="history-content">
+                    <div className="history-action">{item.action}</div>
+                    <div className="history-target">{item.target}</div>
                   </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div className="history-date">
                     <Clock size={12} />
                     {item.date}
                   </div>

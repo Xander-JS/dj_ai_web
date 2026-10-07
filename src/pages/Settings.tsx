@@ -64,11 +64,11 @@ export const Settings: React.FC = () => {
         {activeTab === 'appearance' && (
           <div className="settings-group">
             <h3 className="settings-group-title">{t('settings.appearance_title')}</h3>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-4)', backgroundColor: 'var(--bg-base)', borderRadius: 'var(--radius-md)' }}>
+            <div className="settings-option-card">
               <div>
-                <div style={{ fontWeight: 'var(--font-weight-medium)' }}>{t('settings.theme_dark')}</div>
-                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                  Activar o desactivar el tema oscuro.
+                <div className="settings-option-title">{t('settings.theme_dark')}</div>
+                <div className="settings-option-desc">
+                  {t('settings.theme_dark_desc')}
                 </div>
               </div>
               <Switch checked={isDarkTheme} onChange={toggleTheme} />
@@ -79,7 +79,7 @@ export const Settings: React.FC = () => {
         {activeTab === 'language' && (
           <div className="settings-group">
             <h3 className="settings-group-title">{t('settings.language_title')}</h3>
-            <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
+            <div className="settings-button-group">
               <Button 
                 variant={i18n.language === 'es' ? 'primary' : 'outline'}
                 onClick={() => changeLanguage('es')}
@@ -98,8 +98,8 @@ export const Settings: React.FC = () => {
 
         {/* Placeholders for other tabs */}
         {['general', 'audio', 'playback', 'shortcuts', 'library'].includes(activeTab) && (
-          <div style={{ color: 'var(--text-secondary)' }}>
-            Opciones de configuración de {activeTab} en construcción.
+          <div className="settings-placeholder">
+            {t('settings.under_construction', { tab: tabs.find(t => t.id === activeTab)?.label })}
           </div>
         )}
 

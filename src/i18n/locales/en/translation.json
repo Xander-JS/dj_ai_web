@@ -63,7 +63,8 @@
     "cue": "CUE",
     "play": "PLAY",
     "tempo": "TEMPO",
-    "key_lock": "KEY"
+    "key_lock": "KEY",
+    "time": "TIME"
   },
   "mixer": {
     "gain": "GAIN",
@@ -93,9 +94,11 @@
     },
     "appearance_title": "Application Appearance",
     "theme_dark": "Dark mode",
+    "theme_dark_desc": "Enable or disable dark theme.",
     "language_title": "Interface Language",
     "language_es": "Spanish",
-    "language_en": "English"
+    "language_en": "English",
+    "under_construction": "{{tab}} settings are under construction."
   },
   "profile": {
     "title": "My Profile",

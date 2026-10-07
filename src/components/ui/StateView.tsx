@@ -61,7 +61,7 @@ export const StateView: React.FC<StateViewProps> = ({
       </div>
       {finalTitle && <h3 className="state-view-title">{finalTitle}</h3>}
       {finalDesc && <p className="state-view-desc">{finalDesc}</p>}
-      {action && <div style={{ marginTop: 'var(--space-4)' }}>{action}</div>}
+      {action && <div className="state-view-action">{action}</div>}
     </div>
   );
 };

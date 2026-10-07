@@ -91,7 +91,7 @@ export const Library: React.FC = () => {
               return (
                 <tr key={track.id} className={clsx(isSelected && 'selected')}>
                   <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
-                    {isSelected ? <CheckSquare size={16} color="var(--color-primary-500)" /> : <Square size={16} color="var(--text-tertiary)" />}
+                    {isSelected ? <CheckSquare size={16} className="icon-selected" /> : <Square size={16} className="icon-unselected" />}
                   </td>
                   <td>
                     <div className="track-title-container">

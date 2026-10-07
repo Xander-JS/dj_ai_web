@@ -40,7 +40,7 @@ const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean; vuLevel
         </div>
         
         <div className="mixer-control-group">
-          <span className="mixer-control-label" style={{ color: 'var(--color-primary-500)' }}>
+          <span className="mixer-control-label mixer-control-label-primary">
             {t('mixer.filter')}
           </span>
           <Slider value={filter} onChange={(e) => setFilter(Number(e.target.value))} />
@@ -58,8 +58,7 @@ const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean; vuLevel
           <div 
             className="vu-meter-fill" 
             style={{ 
-              height: isPlaying ? `${vuLevel}%` : '0%',
-              transition: 'height 0.1s ease'
+              height: isPlaying ? `${vuLevel}%` : '0%'
             }}
           ></div>
         </div>

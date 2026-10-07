@@ -129,3 +129,13 @@
   display: flex;
   align-items: center;
 }
+
+.player-heart-icon {
+  color: var(--text-secondary);
+  fill: none;
+}
+
+.player-heart-icon.liked {
+  color: var(--color-primary-500);
+  fill: var(--color-primary-500);
+}

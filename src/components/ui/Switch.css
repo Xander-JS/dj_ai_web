@@ -1,3 +1,15 @@
+.switch-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+
+.switch-label {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
 .switch {
   position: relative;
   display: inline-block;

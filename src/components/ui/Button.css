@@ -41,6 +41,10 @@
   font-size: var(--text-lg);
 }
 
+.btn-full-width {
+  width: 100%;
+}
+
 /* Variants */
 .btn-primary {
   background-color: var(--color-primary-500);

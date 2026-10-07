@@ -36,6 +36,10 @@
   margin: 0;
 }
 
+.state-view-action {
+  margin-top: var(--space-4);
+}
+
 /* Status variants */
 .state-empty .state-icon-wrapper {
   background-color: var(--bg-surface-active);

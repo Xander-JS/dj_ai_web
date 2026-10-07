@@ -85,6 +85,14 @@
   cursor: pointer;
 }
 
+.library-table .col-checkbox .icon-selected {
+  color: var(--color-primary-500);
+}
+
+.library-table .col-checkbox .icon-unselected {
+  color: var(--text-tertiary);
+}
+
 .library-table .col-index {
   width: 40px;
 }

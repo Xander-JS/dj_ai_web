@@ -36,7 +36,7 @@ export const PlayerBar: React.FC = () => {
             <div className="player-artist">deadmau5</div>
           </div>
           <IconButton 
-            icon={<Heart size={16} fill={isLiked ? "var(--color-primary-500)" : "none"} color={isLiked ? "var(--color-primary-500)" : "var(--text-secondary)"} />} 
+            icon={<Heart size={16} className={clsx('player-heart-icon', isLiked && 'liked')} />} 
             size="sm" 
             onClick={() => setIsLiked(!isLiked)}
           />

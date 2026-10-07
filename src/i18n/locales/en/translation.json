@@ -9,6 +9,19 @@
   },
   "common": {
     "search": "Search tracks, artists...",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "play": "Play",
+    "pause": "Pause",
+    "mix": "Mix",
+    "view_all": "View All"
+  },
+  "dashboard": {
+    "welcome": "Welcome back",
+    "recent": "Recently Played",
+    "quick_actions": "Quick Actions",
+    "stats": "Monthly Stats",
+    "recommendations": "Recommended for you",
+    "tracks_played": "Tracks Played",
+    "hours_mixed": "Hours in Session"
   }
 }

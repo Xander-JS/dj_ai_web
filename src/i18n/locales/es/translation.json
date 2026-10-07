@@ -9,6 +9,19 @@
   },
   "common": {
     "search": "Buscar pistas, artistas...",
-    "notifications": "Notificaciones"
+    "notifications": "Notificaciones",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "mix": "Mezclar",
+    "view_all": "Ver todo"
+  },
+  "dashboard": {
+    "welcome": "Bienvenido de nuevo",
+    "recent": "Escuchado recientemente",
+    "quick_actions": "Acciones rápidas",
+    "stats": "Estadísticas del mes",
+    "recommendations": "Recomendado para ti",
+    "tracks_played": "Pistas reproducidas",
+    "hours_mixed": "Horas en sesión"
   }
 }

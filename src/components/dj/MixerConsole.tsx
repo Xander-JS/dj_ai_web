@@ -16,7 +16,7 @@ const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean; vuLevel
 
   return (
     <div className="channel-strip">
-      <div className="channel-header">CH {channelName}</div>
+      <div className="channel-header">{t('mixer.channel', { num: channelName })}</div>
       
       <div className="channel-controls">
         <div className="mixer-control-group">
@@ -72,6 +72,7 @@ const VU_MIN_LEVEL = 50;
 const VU_LEVEL_RANGE = 30;
 
 export const MixerConsole: React.FC = () => {
+  const { t } = useTranslation();
   const [crossfader, setCrossfader] = useState(50);
   // Simulated VU meter level, refreshed on an interval (randomness kept out of render)
   const [vuLevel, setVuLevel] = useState(VU_MIN_LEVEL);
@@ -93,7 +94,7 @@ export const MixerConsole: React.FC = () => {
       </div>
 
       <div className="mixer-crossfader-area">
-        <span className="mixer-control-label">A - CROSSFADER - B</span>
+        <span className="mixer-control-label">{t('mixer.crossfader')}</span>
         <div className="crossfader-container">
           <Slider 
             value={crossfader} 

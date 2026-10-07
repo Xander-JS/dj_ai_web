@@ -10,10 +10,9 @@
   "common": {
     "search": "Search tracks, artists...",
     "notifications": "Notifications",
-    "play": "Play",
-    "pause": "Pause",
     "mix": "Mix",
-    "view_all": "View All"
+    "view_all": "View All",
+    "tracks": "tracks"
   },
   "dashboard": {
     "welcome": "Welcome back",
@@ -62,11 +61,16 @@
     "sync": "SYNC",
     "cue": "CUE",
     "play": "PLAY",
+    "pause": "PAUSE",
     "tempo": "TEMPO",
     "key_lock": "KEY",
-    "time": "TIME"
+    "time": "TIME",
+    "no_track": "No Track Loaded",
+    "unknown_artist": "Unknown"
   },
   "mixer": {
+    "channel": "CH {{num}}",
+    "crossfader": "A - CROSSFADER - B",
     "gain": "GAIN",
     "high": "HI",
     "mid": "MID",

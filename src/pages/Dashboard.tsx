@@ -93,7 +93,7 @@ export const Dashboard: React.FC = () => {
                       <div>
                         <div className="dashboard-rec-name">{rec.title}</div>
                         <div className="dashboard-rec-meta">
-                          {rec.tracks} {t('common.tracks', 'pistas')}
+                          {rec.tracks} {t('common.tracks')}
                         </div>
                       </div>
                     </div>

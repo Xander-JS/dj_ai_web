@@ -15,8 +15,8 @@ export interface DeckProps {
 
 export const Deck: React.FC<DeckProps> = ({ 
   deckName, 
-  trackTitle = 'No Track Loaded', 
-  trackArtist = 'Unknown',
+  trackTitle, 
+  trackArtist,
   bpm = 120.0,
   keyStr = 'Am',
   timeRemaining = '-0:00'
@@ -24,6 +24,9 @@ export const Deck: React.FC<DeckProps> = ({
   const { t } = useTranslation();
   const [isPlaying, setIsPlaying] = useState(false);
   const [pitch, setPitch] = useState(50); // 0-100, 50 is center
+
+  const finalTitle = trackTitle || t('dj.no_track');
+  const finalArtist = trackArtist || t('dj.unknown_artist');
 
   const calculatedBpm = (bpm * (1 + (pitch - 50) / 100 * 0.16)).toFixed(1); // +/- 8% pitch
 
@@ -33,8 +36,8 @@ export const Deck: React.FC<DeckProps> = ({
       {/* Header Info */}
       <div className="deck-header">
         <div className="deck-title-group">
-          <span className="deck-track-title">{trackTitle}</span>
-          <span className="deck-track-artist">{trackArtist}</span>
+          <span className="deck-track-title">{finalTitle}</span>
+          <span className="deck-track-artist">{finalArtist}</span>
         </div>
         <div className="deck-stats">
           <div className="deck-stat-item">
@@ -77,7 +80,7 @@ export const Deck: React.FC<DeckProps> = ({
             className={clsx('btn btn-dj', isPlaying ? 'btn-dj-play' : 'btn-outline')}
             onClick={() => setIsPlaying(!isPlaying)}
           >
-            {isPlaying ? t('player.pause').toUpperCase() : t('dj.play')}
+            {isPlaying ? t('dj.pause') : t('dj.play')}
           </button>
         </div>
 

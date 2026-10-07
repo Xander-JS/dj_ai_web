@@ -23,5 +23,19 @@
     "recommendations": "Recommended for you",
     "tracks_played": "Tracks Played",
     "hours_mixed": "Hours in Session"
+  },
+  "library": {
+    "title": "Music Library",
+    "search_tracks": "Search your library...",
+    "filter_all": "All",
+    "filter_audio": "Audio",
+    "filter_video": "Video",
+    "col_title": "Title",
+    "col_artist": "Artist",
+    "col_album": "Album",
+    "col_bpm": "BPM",
+    "col_key": "Key",
+    "col_energy": "Energy",
+    "col_duration": "Time"
   }
 }

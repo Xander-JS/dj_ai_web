@@ -23,5 +23,19 @@
     "recommendations": "Recomendado para ti",
     "tracks_played": "Pistas reproducidas",
     "hours_mixed": "Horas en sesión"
+  },
+  "library": {
+    "title": "Biblioteca Musical",
+    "search_tracks": "Buscar en tu biblioteca...",
+    "filter_all": "Todo",
+    "filter_audio": "Audio",
+    "filter_video": "Video",
+    "col_title": "Título",
+    "col_artist": "Artista",
+    "col_album": "Álbum",
+    "col_bpm": "BPM",
+    "col_key": "Tono",
+    "col_energy": "Energía",
+    "col_duration": "Duración"
   }
 }

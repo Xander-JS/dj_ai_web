@@ -64,5 +64,13 @@
     "play": "PLAY",
     "tempo": "TEMPO",
     "key_lock": "KEY"
+  },
+  "mixer": {
+    "gain": "GAIN",
+    "high": "HI",
+    "mid": "MID",
+    "low": "LOW",
+    "filter": "FILTER",
+    "master": "MASTER"
   }
 }

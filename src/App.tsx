@@ -1,21 +1,26 @@
 import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { DesktopLayout } from './layouts/DesktopLayout';
-import { Button } from './components/ui/Button';
+
+import { Dashboard } from './pages/Dashboard';
+import { Library } from './pages/Library';
+import { Playlists } from './pages/Playlists';
+import { Mixer } from './pages/Mixer';
+import { Settings } from './pages/Settings';
+import { Profile } from './pages/Profile';
 
 function App() {
   return (
     <DesktopLayout>
-      <div style={{ padding: 'var(--space-8)' }}>
-        <h2 style={{ marginBottom: 'var(--space-4)' }}>Bienvenido a SYSTEM DJ</h2>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-8)' }}>
-          El layout de escritorio ha sido montado correctamente.
-        </p>
-        
-        <div style={{ display: 'flex', gap: 'var(--space-4)' }}>
-          <Button variant="primary">Explorar Biblioteca</Button>
-          <Button variant="outline">Abrir Mixer</Button>
-        </div>
-      </div>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/library" element={<Library />} />
+        <Route path="/playlists" element={<Playlists />} />
+        <Route path="/mixer" element={<Mixer />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/profile" element={<Profile />} />
+      </Routes>
     </DesktopLayout>
   );
 }

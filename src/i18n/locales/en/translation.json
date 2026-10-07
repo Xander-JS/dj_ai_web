@@ -1,0 +1,14 @@
+{
+  "navigation": {
+    "home": "Home",
+    "library": "Library",
+    "playlists": "Playlists",
+    "mixer": "Mixer",
+    "settings": "Settings",
+    "profile": "Profile"
+  },
+  "common": {
+    "search": "Search tracks, artists...",
+    "notifications": "Notifications"
+  }
+}

@@ -1,60 +1,39 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Home, Music, ListMusic, SlidersHorizontal } from 'lucide-react';
+import { clsx } from 'clsx';
+import './Sidebar.css';
 
 export const Sidebar: React.FC = () => {
+  const { t } = useTranslation();
+
+  const getNavClass = ({ isActive }: { isActive: boolean }) => 
+    clsx('sidebar-nav-item', isActive && 'active');
+
   return (
     <aside className="layout-sidebar" style={{ padding: 'var(--space-4) 0' }}>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', padding: '0 var(--space-2)' }}>
         
-        {/* Placeholder Nav Items */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-          padding: 'var(--space-2) var(--space-4)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--color-primary-500)',
-          backgroundColor: 'var(--bg-surface-active)',
-          fontWeight: 'var(--font-weight-medium)',
-          cursor: 'pointer'
-        }}>
+        <NavLink to="/dashboard" className={getNavClass}>
           <Home size={20} />
-          <span>Inicio</span>
-        </div>
+          <span>{t('navigation.home')}</span>
+        </NavLink>
 
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-          padding: 'var(--space-2) var(--space-4)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--text-secondary)',
-          fontWeight: 'var(--font-weight-medium)',
-          cursor: 'pointer'
-        }}>
+        <NavLink to="/library" className={getNavClass}>
           <Music size={20} />
-          <span>Biblioteca</span>
-        </div>
+          <span>{t('navigation.library')}</span>
+        </NavLink>
 
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-          padding: 'var(--space-2) var(--space-4)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--text-secondary)',
-          fontWeight: 'var(--font-weight-medium)',
-          cursor: 'pointer'
-        }}>
+        <NavLink to="/playlists" className={getNavClass}>
           <ListMusic size={20} />
-          <span>Playlists</span>
-        </div>
+          <span>{t('navigation.playlists')}</span>
+        </NavLink>
 
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-          padding: 'var(--space-2) var(--space-4)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--text-secondary)',
-          fontWeight: 'var(--font-weight-medium)',
-          cursor: 'pointer'
-        }}>
+        <NavLink to="/mixer" className={getNavClass}>
           <SlidersHorizontal size={20} />
-          <span>Mixer</span>
-        </div>
+          <span>{t('navigation.mixer')}</span>
+        </NavLink>
 
       </nav>
     </aside>

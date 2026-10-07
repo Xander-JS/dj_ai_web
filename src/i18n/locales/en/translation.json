@@ -45,5 +45,15 @@
     "empty_desc": "Select a playlist from the left or create a new one.",
     "tracks_count": "{{count}} tracks",
     "total_duration": "Total time: {{time}}"
+  },
+  "player": {
+    "play": "Play",
+    "pause": "Pause",
+    "next": "Next track",
+    "prev": "Previous track",
+    "shuffle": "Shuffle",
+    "repeat": "Repeat",
+    "volume": "Volume",
+    "queue": "Playback queue"
   }
 }

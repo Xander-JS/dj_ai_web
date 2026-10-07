@@ -1,0 +1,112 @@
+.player-bar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  gap: var(--space-8);
+}
+
+.player-track-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 1;
+  min-width: 0; /* allows truncation */
+}
+
+.player-cover {
+  width: 56px;
+  height: 56px;
+  background-color: var(--color-primary-500);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  background-image: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-secondary-500) 100%);
+}
+
+.player-text-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.player-title {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.player-artist {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.player-main-controls {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 600px;
+}
+
+.player-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.player-play-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--text-primary);
+  color: var(--bg-base);
+  transition: transform var(--transition-fast);
+}
+
+.player-play-btn:hover {
+  transform: scale(1.05);
+}
+
+.player-timeline {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: var(--space-3);
+}
+
+.player-time {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  width: 40px;
+  font-family: var(--font-family-mono);
+}
+
+.player-time.left {
+  text-align: right;
+}
+
+.player-extra-controls {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.player-volume-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 120px;
+}

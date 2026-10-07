@@ -45,5 +45,15 @@
     "empty_desc": "Selecciona una playlist de la izquierda o crea una nueva.",
     "tracks_count": "{{count}} pistas",
     "total_duration": "Duración total: {{time}}"
+  },
+  "player": {
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "next": "Siguiente pista",
+    "prev": "Pista anterior",
+    "shuffle": "Aleatorio",
+    "repeat": "Repetir",
+    "volume": "Volumen",
+    "queue": "Cola de reproducción"
   }
 }

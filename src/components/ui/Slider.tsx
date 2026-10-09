@@ -1,4 +1,4 @@
-import React, { InputHTMLAttributes } from 'react';
+import React, { type InputHTMLAttributes } from 'react';
 import { clsx } from 'clsx';
 import './Slider.css';
 
@@ -9,7 +9,7 @@ export interface SliderProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
 export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
   ({ className, orientation = 'horizontal', ...props }, ref) => {
     return (
-      <div className="slider-wrapper" style={{ height: orientation === 'vertical' ? '100%' : 'auto' }}>
+      <div className={clsx("slider-wrapper", orientation === 'vertical' && "slider-wrapper-vertical")}>
         <input
           ref={ref}
           type="range"

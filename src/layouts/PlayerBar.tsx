@@ -36,7 +36,7 @@ export const PlayerBar: React.FC = () => {
             <div className="player-artist">deadmau5</div>
           </div>
           <IconButton 
-            icon={<Heart size={16} fill={isLiked ? "var(--color-primary-500)" : "none"} color={isLiked ? "var(--color-primary-500)" : "var(--text-secondary)"} />} 
+            icon={<Heart size={16} className={clsx('player-heart-icon', isLiked && 'liked')} />} 
             size="sm" 
             onClick={() => setIsLiked(!isLiked)}
           />
@@ -48,13 +48,13 @@ export const PlayerBar: React.FC = () => {
             <IconButton 
               icon={<Shuffle size={18} />} 
               title={t('player.shuffle')}
-              style={{ color: isShuffle ? 'var(--color-primary-500)' : 'var(--text-secondary)' }}
+              className={clsx('player-btn player-btn-subtle', isShuffle && 'active')}
               onClick={() => setIsShuffle(!isShuffle)}
             />
             <IconButton 
               icon={<SkipBack size={20} />} 
               title={t('player.prev')} 
-              style={{ color: 'var(--text-primary)' }}
+              className="player-btn"
             />
             
             <button 
@@ -62,25 +62,25 @@ export const PlayerBar: React.FC = () => {
               onClick={togglePlay}
               title={isPlaying ? t('player.pause') : t('player.play')}
             >
-              {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" style={{ marginLeft: '2px' }} />}
+              {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="play-icon-offset" />}
             </button>
             
             <IconButton 
               icon={<SkipForward size={20} />} 
               title={t('player.next')} 
-              style={{ color: 'var(--text-primary)' }}
+              className="player-btn"
             />
             <IconButton 
               icon={<Repeat size={18} />} 
               title={t('player.repeat')}
-              style={{ color: isRepeat ? 'var(--color-primary-500)' : 'var(--text-secondary)' }}
+              className={clsx('player-btn player-btn-subtle', isRepeat && 'active')}
               onClick={() => setIsRepeat(!isRepeat)}
             />
           </div>
 
           <div className="player-timeline">
             <span className="player-time left">2:11</span>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+            <div className="player-timeline-slider-container">
               <Slider 
                 value={progress} 
                 onChange={(e) => setProgress(Number(e.target.value))}
@@ -95,13 +95,13 @@ export const PlayerBar: React.FC = () => {
           <IconButton 
             icon={<ListMusic size={18} />} 
             title={t('player.queue')} 
-            style={{ color: 'var(--text-secondary)' }}
+            className="player-btn player-btn-subtle"
           />
           <div className="player-volume-container">
             <IconButton 
               icon={isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />} 
               size="sm" 
-              style={{ color: 'var(--text-secondary)' }}
+              className="player-btn player-btn-subtle"
               onClick={toggleMute}
               title={t('player.volume')}
             />

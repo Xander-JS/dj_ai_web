@@ -11,6 +11,26 @@
   font-weight: var(--font-weight-medium);
 }
 
+.input-field-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.input-field-with-icon {
+  padding-left: 38px;
+}
+
 .input-field {
   width: 100%;
   height: var(--size-md);
@@ -31,7 +51,7 @@
 .input-field:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-500), 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-500) 20%, transparent);
 }
 
 .input-field:disabled {

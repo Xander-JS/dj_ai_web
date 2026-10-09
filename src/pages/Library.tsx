@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
 import { MOCK_LIBRARY } from '../mock/library';
+import '../components/ui/Table.css';
 import './Library.css';
 import { clsx } from 'clsx';
 
@@ -33,13 +34,14 @@ export const Library: React.FC = () => {
     <div className="library-container">
       
       <div className="library-header">
-        <h2 style={{ fontSize: 'var(--text-3xl)', margin: 0 }}>{t('library.title')}</h2>
+        <h2 className="library-title">{t('library.title')}</h2>
         
         <div className="library-toolbar">
-          <div style={{ position: 'relative', width: '300px' }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', top: '11px', color: 'var(--text-tertiary)' }} />
-            <Input placeholder={t('library.search_tracks')} style={{ paddingLeft: '38px' }} />
-          </div>
+          <Input 
+            placeholder={t('library.search_tracks')} 
+            icon={<Search size={18} />}
+            wrapperClassName="library-search-container" 
+          />
           
           <div className="library-filters">
             <Button 
@@ -90,17 +92,17 @@ export const Library: React.FC = () => {
               const isSelected = selectedTracks.has(track.id);
               return (
                 <tr key={track.id} className={clsx(isSelected && 'selected')}>
-                  <td className="col-checkbox" onClick={() => toggleSelection(track.id)} style={{ cursor: 'pointer' }}>
-                    {isSelected ? <CheckSquare size={16} color="var(--color-primary-500)" /> : <Square size={16} color="var(--text-tertiary)" />}
+                  <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
+                    {isSelected ? <CheckSquare size={16} className="icon-selected" /> : <Square size={16} className="icon-unselected" />}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                      <span style={{ fontWeight: 'var(--font-weight-medium)' }}>{track.title}</span>
+                    <div className="track-title-container">
+                      <span className="track-title">{track.title}</span>
                       {track.type === 'video' && <Badge variant="secondary">V</Badge>}
                     </div>
                   </td>
                   <td>{track.artist}</td>
-                  <td style={{ color: 'var(--text-secondary)' }}>{track.album}</td>
+                  <td className="track-album">{track.album}</td>
                   <td>{track.bpm}</td>
                   <td>
                     <Badge variant="outline">{track.key}</Badge>
@@ -110,12 +112,12 @@ export const Library: React.FC = () => {
                       <div className="energy-bar">
                         <div className="energy-bar-fill" style={{ width: `${track.energy * 10}%` }}></div>
                       </div>
-                      <span style={{ fontSize: 'var(--text-xs)', width: '15px' }}>{track.energy}</span>
+                      <span className="energy-bar-value">{track.energy}</span>
                     </div>
                   </td>
-                  <td style={{ color: 'var(--text-secondary)' }}>{track.duration}</td>
+                  <td className="track-duration">{track.duration}</td>
                   <td className="col-actions">
-                    <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                    <div className="track-actions-container">
                       <IconButton icon={<Play size={16} />} size="sm" />
                       <IconButton icon={<MoreHorizontal size={16} />} size="sm" />
                     </div>

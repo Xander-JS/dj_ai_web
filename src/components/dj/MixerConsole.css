@@ -58,6 +58,10 @@
   text-transform: uppercase;
 }
 
+.mixer-control-label-primary {
+  color: var(--color-primary-500);
+}
+
 .channel-fader-section {
   display: flex;
   justify-content: center;
@@ -84,6 +88,7 @@
   width: 100%;
   height: 60%; /* Simulated level */
   background: linear-gradient(to top, var(--color-success) 0%, var(--color-success) 70%, var(--color-warning) 85%, var(--color-error) 100%);
+  transition: height 0.1s ease;
 }
 
 .mixer-crossfader-area {

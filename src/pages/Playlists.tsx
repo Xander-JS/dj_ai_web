@@ -7,6 +7,7 @@ import { Badge } from '../components/ui/Badge';
 import { StateView } from '../components/ui/StateView';
 import { MOCK_PLAYLISTS } from '../mock/playlists';
 import { clsx } from 'clsx';
+import '../components/ui/Table.css';
 import './Playlists.css';
 
 export const Playlists: React.FC = () => {
@@ -21,7 +22,7 @@ export const Playlists: React.FC = () => {
       {/* Sidebar: List of playlists */}
       <div className="playlists-sidebar">
         <div className="playlists-sidebar-header">
-          <h3 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>{t('playlists.title')}</h3>
+          <h3 className="playlists-title">{t('playlists.title')}</h3>
           <IconButton icon={<Plus size={20} />} title={t('playlists.create')} />
         </div>
         
@@ -51,13 +52,13 @@ export const Playlists: React.FC = () => {
             <div className="playlist-detail-header">
               <div className="playlist-cover-large" style={{ backgroundColor: activePlaylist.coverColor }}></div>
               <div className="playlist-detail-info">
-                <Badge variant="secondary" style={{ width: 'fit-content' }}>Playlist</Badge>
+                <Badge variant="secondary" className="playlist-badge">Playlist</Badge>
                 <h1 className="playlist-detail-title">{activePlaylist.name}</h1>
-                <p style={{ color: 'var(--text-secondary)', margin: '0 0 var(--space-2) 0' }}>
+                <p className="playlist-detail-desc">
                   {activePlaylist.description}
                 </p>
                 <div className="playlist-detail-meta">
-                  <span style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-primary)' }}>DJ_System</span>
+                  <span className="playlist-detail-author">DJ_System</span>
                   <span>•</span>
                   <span>{t('playlists.tracks_count', { count: activePlaylist.tracks.length })}</span>
                 </div>
@@ -73,26 +74,26 @@ export const Playlists: React.FC = () => {
             </div>
 
             {/* Reusing a simplified version of the library table layout */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6)' }}>
+            <div className="playlist-tracks-container">
               {activePlaylist.tracks.length > 0 ? (
                 <table className="library-table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>#</th>
+                      <th className="col-index">#</th>
                       <th>{t('library.col_title')}</th>
                       <th>{t('library.col_artist')}</th>
                       <th>{t('library.col_bpm')}</th>
-                      <th style={{ textAlign: 'right' }}>{t('library.col_duration')}</th>
+                      <th className="col-duration">{t('library.col_duration')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {activePlaylist.tracks.map((track, index) => (
                       <tr key={track.id}>
-                        <td style={{ color: 'var(--text-tertiary)' }}>{index + 1}</td>
-                        <td style={{ fontWeight: 'var(--font-weight-medium)' }}>{track.title}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{track.artist}</td>
+                        <td className="track-index">{index + 1}</td>
+                        <td className="track-title">{track.title}</td>
+                        <td className="track-artist">{track.artist}</td>
                         <td>{track.bpm}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>{track.duration}</td>
+                        <td className="track-duration col-duration">{track.duration}</td>
                       </tr>
                     ))}
                   </tbody>

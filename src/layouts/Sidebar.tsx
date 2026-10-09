@@ -12,8 +12,8 @@ export const Sidebar: React.FC = () => {
     clsx('sidebar-nav-item', isActive && 'active');
 
   return (
-    <aside className="layout-sidebar" style={{ padding: 'var(--space-4) 0' }}>
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', padding: '0 var(--space-2)' }}>
+    <aside className="layout-sidebar sidebar-aside">
+      <nav className="sidebar-nav">
         
         <NavLink to="/dashboard" className={getNavClass}>
           <Home size={20} />

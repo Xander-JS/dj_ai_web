@@ -63,8 +63,8 @@
 }
 
 .player-play-btn {
-  width: 40px;
-  height: 40px;
+  width: var(--size-md);
+  height: var(--size-md);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
@@ -88,7 +88,7 @@
 .player-time {
   font-size: var(--text-xs);
   color: var(--text-secondary);
-  width: 40px;
+  width: var(--size-md);
   font-family: var(--font-family-mono);
 }
 
@@ -109,4 +109,33 @@
   align-items: center;
   gap: var(--space-2);
   width: 120px;
+}
+
+/* Secondary player controls (shuffle, repeat, queue, volume) */
+.player-btn.player-btn-subtle {
+  color: var(--text-secondary);
+}
+
+.player-btn.active {
+  color: var(--color-primary-500);
+}
+
+.play-icon-offset {
+  margin-left: 2px;
+}
+
+.player-timeline-slider-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.player-heart-icon {
+  color: var(--text-secondary);
+  fill: none;
+}
+
+.player-heart-icon.liked {
+  color: var(--color-primary-500);
+  fill: var(--color-primary-500);
 }

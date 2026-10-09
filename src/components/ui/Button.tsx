@@ -1,4 +1,4 @@
-import React, { ButtonHTMLAttributes } from 'react';
+import React, { type ButtonHTMLAttributes } from 'react';
 import { clsx } from 'clsx';
 import './Button.css';
 
@@ -17,10 +17,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           'btn',
           `btn-${variant}`,
           `btn-${size}`,
-          fullWidth && 'w-full',
+          fullWidth && 'btn-full-width',
           className
         )}
-        style={{ width: fullWidth ? '100%' : undefined }}
         {...props}
       >
         {children}

@@ -66,3 +66,30 @@
   font-weight: var(--font-weight-medium);
   margin: 0 0 var(--space-2) 0;
 }
+
+.settings-option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background-color: var(--bg-base);
+  border-radius: var(--radius-md);
+}
+
+.settings-option-title {
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-option-desc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.settings-button-group {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.settings-placeholder {
+  color: var(--text-secondary);
+}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Play, Pause, SkipBack, SkipForward, 
@@ -7,33 +7,54 @@ import {
 import { IconButton } from '../components/ui/IconButton';
 import { Slider } from '../components/ui/Slider';
 import { clsx } from 'clsx';
+import { useDJStore } from '../store/useDJStore';
+import { formatDuration } from '../utils/formatters';
 import './PlayerBar.css';
 
 export const PlayerBar: React.FC = () => {
   const { t } = useTranslation();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(80);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isShuffle, setIsShuffle] = useState(false);
-  const [isRepeat, setIsRepeat] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  
-  // Simulated playback progress
-  const [progress, setProgress] = useState(35); // 0-100%
+  const { 
+    deckA, 
+    togglePlayDeckA, 
+    seekDeckA, 
+    masterVolume, 
+    isMasterMuted, 
+    setMasterVolume, 
+    toggleMasterMute 
+  } = useDJStore();
 
-  const togglePlay = () => setIsPlaying(!isPlaying);
-  const toggleMute = () => setIsMuted(!isMuted);
+  const [isShuffle, setIsShuffle] = React.useState(false);
+  const [isRepeat, setIsRepeat] = React.useState(false);
+  const [isLiked, setIsLiked] = React.useState(false);
+
+  const isPlaying = deckA.playbackState === 'playing';
+  const hasTrack = Boolean(deckA.track);
+  const progressPercent = deckA.duration > 0 
+    ? Math.min(100, Math.max(0, (deckA.currentTime / deckA.duration) * 100)) 
+    : 0;
+
+  const trackTitle = deckA.track ? deckA.track.title : 'SYSTEM DJ';
+  const trackArtist = deckA.track 
+    ? (deckA.track.artist || t('dj.unknown_artist')) 
+    : t('dj.no_track');
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (deckA.duration > 0) {
+      const percent = Number(e.target.value);
+      seekDeckA((percent / 100) * deckA.duration);
+    }
+  };
 
   return (
     <footer className="layout-player">
       <div className="player-bar-container">
         
-        {/* Track Info */}
+        {/* Track Info (sincronizada con Deck A) */}
         <div className="player-track-info">
           <div className="player-cover"></div>
           <div className="player-text-info">
-            <div className="player-title">Strobe (Club Edit)</div>
-            <div className="player-artist">deadmau5</div>
+            <div className="player-title">{trackTitle}</div>
+            <div className="player-artist">{trackArtist}</div>
           </div>
           <IconButton 
             icon={<Heart size={16} className={clsx('player-heart-icon', isLiked && 'liked')} />} 
@@ -42,7 +63,7 @@ export const PlayerBar: React.FC = () => {
           />
         </div>
 
-        {/* Main Controls & Progress */}
+        {/* Main Controls & Real Progress */}
         <div className="player-main-controls">
           <div className="player-buttons">
             <IconButton 
@@ -59,10 +80,15 @@ export const PlayerBar: React.FC = () => {
             
             <button 
               className="player-play-btn" 
-              onClick={togglePlay}
+              onClick={() => togglePlayDeckA()}
               title={isPlaying ? t('player.pause') : t('player.play')}
+              disabled={!hasTrack}
             >
-              {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="play-icon-offset" />}
+              {isPlaying ? (
+                <Pause size={20} fill="currentColor" />
+              ) : (
+                <Play size={20} fill="currentColor" className="play-icon-offset" />
+              )}
             </button>
             
             <IconButton 
@@ -79,18 +105,19 @@ export const PlayerBar: React.FC = () => {
           </div>
 
           <div className="player-timeline">
-            <span className="player-time left">2:11</span>
+            <span className="player-time left">{formatDuration(deckA.currentTime)}</span>
             <div className="player-timeline-slider-container">
               <Slider 
-                value={progress} 
-                onChange={(e) => setProgress(Number(e.target.value))}
+                value={progressPercent} 
+                onChange={handleSeekChange}
+                disabled={!hasTrack}
               />
             </div>
-            <span className="player-time">6:15</span>
+            <span className="player-time">{formatDuration(deckA.duration)}</span>
           </div>
         </div>
 
-        {/* Extra Controls */}
+        {/* Master Output Volume */}
         <div className="player-extra-controls">
           <IconButton 
             icon={<ListMusic size={18} />} 
@@ -99,18 +126,15 @@ export const PlayerBar: React.FC = () => {
           />
           <div className="player-volume-container">
             <IconButton 
-              icon={isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />} 
+              icon={isMasterMuted || masterVolume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />} 
               size="sm" 
               className="player-btn player-btn-subtle"
-              onClick={toggleMute}
+              onClick={toggleMasterMute}
               title={t('player.volume')}
             />
             <Slider 
-              value={isMuted ? 0 : volume} 
-              onChange={(e) => {
-                setVolume(Number(e.target.value));
-                if (isMuted) setIsMuted(false);
-              }}
+              value={isMasterMuted ? 0 : masterVolume} 
+              onChange={(e) => setMasterVolume(Number(e.target.value))}
             />
           </div>
         </div>

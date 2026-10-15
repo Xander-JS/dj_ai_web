@@ -63,6 +63,22 @@
   overflow: hidden;
 }
 
+.deck-waveform-container.waveform-interactive {
+  cursor: pointer;
+}
+
+.deck-waveform-progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background-color: color-mix(in srgb, var(--color-primary-500) 20%, transparent);
+  border-right: 1px solid var(--color-primary-500);
+  pointer-events: none;
+  z-index: 5;
+  transition: width 100ms linear;
+}
+
 /* Simulated Waveform */
 .deck-waveform-mock {
   width: 100%;
@@ -85,6 +101,7 @@
   width: 2px;
   background-color: var(--color-error);
   z-index: 10;
+  transition: left 100ms linear;
 }
 
 .deck-controls {

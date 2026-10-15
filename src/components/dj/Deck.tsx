@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
 import { clsx } from 'clsx';
+import { useDJStore } from '../../store/useDJStore';
+import { formatDuration } from '../../utils/formatters';
 import './Deck.css';
 
 export interface DeckProps {
@@ -22,16 +24,81 @@ export const Deck: React.FC<DeckProps> = ({
   timeRemaining = '-0:00'
 }) => {
   const { t } = useTranslation();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [pitch, setPitch] = useState(50); // 0-100, 50 is center
+  const { deckA, togglePlayDeckA, stopDeckA, seekDeckA, setPitchDeckA } = useDJStore();
 
-  const finalTitle = trackTitle || t('dj.no_track');
-  const finalArtist = trackArtist || t('dj.unknown_artist');
+  // Estado mock local exclusivo para Deck B (hasta la Fase 21)
+  const [mockPlayingB, setMockPlayingB] = useState(false);
+  const [mockPitchB, setMockPitchB] = useState(50);
 
-  const calculatedBpm = (bpm * (1 + (pitch - 50) / 100 * 0.16)).toFixed(1); // +/- 8% pitch
+  const isDeckA = deckName === 'A';
+
+  // Variables calculadas según sea Deck A (Real) o Deck B (Mock)
+  const isPlaying = isDeckA ? (deckA.playbackState === 'playing') : mockPlayingB;
+  const isLoading = isDeckA && deckA.playbackState === 'loading';
+  const hasTrack = isDeckA ? Boolean(deckA.track) : true;
+
+  const finalTitle = isDeckA 
+    ? (deckA.track?.title || t('dj.no_track')) 
+    : (trackTitle || t('dj.no_track'));
+
+  const finalArtist = isDeckA 
+    ? (deckA.track ? (deckA.track.artist || t('dj.unknown_artist')) : '') 
+    : (trackArtist || t('dj.unknown_artist'));
+
+  const currentPitch = isDeckA ? deckA.pitch : mockPitchB;
+
+  const currentBpm = isDeckA 
+    ? (deckA.calculatedBpm !== null ? deckA.calculatedBpm.toFixed(1) : '—')
+    : (bpm * (1 + (mockPitchB - 50) / 100 * 0.16)).toFixed(1);
+
+  const currentKey = isDeckA ? (deckA.keyStr || '—') : keyStr;
+
+  // Cálculo de tiempo real para Deck A
+  const duration = isDeckA ? deckA.duration : 0;
+  const currentTime = isDeckA ? deckA.currentTime : 0;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  const formattedTimeRemaining = isDeckA
+    ? (duration > 0 ? `-${formatDuration(Math.max(0, duration - currentTime))}` : '-0:00')
+    : timeRemaining;
+
+  const handlePlayToggle = async () => {
+    if (isDeckA) {
+      if (!deckA.track) return;
+      await togglePlayDeckA();
+    } else {
+      setMockPlayingB(!mockPlayingB);
+    }
+  };
+
+  const handleStopOrCue = () => {
+    if (isDeckA) {
+      stopDeckA();
+    } else {
+      setMockPlayingB(false);
+    }
+  };
+
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDeckA && duration > 0) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const percent = Math.max(0, Math.min(1, clickX / rect.width));
+      seekDeckA(percent * duration);
+    }
+  };
+
+  const handlePitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    if (isDeckA) {
+      setPitchDeckA(val);
+    } else {
+      setMockPitchB(val);
+    }
+  };
 
   return (
-    <div className="dj-deck">
+    <div className={clsx('dj-deck', isDeckA && 'deck-real')}>
       
       {/* Header Info */}
       <div className="deck-header">
@@ -42,23 +109,39 @@ export const Deck: React.FC<DeckProps> = ({
         <div className="deck-stats">
           <div className="deck-stat-item">
             <span className="deck-stat-label">{t('dj.tempo')}</span>
-            <span>{calculatedBpm}</span>
+            <span>{currentBpm}</span>
           </div>
           <div className="deck-stat-item">
             <span className="deck-stat-label">{t('dj.key_lock')}</span>
-            <span className="deck-key-str">{keyStr}</span>
+            <span className="deck-key-str">{currentKey}</span>
           </div>
           <div className="deck-stat-item">
             <span className="deck-stat-label">{t('dj.time')}</span>
-            <span>{timeRemaining}</span>
+            <span>{formattedTimeRemaining}</span>
           </div>
         </div>
       </div>
 
-      {/* Waveform Placeholder */}
-      <div className="deck-waveform-container">
-        <div className={clsx("deck-waveform-mock", isPlaying && "playing-anim-wave")}></div>
-        <div className="deck-playhead"></div>
+      {/* Waveform y Barra de Progreso Temporal Interactiva */}
+      <div 
+        className={clsx('deck-waveform-container', isDeckA && 'waveform-interactive')}
+        onClick={handleWaveformClick}
+        title={isDeckA && duration > 0 ? 'Haz clic para buscar posición (Seek)' : undefined}
+      >
+        <div className={clsx('deck-waveform-mock', isPlaying && 'playing-anim-wave')}></div>
+        
+        {/* Relleno de progreso transcurrido */}
+        {isDeckA && (
+          <div 
+            className="deck-waveform-progress" 
+            style={{ width: `${progressPercent}%` }}
+          ></div>
+        )}
+
+        <div 
+          className="deck-playhead" 
+          style={isDeckA ? { left: `${progressPercent}%` } : undefined}
+        ></div>
       </div>
 
       {/* Main Deck Controls */}
@@ -68,25 +151,31 @@ export const Deck: React.FC<DeckProps> = ({
         <div className="deck-transport">
           <button 
             className="btn btn-dj btn-dj-sync"
+            title="Función SYNC (En desarrollo para Fase 23)"
+            disabled
           >
             {t('dj.sync')}
           </button>
           <button 
             className="btn btn-dj btn-dj-cue"
+            onClick={handleStopOrCue}
+            title={isDeckA ? 'Detener y rebobinar al inicio (0:00)' : t('dj.cue')}
+            disabled={isDeckA && !hasTrack}
           >
-            {t('dj.cue')}
+            {isDeckA ? 'CUE / STOP' : t('dj.cue')}
           </button>
           <button 
             className={clsx('btn btn-dj', isPlaying ? 'btn-dj-play' : 'btn-outline')}
-            onClick={() => setIsPlaying(!isPlaying)}
+            onClick={handlePlayToggle}
+            disabled={isDeckA && (!hasTrack || isLoading)}
           >
-            {isPlaying ? t('dj.pause') : t('dj.play')}
+            {isLoading ? '...' : (isPlaying ? t('dj.pause') : t('dj.play'))}
           </button>
         </div>
 
         {/* Jog Wheel */}
         <div className="deck-jog-wheel-container">
-          <div className={clsx("deck-jog-wheel", isPlaying && "playing-anim-spin")}>
+          <div className={clsx('deck-jog-wheel', isPlaying && 'playing-anim-spin')}>
             <div className="deck-jog-wheel-inner">
               <span className="deck-jog-wheel-text">
                 {deckName}
@@ -102,8 +191,9 @@ export const Deck: React.FC<DeckProps> = ({
           <div className="deck-pitch-slider-wrapper">
             <Slider 
               orientation="vertical" 
-              value={pitch} 
-              onChange={(e) => setPitch(Number(e.target.value))} 
+              value={currentPitch} 
+              onChange={handlePitchChange}
+              disabled={isDeckA && !hasTrack}
             />
           </div>
           <span className="deck-pitch-label bottom">+8%</span>

@@ -538,9 +538,9 @@ export class AudioEngineService implements IAudioEngineService {
     this.unloadDeck('A');
     this.unloadDeck('B');
 
-    this.playbackEndedListeners.get('A')?.clear();
-    this.playbackEndedListeners.get('B')?.clear();
-    this.stateChangeListeners.clear();
+    // Las suscripciones (onPlaybackEnded / onStateChange) pertenecen a sus suscriptores,
+    // que se desuscriben con la función devuelta. No se borran aquí para que un
+    // dispose seguido de una reinicialización no deje al store sin notificaciones.
 
     if (this.masterGainNode) {
       try {

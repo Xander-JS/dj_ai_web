@@ -2,4 +2,4 @@
  * SYSTEM DJ — Audio Engine Exports
  */
 
-export { AudioEngineService, audioEngine } from './AudioEngineService';
+export { AudioEngineService, audioEngine } from './AudioEngineService.ts';

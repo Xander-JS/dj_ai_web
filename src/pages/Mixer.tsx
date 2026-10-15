@@ -5,30 +5,24 @@ import { MOCK_LIBRARY } from '../mock/library';
 import './Mixer.css';
 
 export const Mixer: React.FC = () => {
-  const trackA = MOCK_LIBRARY[0];
   const trackB = MOCK_LIBRARY[1];
 
   return (
     <div className="mixer-page-container">
       
-      {/* Deck A */}
+      {/* Deck A (Conectado al motor real e IndexedDB) */}
       <div className="deck-container">
         <Deck 
           deckName="A"
-          trackTitle={trackA.title}
-          trackArtist={trackA.artist}
-          bpm={trackA.bpm}
-          keyStr={trackA.key}
-          timeRemaining="-4:20"
         />
       </div>
 
-      {/* Mixer Central Console */}
+      {/* Mixer Central Console (Visual hasta Fase 21) */}
       <div className="mixer-console-container">
         <MixerConsole />
       </div>
 
-      {/* Deck B */}
+      {/* Deck B (Mock visual hasta Fase 21) */}
       <div className="deck-container">
         <Deck 
           deckName="B"

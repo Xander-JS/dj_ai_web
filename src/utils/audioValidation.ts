@@ -11,6 +11,7 @@ export type SupportedAudioFormat = 'mp3' | 'wav';
 export interface AudioValidationResult {
   valid: boolean;
   format?: SupportedAudioFormat;
+  errorCode?: 'missing' | 'empty' | 'unsupported';
   error?: string;
 }
 
@@ -34,12 +35,12 @@ const SUPPORTED_MIME_TYPES: Record<string, SupportedAudioFormat> = {
  */
 export function validateAudioFile(file: File): AudioValidationResult {
   if (!file) {
-    return { valid: false, error: 'No se proporcionó ningún archivo.' };
+    return { valid: false, errorCode: 'missing', error: 'No se proporcionó ningún archivo.' };
   }
 
   // Comprobar archivo vacío
   if (file.size <= 0) {
-    return { valid: false, error: 'El archivo está vacío (0 bytes).' };
+    return { valid: false, errorCode: 'empty', error: 'El archivo está vacío (0 bytes).' };
   }
 
   // 1. Detección por extensión
@@ -57,6 +58,7 @@ export function validateAudioFile(file: File): AudioValidationResult {
   if (!resolvedFormat) {
     return {
       valid: false,
+      errorCode: 'unsupported',
       error: `Formato no compatible (.${ext || 'desconocido'}). Solo se admiten archivos MP3 y WAV.`,
     };
   }

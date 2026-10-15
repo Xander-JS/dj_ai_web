@@ -29,6 +29,15 @@ const DB_NAME = 'SystemDJ_Storage';
 const DB_VERSION = 1;
 const STORE_NAME = 'tracks';
 
+/**
+ * Resultado explícito de un guardado. `persisted: false` significa que la pista
+ * solo existe en memoria durante la sesión actual y se perderá al recargar.
+ */
+export interface SaveTrackResult {
+  persisted: boolean;
+  reason?: 'unsupported' | 'quota' | 'error';
+}
+
 export class IndexedDBStorage {
   private static instance: IndexedDBStorage | null = null;
   private db: IDBDatabase | null = null;
@@ -36,6 +45,15 @@ export class IndexedDBStorage {
 
   // Almacén en memoria como respaldo ante entornos sin IndexedDB o fallo de cuota
   private memoryStore: Map<string, StoredTrackRecord> = new Map();
+  // Identificadores de pistas que NO se pudieron persistir en IndexedDB
+  private memoryOnlyIds: Set<string> = new Set();
+
+  /**
+   * Indica si una pista existe solo en memoria (no sobrevivirá a una recarga).
+   */
+  public isMemoryOnly(id: string): boolean {
+    return this.memoryOnlyIds.has(id);
+  }
 
   public static getInstance(): IndexedDBStorage {
     if (!IndexedDBStorage.instance) {
@@ -123,7 +141,7 @@ export class IndexedDBStorage {
   /**
    * Guarda una pista y su blob binario en almacenamiento local persistente.
    */
-  public async saveTrack(track: Track, audioBlob: Blob): Promise<void> {
+  public async saveTrack(track: Track, audioBlob: Blob): Promise<SaveTrackResult> {
     const record: StoredTrackRecord = {
       id: track.id,
       title: track.title,
@@ -143,42 +161,55 @@ export class IndexedDBStorage {
       dateAdded: track.dateAdded || Date.now(),
     };
 
-    const db = await this.init();
-
-    if (!db) {
-      // Guardar en memoria si IndexedDB no está disponible
+    const keepInMemoryOnly = (reason: SaveTrackResult['reason']): SaveTrackResult => {
       this.memoryStore.set(record.id, record);
-      return;
+      this.memoryOnlyIds.add(record.id);
+      return { persisted: false, reason };
+    };
+
+    let db: IDBDatabase | null;
+    try {
+      db = await this.init();
+    } catch {
+      return keepInMemoryOnly('error');
     }
 
-    return new Promise((resolve, reject) => {
+    if (!db) {
+      // IndexedDB no disponible: la pista solo vive en memoria durante esta sesión
+      return keepInMemoryOnly('unsupported');
+    }
+
+    return new Promise<SaveTrackResult>((resolve) => {
+      let settled = false;
+      const settle = (result: SaveTrackResult) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+
       try {
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const request = store.put(record);
+        tx.objectStore(STORE_NAME).put(record);
 
-        request.onsuccess = () => {
-          // Mantener sincronizado también en memoria
+        // Solo la finalización de la transacción garantiza que los datos se escribieron
+        tx.oncomplete = () => {
           this.memoryStore.set(record.id, record);
-          resolve();
+          this.memoryOnlyIds.delete(record.id);
+          settle({ persisted: true });
         };
 
-        request.onerror = (event) => {
-          const error = (event.target as IDBRequest).error;
-          console.warn('[IndexedDBStorage] Error al persistir pista en IndexedDB:', error);
-
-          // Si se excede la cuota de almacenamiento, conservar en memoria como respaldo
-          if (error && error.name === 'QuotaExceededError') {
-            this.memoryStore.set(record.id, record);
-            resolve();
-            return;
-          }
-
-          reject(new Error(`Error guardando pista: ${error ? error.message : 'desconocido'}`));
+        const onFailure = () => {
+          const error = tx.error;
+          console.warn('[IndexedDBStorage] La transacción de guardado no se completó:', error);
+          const isQuota = error?.name === 'QuotaExceededError';
+          settle(keepInMemoryOnly(isQuota ? 'quota' : 'error'));
         };
-      } catch {
-        this.memoryStore.set(record.id, record);
-        resolve();
+        tx.onabort = onFailure;
+        tx.onerror = onFailure;
+      } catch (err) {
+        console.warn('[IndexedDBStorage] Excepción al iniciar la transacción de guardado:', err);
+        const isQuota = err instanceof Error && err.name === 'QuotaExceededError';
+        settle(keepInMemoryOnly(isQuota ? 'quota' : 'error'));
       }
     });
   }
@@ -264,22 +295,24 @@ export class IndexedDBStorage {
    */
   public async deleteTrack(id: string): Promise<void> {
     this.memoryStore.delete(id);
+    const wasMemoryOnly = this.memoryOnlyIds.delete(id);
 
     const db = await this.init();
-    if (!db) return;
+    if (!db || wasMemoryOnly) return;
 
     return new Promise((resolve, reject) => {
       try {
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const request = store.delete(id);
+        tx.objectStore(STORE_NAME).delete(id);
 
-        request.onsuccess = () => resolve();
-        request.onerror = () => {
-          reject(new Error(`No se pudo eliminar la pista con id ${id}`));
+        tx.oncomplete = () => resolve();
+        const onFailure = () => {
+          reject(new Error(`No se pudo eliminar la pista con id ${id}`, { cause: tx.error }));
         };
+        tx.onabort = onFailure;
+        tx.onerror = onFailure;
       } catch (err) {
-        reject(new Error(`Error en transacción de eliminación: ${err instanceof Error ? err.message : String(err)}`));
+        reject(new Error(`Error en transacción de eliminación: ${err instanceof Error ? err.message : String(err)}`, { cause: err }));
       }
     });
   }
@@ -289,6 +322,7 @@ export class IndexedDBStorage {
    */
   public async clearAll(): Promise<void> {
     this.memoryStore.clear();
+    this.memoryOnlyIds.clear();
 
     const db = await this.init();
     if (!db) return;
@@ -296,10 +330,10 @@ export class IndexedDBStorage {
     return new Promise((resolve) => {
       try {
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        const request = store.clear();
-        request.onsuccess = () => resolve();
-        request.onerror = () => resolve();
+        tx.objectStore(STORE_NAME).clear();
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => resolve();
+        tx.onerror = () => resolve();
       } catch {
         resolve();
       }

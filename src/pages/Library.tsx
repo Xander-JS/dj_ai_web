@@ -14,6 +14,7 @@ import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { validateAudioFile, createTrackFromFile } from '../utils/audioValidation';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { audioEngine } from '../audio';
+import { useDJStore, djStore } from '../store/useDJStore';
 import type { Track } from '../types/track';
 import '../components/ui/Table.css';
 import './Library.css';
@@ -40,6 +41,7 @@ interface UnifiedRowTrack {
 export const Library: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { deckA, loadTrackToDeckA } = useDJStore();
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,7 +57,6 @@ export const Library: React.FC = () => {
   } | null>(null);
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
-  const [preparedDeckATrack, setPreparedDeckATrack] = useState<string | null>(null);
 
   // Carga inicial de pistas desde IndexedDB
   useEffect(() => {
@@ -125,8 +126,12 @@ export const Library: React.FC = () => {
       // 4. Crear entidad Track y persistir en IndexedDB
       const newTrack = createTrackFromFile(file, durationSeconds);
       try {
-        await indexedDBStorage.saveTrack(newTrack, file);
-        successCount++;
+        const result = await indexedDBStorage.saveTrack(newTrack, file);
+        if (!result.persisted) {
+          errors.push(`"${file.name}" se cargó en memoria temporal pero no se pudo persistir en IndexedDB (${result.reason || 'sin persistencia'}). Se perderá al recargar.`);
+        } else {
+          successCount++;
+        }
       } catch (saveErr) {
         errors.push(`Error al guardar ${file.name}: ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`);
       }
@@ -194,13 +199,52 @@ export const Library: React.FC = () => {
     }
   };
 
-  // Preparación para Deck A (acción visual hacia Etapa 4)
-  const handlePrepareDeckA = (trackTitle: string) => {
-    setPreparedDeckATrack(trackTitle);
-    setFeedback({
-      type: 'success',
-      text: `"${trackTitle}" seleccionada y preparada para Deck A.`,
-    });
+  // Carga real de pista en Deck A
+  const handleLoadToDeckA = async (unifiedTrack: UnifiedRowTrack) => {
+    try {
+      let trackToLoad: Track;
+      if (unifiedTrack.rawLocalTrack) {
+        trackToLoad = unifiedTrack.rawLocalTrack;
+      } else {
+        // Pista de demostración
+        trackToLoad = {
+          id: unifiedTrack.id,
+          title: unifiedTrack.title,
+          artist: unifiedTrack.artist,
+          album: unifiedTrack.album,
+          duration: 30,
+          durationFormatted: unifiedTrack.durationFormatted,
+          type: unifiedTrack.type,
+          source: { type: 'blob' },
+          analysis: {
+            status: 'analyzed',
+            bpm: unifiedTrack.bpm,
+            key: unifiedTrack.key,
+            energy: unifiedTrack.energy,
+          },
+          dateAdded: Date.now(),
+        };
+      }
+
+      const loaded = await loadTrackToDeckA(trackToLoad);
+      if (loaded) {
+        setFeedback({
+          type: 'success',
+          text: `"${trackToLoad.title}" cargada y lista en el Deck A.`,
+        });
+      } else {
+        const errMessage = djStore.getSnapshot().deckA.errorMessage;
+        setFeedback({
+          type: 'error',
+          text: errMessage || `No se pudo cargar "${trackToLoad.title}" en el Deck A.`,
+        });
+      }
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: `Error al cargar en Deck A: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
   };
 
   // Construcción unificada de filas (Demo + Local)
@@ -402,10 +446,10 @@ export const Library: React.FC = () => {
           <tbody>
             {filteredTracks.map((track) => {
               const isSelected = selectedTracks.has(track.id);
-              const isPrepared = preparedDeckATrack === track.title;
+              const isLoadedInDeckA = deckA.track?.title === track.title;
 
               return (
-                <tr key={track.id} className={clsx(isSelected && 'selected', isPrepared && 'prepared')}>
+                <tr key={track.id} className={clsx(isSelected && 'selected', isLoadedInDeckA && 'prepared')}>
                   <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
                     {isSelected ? (
                       <CheckSquare size={16} className="icon-selected" />
@@ -420,9 +464,10 @@ export const Library: React.FC = () => {
                         {track.isLocal ? t('library.badge_local') : t('library.badge_demo')}
                       </Badge>
                       {track.type === 'video' && <Badge variant="secondary">V</Badge>}
-                      {isPrepared && (
+                      {isLoadedInDeckA && (
                         <span className="deck-prepared-tag" title={t('library.load_deck_a')}>
-                          <Disc size={13} /> Deck A
+                          <Disc size={13} className={clsx(deckA.playbackState === 'playing' && 'playing-anim-spin')} />
+                          Deck A {deckA.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
                         </span>
                       )}
                     </div>
@@ -469,10 +514,10 @@ export const Library: React.FC = () => {
                   <td className="col-actions">
                     <div className="track-actions-container">
                       <IconButton 
-                        icon={<Disc size={16} />} 
+                        icon={<Disc size={16} className={clsx(isLoadedInDeckA && 'text-primary')} />} 
                         size="sm" 
                         title={t('library.load_deck_a')}
-                        onClick={() => handlePrepareDeckA(track.title)}
+                        onClick={() => handleLoadToDeckA(track)}
                       />
                       {track.isLocal && track.rawLocalTrack && (
                         <IconButton 

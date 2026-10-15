@@ -149,6 +149,24 @@ describe('AudioEngineService — Pruebas de Ciclo de Vida y Transporte', () => {
     assert.equal(audioBuffer.sampleRate, 44100);
   });
 
+  test('decodeAudioData() rechaza con mensaje amigable cuando la decodificación falla', async () => {
+    const originalDecode = MockAudioContext.prototype.decodeAudioData;
+    MockAudioContext.prototype.decodeAudioData = async () => {
+      throw new Error('Formato binario no reconocible');
+    };
+
+    try {
+      await assert.rejects(
+        async () => {
+          await service.decodeAudioData(new ArrayBuffer(100));
+        },
+        /Fallo al decodificar los datos de audio/
+      );
+    } finally {
+      MockAudioContext.prototype.decodeAudioData = originalDecode;
+    }
+  });
+
   test('loadBufferToDeck() carga buffer y asigna duración en Deck A', async () => {
     const fakeBuffer = { duration: 240.0 } as AudioBuffer;
     service.loadBufferToDeck('A', fakeBuffer);

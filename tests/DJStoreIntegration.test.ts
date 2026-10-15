@@ -4,6 +4,7 @@
  * el almacenamiento local y los controles de transporte del Deck A.
  */
 
+import 'fake-indexeddb/auto';
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { djStore } from '../src/store/useDJStore.ts';
@@ -234,7 +235,34 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
     await djStore.loadTrackToDeckA(ghostTrack);
     const snap = djStore.getSnapshot();
     assert.equal(snap.deckA.playbackState, 'error');
+    assert.equal(snap.deckA.errorCode, 'file_missing');
     assert.ok(snap.deckA.errorMessage);
     assert.match(snap.deckA.errorMessage, /no se encuentra/i);
+  });
+
+  test('Manejo de errores cuando decodeAudioData falla (archivo dañado o corrupto)', async () => {
+    const file = new File([new Uint8Array(100)], 'corrupt.mp3', { type: 'audio/mpeg' });
+    const track = createTrackFromFile(file, 0);
+    await indexedDBStorage.saveTrack(track, file);
+
+    const originalDecode = MockAudioContext.prototype.decodeAudioData;
+    MockAudioContext.prototype.decodeAudioData = async () => {
+      throw new Error('Fallo al decodificar: archivo binario dañado');
+    };
+
+    try {
+      const loadResult = await djStore.loadTrackToDeckA(track);
+      assert.equal(loadResult, false);
+
+      const snap = djStore.getSnapshot();
+      assert.equal(snap.deckA.playbackState, 'error');
+      assert.equal(snap.deckA.errorCode, 'decode_failed');
+      assert.ok(snap.deckA.errorMessage);
+      assert.match(snap.deckA.errorMessage, /dañado/i);
+      assert.equal(snap.deckA.duration, 0);
+      assert.equal(audioEngine.getDeckDuration('A'), 0);
+    } finally {
+      MockAudioContext.prototype.decodeAudioData = originalDecode;
+    }
   });
 });

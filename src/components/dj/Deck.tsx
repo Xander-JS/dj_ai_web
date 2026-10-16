@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
 import { clsx } from 'clsx';
@@ -24,87 +24,82 @@ export const Deck: React.FC<DeckProps> = ({
   timeRemaining = '-0:00'
 }) => {
   const { t } = useTranslation();
-  const { deckA, togglePlayDeckA, stopDeckA, seekDeckA, setPitchDeckA } = useDJStore();
+  const { 
+    deckA, 
+    deckB, 
+    togglePlayDeck, 
+    stopDeck, 
+    seekDeck, 
+    setPitchDeck 
+  } = useDJStore();
 
-  // Estado mock local exclusivo para Deck B (hasta la Fase 21)
-  const [mockPlayingB, setMockPlayingB] = useState(false);
-  const [mockPitchB, setMockPitchB] = useState(50);
+  const deck = deckName === 'A' ? deckA : deckB;
 
-  const isDeckA = deckName === 'A';
+  const isPlaying = deck.playbackState === 'playing';
+  const isLoading = deck.playbackState === 'loading';
+  const hasTrack = Boolean(deck.track);
+  const isError = deck.playbackState === 'error';
 
-  // Variables calculadas según sea Deck A (Real) o Deck B (Mock)
-  const isPlaying = isDeckA ? (deckA.playbackState === 'playing') : mockPlayingB;
-  const isLoading = isDeckA && deckA.playbackState === 'loading';
-  const hasTrack = isDeckA ? Boolean(deckA.track) : true;
+  const finalTitle = deck.track?.title || trackTitle || t('dj.no_track');
+  const finalArtist = deck.track 
+    ? (deck.track.artist || t('dj.unknown_artist')) 
+    : (trackArtist || (trackTitle ? t('dj.unknown_artist') : ''));
 
-  const finalTitle = isDeckA 
-    ? (deckA.track?.title || t('dj.no_track')) 
-    : (trackTitle || t('dj.no_track'));
+  const currentPitch = deck.pitch;
 
-  const finalArtist = isDeckA 
-    ? (deckA.track ? (deckA.track.artist || t('dj.unknown_artist')) : '') 
-    : (trackArtist || t('dj.unknown_artist'));
+  const currentBpm = deck.calculatedBpm !== null 
+    ? deck.calculatedBpm.toFixed(1) 
+    : (deck.track ? '—' : bpm.toFixed(1));
 
-  const currentPitch = isDeckA ? deckA.pitch : mockPitchB;
+  const currentKey = deck.keyStr || (deck.track ? '—' : keyStr);
 
-  const currentBpm = isDeckA 
-    ? (deckA.calculatedBpm !== null ? deckA.calculatedBpm.toFixed(1) : '—')
-    : (bpm * (1 + (mockPitchB - 50) / 100 * 0.16)).toFixed(1);
-
-  const currentKey = isDeckA ? (deckA.keyStr || '—') : keyStr;
-
-  // Cálculo de tiempo real para Deck A
-  const duration = isDeckA ? deckA.duration : 0;
-  const currentTime = isDeckA ? deckA.currentTime : 0;
+  const duration = deck.duration;
+  const currentTime = deck.currentTime;
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
-  const formattedTimeRemaining = isDeckA
-    ? (duration > 0 ? `-${formatDuration(Math.max(0, duration - currentTime))}` : '-0:00')
+  const formattedTimeRemaining = duration > 0 
+    ? `-${formatDuration(Math.max(0, duration - currentTime))}` 
     : timeRemaining;
 
   const handlePlayToggle = async () => {
-    if (isDeckA) {
-      if (!deckA.track) return;
-      await togglePlayDeckA();
-    } else {
-      setMockPlayingB(!mockPlayingB);
-    }
+    if (!deck.track || isLoading) return;
+    await togglePlayDeck(deckName);
   };
 
   const handleStopOrCue = () => {
-    if (isDeckA) {
-      stopDeckA();
-    } else {
-      setMockPlayingB(false);
-    }
+    if (!hasTrack || isLoading) return;
+    stopDeck(deckName);
   };
 
   const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isDeckA && duration > 0) {
+    if (duration > 0) {
       const rect = e.currentTarget.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const percent = Math.max(0, Math.min(1, clickX / rect.width));
-      seekDeckA(percent * duration);
+      seekDeck(deckName, percent * duration);
     }
   };
 
   const handlePitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    if (isDeckA) {
-      setPitchDeckA(val);
-    } else {
-      setMockPitchB(val);
-    }
+    setPitchDeck(deckName, Number(e.target.value));
   };
 
   return (
-    <div className={clsx('dj-deck', isDeckA && 'deck-real')}>
+    <div className={clsx('dj-deck', 'deck-real', `deck-${deckName.toLowerCase()}`, isError && 'deck-has-error')}>
       
       {/* Header Info */}
       <div className="deck-header">
         <div className="deck-title-group">
           <span className="deck-track-title">{finalTitle}</span>
-          <span className="deck-track-artist">{finalArtist}</span>
+          <span className="deck-track-artist">
+            {isError && deck.errorMessage ? (
+              <span className="deck-error-badge" title={deck.errorMessage}>
+                {deck.errorMessage}
+              </span>
+            ) : (
+              finalArtist
+            )}
+          </span>
         </div>
         <div className="deck-stats">
           <div className="deck-stat-item">
@@ -124,14 +119,14 @@ export const Deck: React.FC<DeckProps> = ({
 
       {/* Waveform y Barra de Progreso Temporal Interactiva */}
       <div 
-        className={clsx('deck-waveform-container', isDeckA && 'waveform-interactive')}
+        className={clsx('deck-waveform-container', duration > 0 && 'waveform-interactive')}
         onClick={handleWaveformClick}
-        title={isDeckA && duration > 0 ? 'Haz clic para buscar posición (Seek)' : undefined}
+        title={duration > 0 ? t('dj.seek_title') : undefined}
       >
         <div className={clsx('deck-waveform-mock', isPlaying && 'playing-anim-wave')}></div>
         
         {/* Relleno de progreso transcurrido */}
-        {isDeckA && (
+        {duration > 0 && (
           <div 
             className="deck-waveform-progress" 
             style={{ width: `${progressPercent}%` }}
@@ -140,7 +135,7 @@ export const Deck: React.FC<DeckProps> = ({
 
         <div 
           className="deck-playhead" 
-          style={isDeckA ? { left: `${progressPercent}%` } : undefined}
+          style={duration > 0 ? { left: `${progressPercent}%` } : undefined}
         ></div>
       </div>
 
@@ -151,7 +146,7 @@ export const Deck: React.FC<DeckProps> = ({
         <div className="deck-transport">
           <button 
             className="btn btn-dj btn-dj-sync"
-            title="Función SYNC (En desarrollo para Fase 23)"
+            title="Función SYNC (En desarrollo)"
             disabled
           >
             {t('dj.sync')}
@@ -159,15 +154,15 @@ export const Deck: React.FC<DeckProps> = ({
           <button 
             className="btn btn-dj btn-dj-cue"
             onClick={handleStopOrCue}
-            title={isDeckA ? 'Detener y rebobinar al inicio (0:00)' : t('dj.cue')}
-            disabled={isDeckA && !hasTrack}
+            title={t('dj.cue_stop_title')}
+            disabled={!hasTrack || isLoading}
           >
-            {isDeckA ? 'CUE / STOP' : t('dj.cue')}
+            {t('dj.cue_stop')}
           </button>
           <button 
             className={clsx('btn btn-dj', isPlaying ? 'btn-dj-play' : 'btn-outline')}
             onClick={handlePlayToggle}
-            disabled={isDeckA && (!hasTrack || isLoading)}
+            disabled={!hasTrack || isLoading}
           >
             {isLoading ? '...' : (isPlaying ? t('dj.pause') : t('dj.play'))}
           </button>
@@ -193,7 +188,7 @@ export const Deck: React.FC<DeckProps> = ({
               orientation="vertical" 
               value={currentPitch} 
               onChange={handlePitchChange}
-              disabled={isDeckA && !hasTrack}
+              disabled={!hasTrack || isLoading}
             />
           </div>
           <span className="deck-pitch-label bottom">+8%</span>

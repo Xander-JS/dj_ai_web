@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   Search, MoreHorizontal, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
-  Disc, X, HardDrive
+  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle
 } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -15,21 +15,26 @@ import { validateAudioFile, createTrackFromFile } from '../utils/audioValidation
 import { formatBytes, formatDate } from '../utils/formatters';
 import { audioEngine } from '../audio';
 import { useDJStore, djStore } from '../store/useDJStore';
-import type { Track } from '../types/track';
+import { analysisSyncManager } from '../services/analysis';
+import { keyToCamelot } from '../audio/analysis/camelotMapper';
+import type { Track, AnalysisStatus, MusicalKeyCamelot } from '../types/track';
 import '../components/ui/Table.css';
 import './Library.css';
 import { clsx } from 'clsx';
 
-type FilterType = 'all' | 'local' | 'demo' | 'audio' | 'video';
+export type FilterType = 'all' | 'local' | 'demo' | 'audio' | 'video';
 
-interface UnifiedRowTrack {
+export interface UnifiedRowTrack {
   id: string;
   title: string;
   artist: string;
   album: string;
   bpm?: number;
   key?: string;
+  camelot?: MusicalKeyCamelot;
   energy?: number;
+  status: AnalysisStatus;
+  analysisError?: string;
   durationFormatted: string;
   type: 'audio' | 'video';
   isLocal: boolean;
@@ -38,10 +43,85 @@ interface UnifiedRowTrack {
   rawLocalTrack?: Track;
 }
 
+export interface AnalysisStatusBadgeProps {
+  status: AnalysisStatus;
+  error?: string;
+  onAnalyze?: () => void;
+}
+
+export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
+  status,
+  error,
+  onAnalyze,
+}) => {
+  const { t } = useTranslation();
+
+  const getStatusConfig = () => {
+    switch (status) {
+      case 'analyzing':
+        return {
+          icon: <Loader2 size={12} className="spin-anim" />,
+          label: t('library.status_analyzing'),
+          title: t('library.status_analyzing_title'),
+          className: 'status-badge-analyzing',
+          isInteractive: false,
+        };
+      case 'analyzed':
+        return {
+          icon: <CheckCircle2 size={12} />,
+          label: t('library.status_analyzed'),
+          title: t('library.status_analyzed_title'),
+          className: 'status-badge-analyzed',
+          isInteractive: Boolean(onAnalyze),
+        };
+      case 'failed':
+        return {
+          icon: <AlertCircle size={12} />,
+          label: t('library.status_failed'),
+          title: error ? `${t('library.status_failed_title')}: ${error}` : t('library.status_failed_title'),
+          className: 'status-badge-failed',
+          isInteractive: Boolean(onAnalyze),
+        };
+      case 'unsupported':
+        return {
+          icon: <AlertTriangle size={12} />,
+          label: t('library.status_unsupported'),
+          title: error || t('library.status_unsupported_title'),
+          className: 'status-badge-unsupported',
+          isInteractive: Boolean(onAnalyze),
+        };
+      case 'pending':
+      default:
+        return {
+          icon: <Clock size={12} />,
+          label: t('library.status_pending'),
+          title: t('library.status_pending_title'),
+          className: 'status-badge-pending',
+          isInteractive: Boolean(onAnalyze),
+        };
+    }
+  };
+
+  const config = getStatusConfig();
+
+  return (
+    <span
+      role="status"
+      aria-label={config.title}
+      title={config.title}
+      className={clsx('status-badge', config.className, config.isInteractive && 'interactive')}
+      onClick={config.isInteractive ? onAnalyze : undefined}
+    >
+      {config.icon}
+      <span>{config.label}</span>
+    </span>
+  );
+};
+
 export const Library: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB } = useDJStore();
+  const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB, analyzeTrack } = useDJStore();
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,7 +138,7 @@ export const Library: React.FC = () => {
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
 
-  // Carga inicial de pistas desde IndexedDB
+  // Carga inicial y suscripción reactiva en tiempo real al gestor de análisis
   useEffect(() => {
     let isMounted = true;
     indexedDBStorage
@@ -72,8 +152,17 @@ export const Library: React.FC = () => {
         console.error('[Library] Error al cargar pistas locales:', err);
       });
 
+    // Suscripción reactiva para reflejar análisis completados, fallidos o en curso sin recarga
+    const unsubscribe = analysisSyncManager.subscribe((trackId, analysis) => {
+      if (!isMounted) return;
+      setLocalTracks((prevTracks) =>
+        prevTracks.map((tr) => (tr.id === trackId ? { ...tr, analysis } : tr))
+      );
+    });
+
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, []);
 
@@ -180,15 +269,74 @@ export const Library: React.FC = () => {
     }
   };
 
+  // Acción contextual: Analizar o Reanalizar pista
+  const handleAnalyzeTrack = async (track: Track, force = false) => {
+    // Evitar solicitudes duplicadas innecesarias si ya está procesándose
+    if (analysisSyncManager.isAnalyzing(track.id)) {
+      return;
+    }
+
+    try {
+      // Marcado visual optimista
+      setLocalTracks((prev) =>
+        prev.map((t) =>
+          t.id === track.id ? { ...t, analysis: { ...t.analysis, status: 'analyzing' } } : t
+        )
+      );
+
+      const result = await analyzeTrack(track, force);
+
+      if (result.status === 'failed') {
+        setFeedback({
+          type: 'warning',
+          text: t('library.analysis_failed_warning', {
+            title: track.title,
+            error: result.analysisError || t('states.error_desc'),
+          }),
+        });
+      } else if (result.status === 'analyzed') {
+        const bpmStr = result.bpm ? `${result.bpm} BPM` : '';
+        const keyStr = result.key ? `${result.key}` : '';
+        setFeedback({
+          type: 'success',
+          text: t('library.analysis_success', {
+            title: track.title,
+            bpm: bpmStr,
+            key: keyStr,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error('[Library] Error al solicitar análisis:', err);
+      setFeedback({
+        type: 'error',
+        text: t('library.analysis_error', {
+          title: track.title,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      });
+    }
+  };
+
   // Eliminación de pista local
   const handleDeleteTrack = async (track: Track) => {
     try {
+      // Cancelar análisis en vuelo si estuviera analizándose para evitar escrituras huérfanas
+      analysisSyncManager.cancelAnalysis(track.id);
+
       await indexedDBStorage.deleteTrack(track.id);
       setDeleteConfirmTrack(null);
+      
+      // Remover de inmediato del estado local
+      setLocalTracks((prev) => prev.filter((t) => t.id !== track.id));
+
       await refreshLocalTracks();
       setFeedback({
         type: 'success',
-        text: `Pista "${track.title}" eliminada de la biblioteca local.`,
+        text: t('library.delete_success', {
+          title: track.title,
+          defaultValue: `Pista "${track.title}" eliminada de la biblioteca local.`,
+        }),
       });
     } catch (err) {
       console.error('[Library] Error al eliminar pista:', err);
@@ -220,6 +368,7 @@ export const Library: React.FC = () => {
             status: 'analyzed',
             bpm: unifiedTrack.bpm,
             key: unifiedTrack.key,
+            camelot: unifiedTrack.camelot,
             energy: unifiedTrack.energy,
           },
           dateAdded: Date.now(),
@@ -254,21 +403,29 @@ export const Library: React.FC = () => {
   // Construcción unificada de filas (Demo + Local)
   const unifiedTracks: UnifiedRowTrack[] = [
     // Pistas locales importadas
-    ...localTracks.map((lt): UnifiedRowTrack => ({
-      id: lt.id,
-      title: lt.title,
-      artist: lt.artist || t('dj.unknown_artist'),
-      album: lt.fileMeta?.fileName || '-',
-      bpm: lt.analysis.bpm,
-      key: lt.analysis.key,
-      energy: lt.analysis.energy,
-      durationFormatted: lt.durationFormatted,
-      type: lt.type,
-      isLocal: true,
-      fileSizeFormatted: lt.fileMeta?.fileSize ? formatBytes(lt.fileMeta.fileSize) : undefined,
-      dateAddedFormatted: lt.dateAdded ? formatDate(lt.dateAdded) : undefined,
-      rawLocalTrack: lt,
-    })),
+    ...localTracks.map((lt): UnifiedRowTrack => {
+      const isAnalyzed = lt.analysis?.status === 'analyzed';
+      return {
+        id: lt.id,
+        title: lt.title,
+        artist: lt.artist || t('dj.unknown_artist'),
+        album: lt.fileMeta?.fileName || '-',
+        bpm: isAnalyzed ? lt.analysis.bpm : undefined,
+        key: isAnalyzed ? lt.analysis.key : undefined,
+        camelot: isAnalyzed
+          ? lt.analysis.camelot || (lt.analysis.key ? keyToCamelot(lt.analysis.key) || undefined : undefined)
+          : undefined,
+        energy: isAnalyzed ? lt.analysis.energy : undefined,
+        status: lt.analysis?.status || 'pending',
+        analysisError: lt.analysis?.analysisError,
+        durationFormatted: lt.durationFormatted,
+        type: lt.type,
+        isLocal: true,
+        fileSizeFormatted: lt.fileMeta?.fileSize ? formatBytes(lt.fileMeta.fileSize) : undefined,
+        dateAddedFormatted: lt.dateAdded ? formatDate(lt.dateAdded) : undefined,
+        rawLocalTrack: lt,
+      };
+    }),
     // Pistas mock de demostración
     ...MOCK_LIBRARY.map((mt): UnifiedRowTrack => ({
       id: `demo_${mt.id}`,
@@ -277,7 +434,9 @@ export const Library: React.FC = () => {
       album: mt.album,
       bpm: mt.bpm,
       key: mt.key,
+      camelot: keyToCamelot(mt.key) || undefined,
       energy: mt.energy,
+      status: 'analyzed',
       durationFormatted: mt.duration,
       type: mt.type,
       isLocal: false,
@@ -443,6 +602,7 @@ export const Library: React.FC = () => {
               <th>{t('library.col_bpm')}</th>
               <th>{t('library.col_key')}</th>
               <th>{t('library.col_energy')}</th>
+              <th className="col-status">{t('library.col_status')}</th>
               <th>{t('library.col_duration')}</th>
               <th className="col-actions"></th>
             </tr>
@@ -493,33 +653,47 @@ export const Library: React.FC = () => {
                     )}
                   </td>
                   <td>
-                    {track.bpm !== undefined ? (
-                      track.bpm
+                    {track.status === 'analyzed' && track.bpm !== undefined && track.bpm > 0 ? (
+                      <span className="track-bpm-value">{track.bpm % 1 === 0 ? track.bpm : track.bpm.toFixed(1)}</span>
                     ) : (
-                      <span className="text-muted">--</span>
+                      <span className="text-muted">—</span>
                     )}
                   </td>
                   <td>
-                    {track.key ? (
-                      <Badge variant="outline">{track.key}</Badge>
+                    {track.status === 'analyzed' && track.key ? (
+                      <div className="track-key-group">
+                        <span className="track-key-name">{track.key}</span>
+                        {track.camelot && (
+                          <Badge variant="outline" className="track-camelot-badge">
+                            {track.camelot}
+                          </Badge>
+                        )}
+                      </div>
                     ) : (
-                      <span className="text-muted">--</span>
+                      <span className="text-muted">—</span>
                     )}
                   </td>
                   <td>
-                    {track.energy !== undefined ? (
-                      <div className="energy-bar-container">
+                    {track.status === 'analyzed' && typeof track.energy === 'number' ? (
+                      <div className="energy-bar-container" title={t('library.energy_label', { val: track.energy })}>
                         <div className="energy-bar">
                           <div 
                             className="energy-bar-fill" 
-                            style={{ width: `${track.energy * 10}%` }}
+                            style={{ width: `${Math.min(10, Math.max(0, track.energy)) * 10}%` }}
                           ></div>
                         </div>
                         <span className="energy-bar-value">{track.energy}</span>
                       </div>
                     ) : (
-                      <span className="text-muted">--</span>
+                      <span className="text-muted">—</span>
                     )}
+                  </td>
+                  <td className="col-status">
+                    <AnalysisStatusBadge
+                      status={track.status}
+                      error={track.analysisError}
+                      onAnalyze={track.isLocal && track.rawLocalTrack ? () => handleAnalyzeTrack(track.rawLocalTrack!, track.status === 'analyzed') : undefined}
+                    />
                   </td>
                   <td className="track-duration">{track.durationFormatted}</td>
                   <td className="col-actions">
@@ -541,6 +715,36 @@ export const Library: React.FC = () => {
                         onClick={() => handleLoadToDeck(track, 'B')}
                       />
                       {track.isLocal && track.rawLocalTrack && (
+                        track.status === 'analyzing' ? (
+                          <IconButton 
+                            icon={<Loader2 size={15} className="spin-anim" />} 
+                            size="sm" 
+                            variant="ghost"
+                            disabled
+                            title={t('library.status_analyzing')}
+                            aria-label={t('library.status_analyzing')}
+                          />
+                        ) : track.status === 'analyzed' ? (
+                          <IconButton 
+                            icon={<RefreshCw size={15} />} 
+                            size="sm" 
+                            variant="ghost"
+                            title={t('library.action_reanalyze')}
+                            aria-label={t('library.action_reanalyze')}
+                            onClick={() => handleAnalyzeTrack(track.rawLocalTrack!, true)}
+                          />
+                        ) : (
+                          <IconButton 
+                            icon={<Sparkles size={15} />} 
+                            size="sm" 
+                            variant="ghost"
+                            title={t('library.action_analyze')}
+                            aria-label={t('library.action_analyze')}
+                            onClick={() => handleAnalyzeTrack(track.rawLocalTrack!, false)}
+                          />
+                        )
+                      )}
+                      {track.isLocal && track.rawLocalTrack && (
                         <IconButton 
                           icon={<Trash2 size={16} />} 
                           size="sm" 
@@ -561,7 +765,7 @@ export const Library: React.FC = () => {
 
             {filteredTracks.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
                     <AlertCircle size={28} className="text-muted" />
                     <span style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-primary)' }}>
@@ -601,3 +805,4 @@ export const Library: React.FC = () => {
     </div>
   );
 };
+

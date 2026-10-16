@@ -101,7 +101,16 @@
     "mid": "MID",
     "low": "LOW",
     "filter": "FILTER",
-    "master": "MASTER"
+    "master": "MASTER",
+    "cue_pfl": "CUE",
+    "curve": "Curve",
+    "curve_constant_power": "Constant Power",
+    "curve_linear": "Linear",
+    "curve_cut": "Fast Cut (Scratch)",
+    "curve_cp_short": "CP",
+    "curve_lin_short": "LIN",
+    "curve_cut_short": "CUT",
+    "mute": "MUTE"
   },
   "states": {
     "loading": "Loading...",

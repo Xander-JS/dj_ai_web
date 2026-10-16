@@ -11,11 +11,12 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { Track } from '../types/track';
+import type { Track, TrackAnalysis } from '../types/track.ts';
 import type { DeckId } from '../types/deck';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
+import { analysisSyncManager } from '../services/analysis/index.ts';
 
 export type DeckPlaybackStatus = 'stopped' | 'playing' | 'paused' | 'loading' | 'error';
 
@@ -138,14 +139,26 @@ const INITIAL_STATE: DJStoreState = {
 };
 
 
-/** BPM analizado real, o null si la pista no tiene BPM analizado/almacenado. */
+/** BPM analizado real, o null si la pista no tiene BPM analizado/almacenado válido. */
 function getAnalyzedBpm(track: Track | null): number | null {
-  if (!track || typeof track.analysis?.bpm !== 'number' || track.analysis.bpm <= 0) return null;
+  if (!track || !track.analysis) return null;
+  // Nunca transformar estados fallidos o no soportados en resultados musicales válidos
+  if (track.analysis.status === 'failed' || track.analysis.status === 'unsupported') {
+    return null;
+  }
+  if (typeof track.analysis.bpm !== 'number' || track.analysis.bpm <= 0) return null;
   return track.analysis.bpm;
 }
 
 function getAnalyzedKey(track: Track | null): string | null {
-  if (!track || !track.analysis?.key) return null;
+  if (!track || !track.analysis) return null;
+  if (track.analysis.status === 'failed' || track.analysis.status === 'unsupported') {
+    return null;
+  }
+  if (!track.analysis.key) return null;
+  if (track.analysis.camelot) {
+    return `${track.analysis.key} (${track.analysis.camelot})`;
+  }
   return track.analysis.key;
 }
 
@@ -170,6 +183,11 @@ class DJStore {
     });
     audioEngine.onPlaybackEnded('B', () => {
       this.handlePlaybackEnded('B');
+    });
+
+    // Escuchar actualizaciones de análisis de pistas para sincronizar reactivamente los decks
+    analysisSyncManager.subscribe((trackId, analysis) => {
+      this.handleAnalysisUpdated(trackId, analysis);
     });
   }
 
@@ -207,6 +225,62 @@ class DJStore {
     } else {
       this.setState({ deckB: { ...this.state.deckB, ...partial } });
     }
+  }
+
+  /**
+   * Actualiza el estado reactivo de Deck A o Deck B cuando finaliza o cambia el análisis de una pista.
+   */
+  public handleAnalysisUpdated(trackId: string, analysis: TrackAnalysis): void {
+    let hasChanged = false;
+    const updates: Partial<DJStoreState> = {};
+
+    if (this.state.deckA.track?.id === trackId) {
+      const updatedTrack: Track = {
+        ...this.state.deckA.track,
+        analysis,
+      };
+      updates.deckA = {
+        ...this.state.deckA,
+        track: updatedTrack,
+        calculatedBpm: computeEffectiveBpm(updatedTrack, this.state.deckA.playbackRate),
+        keyStr: getAnalyzedKey(updatedTrack),
+      };
+      hasChanged = true;
+    }
+
+    if (this.state.deckB.track?.id === trackId) {
+      const updatedTrack: Track = {
+        ...this.state.deckB.track,
+        analysis,
+      };
+      updates.deckB = {
+        ...this.state.deckB,
+        track: updatedTrack,
+        calculatedBpm: computeEffectiveBpm(updatedTrack, this.state.deckB.playbackRate),
+        keyStr: getAnalyzedKey(updatedTrack),
+      };
+      hasChanged = true;
+    }
+
+    if (hasChanged) {
+      this.setState(updates);
+    }
+  }
+
+  /**
+   * Solicita el análisis musical de una pista sincronizado con IndexedDB y el store.
+   */
+  public async analyzeTrack(track: Track, force = false): Promise<TrackAnalysis> {
+    return analysisSyncManager.analyzeTrack(track, { force });
+  }
+
+  /**
+   * Actualiza el análisis de una pista atómicamente y sincroniza los decks si está cargada.
+   */
+  public async updateTrackAnalysis(trackId: string, analysis: TrackAnalysis): Promise<boolean> {
+    const success = await indexedDBStorage.updateTrackAnalysis(trackId, analysis);
+    this.handleAnalysisUpdated(trackId, analysis);
+    return success;
   }
 
   /**
@@ -817,6 +891,10 @@ export function useDJStore(): {
   setGain: (deckId: DeckId, gain: number) => void;
   setEq: (deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, value: number) => void;
   setFilter: (deckId: DeckId, value: number) => void;
+
+  // Análisis musical y sincronización
+  analyzeTrack: (track: Track, force?: boolean) => Promise<TrackAnalysis>;
+  updateTrackAnalysis: (trackId: string, analysis: TrackAnalysis) => Promise<boolean>;
 } {
   const state = useSyncExternalStore(djStore.subscribe, djStore.getSnapshot);
 
@@ -874,6 +952,10 @@ export function useDJStore(): {
     setGain: djStore.setChannelGain.bind(djStore),
     setEq: djStore.setChannelEq.bind(djStore),
     setFilter: djStore.setChannelFilter.bind(djStore),
+
+    // Análisis musical y sincronización
+    analyzeTrack: djStore.analyzeTrack.bind(djStore),
+    updateTrackAnalysis: djStore.updateTrackAnalysis.bind(djStore),
   };
 }
 

@@ -19,10 +19,14 @@ class MockAudioParam {
 }
 
 class MockAudioNode {
-  public connect(): MockAudioNode {
-    return this;
+  public connectedTo: MockAudioNode[] = [];
+  public connect(destination: MockAudioNode): MockAudioNode {
+    this.connectedTo.push(destination);
+    return destination;
   }
-  public disconnect(): void {}
+  public disconnect(): void {
+    this.connectedTo = [];
+  }
 }
 
 class MockGainNode extends MockAudioNode {
@@ -40,10 +44,25 @@ class MockAnalyserNode extends MockAudioNode {
   public fftSize = 256;
   public frequencyBinCount = 128;
   public smoothingTimeConstant = 0.8;
+  public customData: number[] | null = null;
   public getByteTimeDomainData(array: Uint8Array): void {
-    // Rellenar con señal neutra (128 = silencio)
-    array.fill(128);
+    if (this.customData) {
+      for (let i = 0; i < array.length; i++) {
+        array[i] = this.customData[i % this.customData.length];
+      }
+    } else {
+      // Rellenar con señal neutra (128 = silencio)
+      array.fill(128);
+    }
   }
+}
+
+class MockDynamicsCompressorNode extends MockAudioNode {
+  public threshold = new MockAudioParam(-1);
+  public knee = new MockAudioParam(0);
+  public ratio = new MockAudioParam(20);
+  public attack = new MockAudioParam(0.001);
+  public release = new MockAudioParam(0.05);
 }
 
 class MockAudioBufferSourceNode extends MockAudioNode {
@@ -85,6 +104,10 @@ class MockAudioContext {
 
   public createAnalyser(): AnalyserNode {
     return new MockAnalyserNode() as unknown as AnalyserNode;
+  }
+
+  public createDynamicsCompressor(): DynamicsCompressorNode {
+    return new MockDynamicsCompressorNode() as unknown as DynamicsCompressorNode;
   }
 
   public createBufferSource(): AudioBufferSourceNode {
@@ -470,3 +493,371 @@ describe('AudioEngineService — Pruebas de Ciclo de Vida y Transporte', () => {
     assert.equal(service.status, 'uninitialized');
   });
 });
+
+describe('AudioEngineService — Pruebas del Grafo DSP, Curvas y Medición Real', () => {
+  let service: AudioEngineService;
+  const originalWindow = globalThis.window;
+
+  beforeEach(() => {
+    (globalThis as unknown as { window: unknown }).window = {
+      AudioContext: MockAudioContext,
+    };
+    service = new AudioEngineService();
+  });
+
+  afterEach(async () => {
+    await service.dispose();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+  });
+
+  test('Topología del grafo DSP: orden secuencial de nodos en el canal', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+
+    const gainNode = graphA.gainNode as unknown as MockAudioNode;
+    const filterNode = graphA.filterNode as unknown as MockAudioNode;
+    const eqHighNode = graphA.eqHighNode as unknown as MockAudioNode;
+    const eqMidNode = graphA.eqMidNode as unknown as MockAudioNode;
+    const eqLowNode = graphA.eqLowNode as unknown as MockAudioNode;
+    const volumeNode = graphA.volumeNode as unknown as MockAudioNode;
+
+    assert.ok(gainNode.connectedTo.includes(filterNode), 'gainNode debe conectar a filterNode');
+    assert.ok(filterNode.connectedTo.includes(eqHighNode), 'filterNode debe conectar a eqHighNode');
+    assert.ok(eqHighNode.connectedTo.includes(eqMidNode), 'eqHighNode debe conectar a eqMidNode');
+    assert.ok(eqMidNode.connectedTo.includes(eqLowNode), 'eqMidNode debe conectar a eqLowNode');
+    assert.ok(eqLowNode.connectedTo.includes(volumeNode), 'eqLowNode debe conectar a volumeNode');
+  });
+
+  test('Topología del grafo DSP: el analizador de canal es pre-crossfader y post-fader', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+
+    const volumeNode = graphA.volumeNode as unknown as MockAudioNode;
+    const analyserNode = graphA.analyserNode as unknown as MockAudioNode;
+    const crossfaderGainNode = graphA.crossfaderGainNode as unknown as MockAudioNode;
+
+    // volumeNode debe bifurcarse hacia analyserNode y hacia crossfaderGainNode
+    assert.ok(volumeNode.connectedTo.includes(analyserNode), 'volumeNode debe derivar al analyserNode del canal');
+    assert.ok(volumeNode.connectedTo.includes(crossfaderGainNode), 'volumeNode debe conectar al crossfaderGainNode');
+
+    // analyserNode NO debe estar aguas abajo del crossfader
+    assert.ok(
+      !crossfaderGainNode.connectedTo.includes(analyserNode),
+      'analyserNode no debe conectarse después de crossfaderGainNode'
+    );
+  });
+
+  test('Topología de la etapa Master: masterGainNode alimenta al masterAnalyser y al limitador de seguridad', async () => {
+    await service.initialize();
+    const master = service.getMasterGraph();
+
+    const masterGain = master.masterGainNode as unknown as MockAudioNode;
+    const masterAnalyser = master.masterAnalyserNode as unknown as MockAudioNode;
+    const limiter = master.limiterNode as unknown as MockAudioNode;
+    const destination = MockAudioContext.lastInstance!.destination as unknown as MockAudioNode;
+
+    assert.ok(masterGain.connectedTo.includes(masterAnalyser), 'masterGainNode debe derivar al masterAnalyserNode');
+    assert.ok(masterGain.connectedTo.includes(limiter), 'masterGainNode debe conectar al limitador de picos');
+    assert.ok(limiter.connectedTo.includes(destination), 'El limitador de picos debe conectar al destination final');
+  });
+
+  test('setChannelGain() aplica ganancia lineal 0..2 y aísla los canales A y B', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const gainParamA = (graphA.gainNode as unknown as { gain: MockAudioParam }).gain;
+    const gainParamB = (graphB.gainNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setChannelGain('A', 50);
+    assert.equal(gainParamA.value, 1.0);
+
+    service.setChannelGain('A', 100);
+    assert.equal(gainParamA.value, 2.0);
+
+    service.setChannelGain('A', 0);
+    assert.equal(gainParamA.value, 0.0);
+
+    // Ajuste en B no altera A
+    service.setChannelGain('B', 75);
+    assert.equal(gainParamB.value, 1.5);
+    assert.equal(gainParamA.value, 0.0);
+
+    // Clamping estricto
+    service.setChannelGain('A', 150);
+    assert.equal(gainParamA.value, 2.0);
+    service.setChannelGain('A', -20);
+    assert.equal(gainParamA.value, 0.0);
+  });
+
+  test('setChannelEq() aplica ecualización de 3 bandas (-12 a +12 dB) con aislamiento', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const highA = (graphA.eqHighNode as unknown as { gain: MockAudioParam }).gain;
+    const midA = (graphA.eqMidNode as unknown as { gain: MockAudioParam }).gain;
+    const lowA = (graphA.eqLowNode as unknown as { gain: MockAudioParam }).gain;
+
+    const highB = (graphB.eqHighNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setChannelEq('A', 'high', 8);
+    assert.equal(highA.value, 8);
+
+    service.setChannelEq('A', 'mid', -4);
+    assert.equal(midA.value, -4);
+
+    service.setChannelEq('A', 'low', 12);
+    assert.equal(lowA.value, 12);
+
+    // Canal B permanece en 0 dB
+    assert.equal(highB.value, 0);
+
+    // Clamping a [-12, +12]
+    service.setChannelEq('A', 'high', 25);
+    assert.equal(highA.value, 12);
+
+    service.setChannelEq('A', 'low', -30);
+    assert.equal(lowA.value, -12);
+  });
+
+  test('setChannelFilter() implementa filtro bipolar: bypass (0), lowpass (<0) y highpass (>0)', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const filterNodeA = graphA.filterNode as unknown as { type: string; frequency: MockAudioParam };
+    const filterNodeB = graphB.filterNode as unknown as { type: string; frequency: MockAudioParam };
+
+    // Centro = Allpass bypass
+    service.setChannelFilter('A', 0);
+    assert.equal(filterNodeA.type, 'allpass');
+
+    // Hacia la izquierda (<0) = Lowpass progresivo
+    service.setChannelFilter('A', -50);
+    assert.equal(filterNodeA.type, 'lowpass');
+    assert.ok(filterNodeA.frequency.value > 200 && filterNodeA.frequency.value < 20000);
+
+    // Hacia la derecha (>0) = Highpass progresivo
+    service.setChannelFilter('A', 50);
+    assert.equal(filterNodeA.type, 'highpass');
+    assert.ok(filterNodeA.frequency.value > 20 && filterNodeA.frequency.value < 8000);
+
+    // Canal B se mantiene en su estado
+    assert.equal(filterNodeB.type, 'allpass');
+  });
+
+  test('setChannelVolume() aplica fader lineal 0..1 independiente por canal', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const volA = (graphA.volumeNode as unknown as { gain: MockAudioParam }).gain;
+    const volB = (graphB.volumeNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setChannelVolume('A', 80);
+    assert.equal(volA.value, 0.8);
+
+    service.setChannelVolume('A', 0);
+    assert.equal(volA.value, 0.0);
+
+    service.setChannelVolume('B', 100);
+    assert.equal(volB.value, 1.0);
+    assert.equal(volA.value, 0.0);
+
+    // Clamping
+    service.setChannelVolume('A', 120);
+    assert.equal(volA.value, 1.0);
+    service.setChannelVolume('A', -10);
+    assert.equal(volA.value, 0.0);
+  });
+
+  test('setCrossfader() curva constant-power conserva la potencia acústica', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const crossA = (graphA.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+    const crossB = (graphB.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+
+    // Extremo A (0.0)
+    service.setCrossfader(0.0, 'constant-power');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 0.0);
+
+    // Centro (0.5) -> cos(pi/4) ≈ 0.7071
+    service.setCrossfader(0.5, 'constant-power');
+    assert.ok(Math.abs(crossA.value - 0.7071) < 0.001);
+    assert.ok(Math.abs(crossB.value - 0.7071) < 0.001);
+
+    // Extremo B (1.0)
+    service.setCrossfader(1.0, 'constant-power');
+    assert.equal(crossA.value, 0.0);
+    assert.equal(crossB.value, 1.0);
+  });
+
+  test('setCrossfader() curva linear atenúa de forma proporcional directa', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const crossA = (graphA.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+    const crossB = (graphB.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setCrossfader(0.0, 'linear');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 0.0);
+
+    service.setCrossfader(0.5, 'linear');
+    assert.equal(crossA.value, 0.5);
+    assert.equal(crossB.value, 0.5);
+
+    service.setCrossfader(1.0, 'linear');
+    assert.equal(crossA.value, 0.0);
+    assert.equal(crossB.value, 1.0);
+  });
+
+  test('setCrossfader() curva cut (scratch) ofrece transición abrupta en extremos y plena ganancia central', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const crossA = (graphA.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+    const crossB = (graphB.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setCrossfader(0.0, 'cut');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 0.0);
+
+    // Corte rápido en extremo B (pos = 0.025 -> 0.025 * 20 = 0.5)
+    service.setCrossfader(0.025, 'cut');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 0.5);
+
+    // En 0.05 ya alcanza 1.0
+    service.setCrossfader(0.05, 'cut');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 1.0);
+
+    // Centro
+    service.setCrossfader(0.5, 'cut');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 1.0);
+
+    // En 0.95 todavía está al 100%
+    service.setCrossfader(0.95, 'cut');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 1.0);
+
+    // Corte rápido en extremo A (pos = 0.975 -> (1 - 0.975) * 20 = 0.5)
+    service.setCrossfader(0.975, 'cut');
+    assert.equal(crossA.value, 0.5);
+    assert.equal(crossB.value, 1.0);
+
+    // Extremo B (1.0)
+    service.setCrossfader(1.0, 'cut');
+    assert.equal(crossA.value, 0.0);
+    assert.equal(crossB.value, 1.0);
+  });
+
+  test('setCrossfader() soporta valores normalizados 0..1 y porcentuales 0..100 indistintamente', async () => {
+    await service.initialize();
+    const graphA = service.getDeckAudioGraph('A');
+    const graphB = service.getDeckAudioGraph('B');
+
+    const crossA = (graphA.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+    const crossB = (graphB.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setCrossfader(50, 'constant-power');
+    assert.ok(Math.abs(crossA.value - 0.7071) < 0.001);
+    assert.ok(Math.abs(crossB.value - 0.7071) < 0.001);
+
+    service.setCrossfader(100, 'constant-power');
+    assert.equal(crossA.value, 0.0);
+    assert.equal(crossB.value, 1.0);
+
+    service.setCrossfader(0, 'constant-power');
+    assert.equal(crossA.value, 1.0);
+    assert.equal(crossB.value, 0.0);
+  });
+
+  test('El vúmetro de canal no se anula cuando el crossfader está en el extremo opuesto', async () => {
+    await service.initialize();
+    const fakeBuffer = { duration: 120.0 } as AudioBuffer;
+    service.loadBufferToDeck('A', fakeBuffer);
+    service.playDeck('A', 0);
+
+    const graphA = service.getDeckAudioGraph('A');
+    const analyserA = graphA.analyserNode as unknown as MockAnalyserNode;
+
+    // Simular que el canal A tiene señal de audio (amplitud variable)
+    analyserA.customData = [200, 56, 200, 56];
+
+    // Mover el crossfader totalmente hacia Deck B (atenuando Deck A a 0 en el master)
+    service.setCrossfader(1.0, 'constant-power');
+    const crossGainA = (graphA.crossfaderGainNode as unknown as { gain: MockAudioParam }).gain;
+    assert.equal(crossGainA.value, 0.0);
+
+    // Comprobar que el vúmetro del canal A sigue midiendo la señal de audio real
+    const rmsA = service.getDeckRMS('A');
+    const vuA = service.getDeckVUMeter('A');
+
+    assert.ok(rmsA > 0, 'El valor RMS del canal A debe ser > 0 independientemente del crossfader');
+    assert.ok(vuA > 0, 'El nivel VU del canal A debe ser > 0 independientemente del crossfader');
+  });
+
+  test('Medición RMS Master representa la mezcla combinada y cae a 0 si no hay reproducción', async () => {
+    await service.initialize();
+    const master = service.getMasterGraph();
+    const masterAnalyser = master.masterAnalyserNode as unknown as MockAnalyserNode;
+
+    // Con ambos decks detenidos, el nivel Master debe ser 0
+    assert.equal(service.getMasterRMS(), 0);
+    assert.equal(service.getMasterVUMeter(), 0);
+
+    // Al reproducir Deck A con señal activa en el analizador maestro
+    const fakeBuffer = { duration: 120.0 } as AudioBuffer;
+    service.loadBufferToDeck('A', fakeBuffer);
+    service.playDeck('A', 0);
+
+    masterAnalyser.customData = [180, 76, 180, 76];
+    assert.ok(service.getMasterRMS() > 0, 'El RMS Master debe ser > 0 cuando hay señal');
+    assert.ok(service.getMasterVUMeter() > 0, 'El VUMeter Master debe ser > 0 cuando hay señal');
+  });
+
+  test('Protección contra picos: DynamicsCompressorNode se configura con parámetros de seguridad', async () => {
+    await service.initialize();
+    const master = service.getMasterGraph();
+
+    assert.ok(master.limiterNode, 'El nodo limitador de picos debe existir');
+    const limiter = master.limiterNode as unknown as MockDynamicsCompressorNode;
+
+    assert.equal(limiter.threshold.value, -1.0, 'Threshold debe configurarse en -1.0 dBFS');
+    assert.equal(limiter.ratio.value, 20.0, 'Ratio debe configurarse en 20:1');
+    assert.equal(limiter.knee.value, 0.0, 'Knee debe ser 0');
+    assert.equal(limiter.attack.value, 0.001, 'Attack debe ser 1 ms');
+    assert.equal(limiter.release.value, 0.050, 'Release debe ser 50 ms');
+  });
+
+  test('setMasterVolume() ajusta la ganancia del nodo master y aísla el valor', async () => {
+    await service.initialize();
+    const master = service.getMasterGraph();
+    const masterGain = (master.masterGainNode as unknown as { gain: MockAudioParam }).gain;
+
+    service.setMasterVolume(80);
+    assert.equal(masterGain.value, 0.8);
+
+    service.setMasterVolume(0);
+    assert.equal(masterGain.value, 0.0);
+
+    service.setMasterVolume(100);
+    assert.equal(masterGain.value, 1.0);
+
+    // Clamping
+    service.setMasterVolume(150);
+    assert.equal(masterGain.value, 1.0);
+    service.setMasterVolume(-30);
+    assert.equal(masterGain.value, 0.0);
+  });
+});
+

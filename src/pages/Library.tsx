@@ -41,7 +41,7 @@ interface UnifiedRowTrack {
 export const Library: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { deckA, loadTrackToDeckA } = useDJStore();
+  const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB } = useDJStore();
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -199,8 +199,8 @@ export const Library: React.FC = () => {
     }
   };
 
-  // Carga real de pista en Deck A
-  const handleLoadToDeckA = async (unifiedTrack: UnifiedRowTrack) => {
+  // Carga real de pista en Deck A o Deck B
+  const handleLoadToDeck = async (unifiedTrack: UnifiedRowTrack, deckId: 'A' | 'B') => {
     try {
       let trackToLoad: Track;
       if (unifiedTrack.rawLocalTrack) {
@@ -226,23 +226,27 @@ export const Library: React.FC = () => {
         };
       }
 
-      const loaded = await loadTrackToDeckA(trackToLoad);
+      const loadFn = deckId === 'A' ? loadTrackToDeckA : loadTrackToDeckB;
+      const loaded = await loadFn(trackToLoad);
+      const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
       if (loaded) {
         setFeedback({
           type: 'success',
-          text: `"${trackToLoad.title}" cargada y lista en el Deck A.`,
+          text: t('library.load_success', { title: trackToLoad.title, deck: deckLabel }),
         });
       } else {
-        const errMessage = djStore.getSnapshot().deckA.errorMessage;
+        const snapshot = djStore.getSnapshot();
+        const errMessage = deckId === 'A' ? snapshot.deckA.errorMessage : snapshot.deckB.errorMessage;
         setFeedback({
           type: 'error',
-          text: errMessage || `No se pudo cargar "${trackToLoad.title}" en el Deck A.`,
+          text: errMessage || t('library.load_error', { title: trackToLoad.title, deck: deckLabel }),
         });
       }
     } catch (err) {
+      const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
       setFeedback({
         type: 'error',
-        text: `Error al cargar en Deck A: ${err instanceof Error ? err.message : String(err)}`,
+        text: `Error al cargar en ${deckLabel}: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
   };
@@ -447,9 +451,10 @@ export const Library: React.FC = () => {
             {filteredTracks.map((track) => {
               const isSelected = selectedTracks.has(track.id);
               const isLoadedInDeckA = deckA.track?.title === track.title;
+              const isLoadedInDeckB = deckB.track?.title === track.title;
 
               return (
-                <tr key={track.id} className={clsx(isSelected && 'selected', isLoadedInDeckA && 'prepared')}>
+                <tr key={track.id} className={clsx(isSelected && 'selected', (isLoadedInDeckA || isLoadedInDeckB) && 'prepared')}>
                   <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
                     {isSelected ? (
                       <CheckSquare size={16} className="icon-selected" />
@@ -468,6 +473,12 @@ export const Library: React.FC = () => {
                         <span className="deck-prepared-tag" title={t('library.load_deck_a')}>
                           <Disc size={13} className={clsx(deckA.playbackState === 'playing' && 'playing-anim-spin')} />
                           Deck A {deckA.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
+                        </span>
+                      )}
+                      {isLoadedInDeckB && (
+                        <span className="deck-prepared-tag deck-b-tag" title={t('library.load_deck_b')}>
+                          <Disc size={13} className={clsx(deckB.playbackState === 'playing' && 'playing-anim-spin')} />
+                          Deck B {deckB.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
                         </span>
                       )}
                     </div>
@@ -514,10 +525,20 @@ export const Library: React.FC = () => {
                   <td className="col-actions">
                     <div className="track-actions-container">
                       <IconButton 
-                        icon={<Disc size={16} className={clsx(isLoadedInDeckA && 'text-primary')} />} 
+                        icon={<span className="deck-action-badge">A</span>} 
                         size="sm" 
+                        variant={isLoadedInDeckA ? 'primary' : 'outline'}
                         title={t('library.load_deck_a')}
-                        onClick={() => handleLoadToDeckA(track)}
+                        aria-label={t('library.load_deck_a')}
+                        onClick={() => handleLoadToDeck(track, 'A')}
+                      />
+                      <IconButton 
+                        icon={<span className="deck-action-badge">B</span>} 
+                        size="sm" 
+                        variant={isLoadedInDeckB ? 'secondary' : 'outline'}
+                        title={t('library.load_deck_b')}
+                        aria-label={t('library.load_deck_b')}
+                        onClick={() => handleLoadToDeck(track, 'B')}
                       />
                       {track.isLocal && track.rawLocalTrack && (
                         <IconButton 
@@ -525,11 +546,12 @@ export const Library: React.FC = () => {
                           size="sm" 
                           variant="ghost"
                           title={t('library.delete_track')}
+                          aria-label={t('library.delete_track')}
                           onClick={() => setDeleteConfirmTrack(track.rawLocalTrack || null)}
                         />
                       )}
                       {!track.isLocal && (
-                        <IconButton icon={<MoreHorizontal size={16} />} size="sm" />
+                        <IconButton icon={<MoreHorizontal size={16} />} size="sm" aria-label="More" />
                       )}
                     </div>
                   </td>

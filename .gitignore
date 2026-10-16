@@ -36,3 +36,5 @@ __pycache__/
 
 # Agents & local tooling logs
 .agents/logs/
+
+docs/

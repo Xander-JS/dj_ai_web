@@ -509,6 +509,20 @@ export class AudioEngineService implements IAudioEngineService {
   }
 
   /**
+   * Indica si el deck especificado se encuentra en reproducción activa.
+   */
+  public isDeckPlaying(deckId: DeckId): boolean {
+    return this.deckTransports.get(deckId)?.isPlaying ?? false;
+  }
+
+  /**
+   * Obtiene la velocidad de reproducción / factor de pitch actual del deck (0.92 a 1.08).
+   */
+  public getDeckPlaybackRate(deckId: DeckId): number {
+    return this.deckTransports.get(deckId)?.playbackRate ?? 1.0;
+  }
+
+  /**
    * Registra un callback desacoplado para cuando una pista termine naturalmente.
    */
   public onPlaybackEnded(deckId: DeckId, callback: () => void): () => void {

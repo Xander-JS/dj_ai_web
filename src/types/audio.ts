@@ -16,14 +16,23 @@ export interface DeckAudioGraph {
   deckId: DeckId;
   sourceNode: AudioBufferSourceNode | null;
   buffer: AudioBuffer | null;
+  gainNode: GainNode;
   filterNode: BiquadFilterNode;
   eqHighNode: BiquadFilterNode;
   eqMidNode: BiquadFilterNode;
   eqLowNode: BiquadFilterNode;
-  gainNode: GainNode;
   volumeNode: GainNode;
   crossfaderGainNode: GainNode;
   analyserNode: AnalyserNode;
+}
+
+/**
+ * Topología de la etapa Master de salida combinada.
+ */
+export interface MasterAudioGraph {
+  masterGainNode: GainNode;
+  masterAnalyserNode: AnalyserNode;
+  limiterNode: DynamicsCompressorNode | null;
 }
 
 /**
@@ -52,16 +61,25 @@ export interface IAudioEngineService {
   setChannelEq(deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, dbValue: number): void;
   setChannelFilter(deckId: DeckId, filterNormalized: number): void;
   setChannelVolume(deckId: DeckId, volumeLinear: number): void;
-  setCrossfader(positionNormalized: number, curve: CrossfaderCurve): void;
+  setCrossfader(positionNormalized: number, curve?: CrossfaderCurve): void;
+  setCrossfaderCurve?(curve: CrossfaderCurve): void;
   setMasterVolume(volumeLinear: number): void;
   
   // Telemetría y análisis
   getDeckCurrentTime(deckId: DeckId): number;
   getDeckDuration(deckId: DeckId): number;
-  getDeckVUMeter(deckId: DeckId): number; // Nivel RMS/Pico (0 a 100)
+  getDeckVUMeter(deckId: DeckId): number; // Nivel visual UI (0 a 100) pre-crossfader
+  getMasterVUMeter(): number;             // Nivel visual UI (0 a 100) mezcla Master
+  getDeckRMS(deckId: DeckId): number;    // Medición matemática RMS pura (0.0 a 1.0+) pre-crossfader
+  getMasterRMS(): number;                // Medición matemática RMS pura (0.0 a 1.0+) mezcla Master
   isDeckPlaying(deckId: DeckId): boolean;
   getDeckPlaybackRate(deckId: DeckId): number;
+  
+  // Inspección para pruebas
+  getDeckAudioGraph?(deckId: DeckId): DeckAudioGraph;
+  getMasterGraph?(): MasterAudioGraph;
   
   // Liberación de recursos
   dispose(): Promise<void>;
 }
+

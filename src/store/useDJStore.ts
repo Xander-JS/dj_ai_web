@@ -11,7 +11,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { Track, TrackAnalysis } from '../types/track.ts';
+import type { Track, TrackAnalysis, HotCue } from '../types/track.ts';
 import type { DeckId } from '../types/deck';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
@@ -22,6 +22,18 @@ export type DeckPlaybackStatus = 'stopped' | 'playing' | 'paused' | 'loading' | 
 
 /** Códigos de error traducibles por la interfaz. */
 export type DeckErrorCode = 'file_missing' | 'decode_failed' | 'playback_failed';
+
+/** Paleta de 8 colores distintivos para los pads de Hot Cue estilo DJ profesional. */
+export const HOT_CUE_COLORS: readonly string[] = [
+  '#ff3b30', // Slot 1: Rojo
+  '#ff9500', // Slot 2: Naranja
+  '#ffcc00', // Slot 3: Amarillo
+  '#34c759', // Slot 4: Verde
+  '#00c7be', // Slot 5: Turquesa
+  '#32ade6', // Slot 6: Azul claro
+  '#5856d6', // Slot 7: Púrpura
+  '#af52de', // Slot 8: Magenta
+];
 
 export interface DeckStoreState {
   deckId: DeckId;
@@ -35,9 +47,16 @@ export interface DeckStoreState {
   calculatedBpm: number | null;
   /** Tonalidad analizada. `null` si no hay análisis real. */
   keyStr: string | null;
+  /** Posición del CUE principal en segundos, o null si aún no se ha fijado. */
+  mainCue: number | null;
+  /** Lista de 8 Hot Cues definidos para la pista cargada. */
+  hotCues: HotCue[];
+  /** Indica si el deck se encuentra en reproducción provisional CUP (manteniendo CUE presionado). */
+  isCupPlaying: boolean;
   errorCode: DeckErrorCode | null;
   errorMessage: string | null;
 }
+
 
 export interface DJStoreState {
   deckA: DeckStoreState;
@@ -78,6 +97,9 @@ const INITIAL_DECK_A: DeckStoreState = {
   playbackRate: 1.0,
   calculatedBpm: null,
   keyStr: null,
+  mainCue: null,
+  hotCues: [],
+  isCupPlaying: false,
   errorCode: null,
   errorMessage: null,
 };
@@ -92,9 +114,13 @@ const INITIAL_DECK_B: DeckStoreState = {
   playbackRate: 1.0,
   calculatedBpm: null,
   keyStr: null,
+  mainCue: null,
+  hotCues: [],
+  isCupPlaying: false,
   errorCode: null,
   errorMessage: null,
 };
+
 
 const INITIAL_CHANNEL_A: ChannelStripState = {
   deckId: 'A',
@@ -175,6 +201,9 @@ class DJStore {
   private lastRafUpdate = 0;
   /** Identificadores de carga por deck para descartar cargas obsoletas sin interferencia cruzada. */
   private loadTokens: Record<DeckId, number> = { A: 0, B: 0 };
+  /** Indicador de reproducción momentánea CUP activa por deck. */
+  private isCupPlaying: Record<DeckId, boolean> = { A: false, B: false };
+
 
   private constructor() {
     // Escuchar la finalización natural de la reproducción en ambos decks
@@ -295,25 +324,56 @@ class DJStore {
     audioEngine.unloadDeck(deckId);
     this.checkStopTimeLoop();
 
+    // Recuperar análisis existente de IndexedDB si la pista recibida en memoria aún no lo tenía actualizado
+    let effectiveTrack = track;
+    if (track.analysis?.status !== 'analyzed') {
+      try {
+        const persistedAnalysis = await indexedDBStorage.getTrackAnalysis(track.id);
+        if (persistedAnalysis && persistedAnalysis.status === 'analyzed') {
+          effectiveTrack = { ...effectiveTrack, analysis: persistedAnalysis };
+        }
+      } catch {
+        // Ignorar si no está disponible
+      }
+    }
+
+    // Recuperar CUEs guardados (mainCue y hotCues) si existen en almacenamiento persistente
+    try {
+      const persistedCues = await indexedDBStorage.getTrackCues(track.id);
+      if (persistedCues) {
+        effectiveTrack = {
+          ...effectiveTrack,
+          mainCue: persistedCues.mainCue !== null ? persistedCues.mainCue : (effectiveTrack.mainCue ?? null),
+          hotCues: persistedCues.hotCues && persistedCues.hotCues.length > 0 ? persistedCues.hotCues : (effectiveTrack.hotCues ?? []),
+        };
+      }
+    } catch {
+      // Ignorar si no está disponible
+    }
+
+    if (token !== this.loadTokens[deckId]) return false;
+
     this.setDeck(deckId, {
-      track,
+      track: effectiveTrack,
       playbackState: 'loading',
       currentTime: 0,
       duration: 0,
-      calculatedBpm: computeEffectiveBpm(track, initialPitch),
-      keyStr: getAnalyzedKey(track),
+      calculatedBpm: computeEffectiveBpm(effectiveTrack, initialPitch),
+      keyStr: getAnalyzedKey(effectiveTrack),
+      mainCue: effectiveTrack.mainCue ?? null,
+      hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
       errorCode: null,
       errorMessage: null,
     });
 
     // 1. Obtener el blob de audio binario real
-    let audioBlob: Blob | null = track.source.blob || track.source.file || null;
+    let audioBlob: Blob | null = effectiveTrack.source.blob || effectiveTrack.source.file || null;
     try {
-      if (!audioBlob && track.source.indexedDbKey) {
-        audioBlob = await indexedDBStorage.getTrackBlob(track.source.indexedDbKey);
+      if (!audioBlob && effectiveTrack.source.indexedDbKey) {
+        audioBlob = await indexedDBStorage.getTrackBlob(effectiveTrack.source.indexedDbKey);
       }
       if (!audioBlob) {
-        audioBlob = await indexedDBStorage.getTrackBlob(track.id);
+        audioBlob = await indexedDBStorage.getTrackBlob(effectiveTrack.id);
       }
     } catch (err) {
       console.error(`[useDJStore] Error leyendo el almacenamiento local para Deck ${deckId}:`, err);
@@ -351,6 +411,8 @@ class DJStore {
         duration: audioBuffer.duration,
         currentTime: 0,
         playbackState: 'stopped',
+        mainCue: effectiveTrack.mainCue ?? null,
+        hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
         errorCode: null,
         errorMessage: null,
       });
@@ -386,6 +448,12 @@ class DJStore {
       return;
     }
 
+    // Si estaba en reproducción momentánea CUP y se pulsa PLAY, enclavar en reproducción normal
+    if (this.isCupPlaying[deckId]) {
+      this.isCupPlaying[deckId] = false;
+      this.setDeck(deckId, { isCupPlaying: false });
+    }
+
     try {
       await audioEngine.resume();
       audioEngine.playDeck(deckId, deckState.currentTime);
@@ -414,6 +482,7 @@ class DJStore {
    * Pausa la reproducción del deck reteniendo el segundo exacto.
    */
   public pauseDeck(deckId: DeckId): void {
+    this.isCupPlaying[deckId] = false;
     const deckState = this.getDeckState(deckId);
     if (deckState.playbackState !== 'playing') {
       return;
@@ -423,6 +492,7 @@ class DJStore {
     this.setDeck(deckId, {
       playbackState: 'paused',
       currentTime: audioEngine.getDeckCurrentTime(deckId),
+      isCupPlaying: false,
     });
     this.checkStopTimeLoop();
   }
@@ -459,11 +529,12 @@ class DJStore {
    * Detiene la reproducción del deck y regresa al inicio (0:00).
    */
   public stopDeck(deckId: DeckId): void {
+    this.isCupPlaying[deckId] = false;
     const deckState = this.getDeckState(deckId);
     if (deckState.playbackState === 'loading' || deckState.playbackState === 'error') return;
 
     audioEngine.stopDeck(deckId);
-    this.setDeck(deckId, { playbackState: 'stopped', currentTime: 0 });
+    this.setDeck(deckId, { playbackState: 'stopped', currentTime: 0, isCupPlaying: false });
     this.checkStopTimeLoop();
   }
 
@@ -479,6 +550,7 @@ class DJStore {
    * Desplaza la posición de reproducción (Seek) en segundos para el deck indicado.
    */
   public seekDeck(deckId: DeckId, positionSeconds: number): void {
+    this.isCupPlaying[deckId] = false;
     const deckState = this.getDeckState(deckId);
     if (!deckState.track || deckState.duration === 0 || deckState.playbackState === 'loading' || deckState.playbackState === 'error') {
       return;
@@ -487,7 +559,7 @@ class DJStore {
     const maxPosition = Math.max(0, deckState.duration - SEEK_END_MARGIN_SECONDS);
     const clamped = Math.max(0, Math.min(positionSeconds, maxPosition));
     audioEngine.seekDeck(deckId, clamped);
-    this.setDeck(deckId, { currentTime: clamped });
+    this.setDeck(deckId, { currentTime: clamped, isCupPlaying: false });
   }
 
   public seekDeckA(positionSeconds: number): void {
@@ -496,6 +568,267 @@ class DJStore {
 
   public seekDeckB(positionSeconds: number): void {
     this.seekDeck('B', positionSeconds);
+  }
+
+  /**
+   * Fija la posición del CUE principal (mainCue) en el deck.
+   * Si no se indica positionSeconds, toma el currentTime actual.
+   */
+  public async setMainCue(deckId: DeckId, positionSeconds?: number): Promise<void> {
+    const deck = this.getDeckState(deckId);
+    if (!deck.track || deck.duration <= 0) return;
+
+    const raw = positionSeconds !== undefined ? positionSeconds : deck.currentTime;
+    if (!Number.isFinite(raw) || raw < 0 || raw > deck.duration) return;
+    const clamped = Number(Math.max(0, Math.min(raw, deck.duration)).toFixed(3));
+
+    const updatedTrack: Track = {
+      ...deck.track,
+      mainCue: clamped,
+    };
+
+    const updates: Partial<DJStoreState> = {};
+    if (deckId === 'A') {
+      updates.deckA = { ...this.state.deckA, mainCue: clamped, track: updatedTrack };
+    } else {
+      updates.deckB = { ...this.state.deckB, mainCue: clamped, track: updatedTrack };
+    }
+
+    // Si el otro deck tiene cargada la misma pista, sincronizar mainCue reactivamente
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const otherDeck = this.getDeckState(otherDeckId);
+    if (otherDeck.track?.id === deck.track.id) {
+      const otherUpdatedTrack: Track = { ...otherDeck.track, mainCue: clamped };
+      if (otherDeckId === 'A') {
+        updates.deckA = { ...this.state.deckA, mainCue: clamped, track: otherUpdatedTrack };
+      } else {
+        updates.deckB = { ...this.state.deckB, mainCue: clamped, track: otherUpdatedTrack };
+      }
+    }
+
+    this.setState(updates);
+
+    try {
+      await indexedDBStorage.updateTrackCues(deck.track.id, { mainCue: clamped });
+    } catch (err) {
+      console.warn(`[useDJStore] Error persistiendo mainCue para ${deck.track.id}:`, err);
+    }
+  }
+
+  /**
+   * Salta al CUE principal.
+   * Si está reproduciendo, detiene la reproducción y regresa al CUE.
+   * Si está pausado o detenido, reposiciona el cursor en el CUE sin reproducir.
+   */
+  public jumpToMainCue(deckId: DeckId): void {
+    const deck = this.getDeckState(deckId);
+    if (!deck.track || deck.duration <= 0) return;
+
+    const targetPos = deck.mainCue ?? 0;
+    this.isCupPlaying[deckId] = false;
+
+    if (deck.playbackState === 'playing') {
+      audioEngine.pauseDeck(deckId);
+      audioEngine.seekDeck(deckId, targetPos);
+      this.setDeck(deckId, { playbackState: 'paused', currentTime: targetPos, isCupPlaying: false });
+      this.checkStopTimeLoop();
+    } else {
+      audioEngine.seekDeck(deckId, targetPos);
+      this.setDeck(deckId, { currentTime: targetPos, isCupPlaying: false });
+    }
+  }
+
+  /**
+   * Manejador al presionar el botón CUE (pointerdown / mousedown / keydown):
+   * - En reproducción: detiene y salta a mainCue.
+   * - En pausa: fija el CUE en currentTime (si se desplazó) y activa reproducción CUP mientras se mantenga presionado.
+   */
+  public async handleCueDown(deckId: DeckId): Promise<void> {
+    const deck = this.getDeckState(deckId);
+    if (!deck.track || deck.duration <= 0 || deck.playbackState === 'loading' || deck.playbackState === 'error') {
+      return;
+    }
+
+    if (deck.playbackState === 'playing') {
+      this.jumpToMainCue(deckId);
+      return;
+    }
+
+    // Estado paused o stopped:
+    // Si no había mainCue, o si la posición actual se movió más de 50 ms del CUE existente, actualizar CUE
+    const currentCue = deck.mainCue ?? 0;
+    if (deck.mainCue === null || Math.abs(deck.currentTime - currentCue) > 0.05) {
+      await this.setMainCue(deckId, deck.currentTime);
+    }
+
+    // Iniciar reproducción CUP
+    const cueToPlay = this.getDeckState(deckId).mainCue ?? 0;
+    this.isCupPlaying[deckId] = true;
+    try {
+      await audioEngine.resume();
+      audioEngine.playDeck(deckId, cueToPlay);
+      this.setDeck(deckId, { playbackState: 'playing', currentTime: cueToPlay, isCupPlaying: true });
+      this.ensureTimeLoop();
+    } catch (err) {
+      this.isCupPlaying[deckId] = false;
+      this.setDeck(deckId, { isCupPlaying: false });
+      console.error(`[useDJStore] Error en reproducción CUP Deck ${deckId}:`, err);
+    }
+  }
+
+  /**
+   * Manejador al soltar el botón CUE (pointerup / mouseup / keyup):
+   * Si CUP estaba activo, detiene la reproducción y regresa a mainCue.
+   */
+  public handleCueUp(deckId: DeckId): void {
+    if (!this.isCupPlaying[deckId]) return;
+    this.isCupPlaying[deckId] = false;
+
+    const deck = this.getDeckState(deckId);
+    const targetPos = deck.mainCue ?? 0;
+
+    audioEngine.pauseDeck(deckId);
+    audioEngine.seekDeck(deckId, targetPos);
+    this.setDeck(deckId, { playbackState: 'paused', currentTime: targetPos, isCupPlaying: false });
+    this.checkStopTimeLoop();
+  }
+
+  /**
+   * Cancela de forma segura cualquier reproducción CUP activa (p. ej. pérdida de foco, cambio de pista, blur).
+   */
+  public cancelCup(deckId: DeckId): void {
+    if (this.isCupPlaying[deckId]) {
+      this.handleCueUp(deckId);
+    }
+  }
+
+  /**
+   * Retorna si el deck está actualmente en reproducción CUP.
+   */
+  public getIsCupPlaying(deckId: DeckId): boolean {
+    return this.isCupPlaying[deckId];
+  }
+
+  /**
+   * Guarda o actualiza un Hot Cue (1 a 8) en la posición indicada (o currentTime actual).
+   */
+  public async setHotCue(deckId: DeckId, slotNumber: number, positionSeconds?: number): Promise<boolean> {
+    if (slotNumber < 1 || slotNumber > 8) return false;
+    const deck = this.getDeckState(deckId);
+    if (!deck.track || deck.duration <= 0) return false;
+
+    const raw = positionSeconds !== undefined ? positionSeconds : deck.currentTime;
+    if (!Number.isFinite(raw) || raw < 0 || raw > deck.duration) return false;
+    const clamped = Number(Math.max(0, Math.min(raw, deck.duration)).toFixed(3));
+
+    const currentCues = deck.hotCues || [];
+    const existingCue = currentCues.find((c) => c.id === slotNumber);
+    const color = HOT_CUE_COLORS[slotNumber - 1];
+    const newCue: HotCue = {
+      id: slotNumber,
+      position: clamped,
+      trackId: deck.track.id,
+      label: `Cue ${slotNumber}`,
+      color,
+      createdAt: existingCue?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    };
+    const filtered = currentCues.filter((c) => c.id !== slotNumber);
+    const updatedCues = [...filtered, newCue].sort((a, b) => a.id - b.id);
+
+    const updatedTrack: Track = {
+      ...deck.track,
+      hotCues: updatedCues,
+    };
+
+    const updates: Partial<DJStoreState> = {};
+    if (deckId === 'A') {
+      updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: updatedTrack };
+    } else {
+      updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: updatedTrack };
+    }
+
+    // Sincronizar en el otro deck si comparte la misma pista
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const otherDeck = this.getDeckState(otherDeckId);
+    if (otherDeck.track?.id === deck.track.id) {
+      const otherUpdatedTrack: Track = { ...otherDeck.track, hotCues: updatedCues };
+      if (otherDeckId === 'A') {
+        updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: otherUpdatedTrack };
+      } else {
+        updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: otherUpdatedTrack };
+      }
+    }
+
+    this.setState(updates);
+
+    try {
+      await indexedDBStorage.updateTrackCues(deck.track.id, { hotCues: updatedCues });
+      return true;
+    } catch (err) {
+      console.warn(`[useDJStore] Error persistiendo hotCues para ${deck.track.id}:`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Salta al Hot Cue indicado respetando el estado de reproducción o pausa actual.
+   */
+  public jumpToHotCue(deckId: DeckId, slotNumber: number): void {
+    const deck = this.getDeckState(deckId);
+    if (!deck.track || deck.duration <= 0) return;
+
+    const cue = deck.hotCues.find((c) => c.id === slotNumber);
+    if (!cue) return;
+
+    this.seekDeck(deckId, cue.position);
+  }
+
+  /**
+   * Elimina un Hot Cue (1 a 8) de la pista y actualiza la persistencia.
+   */
+  public async deleteHotCue(deckId: DeckId, slotNumber: number): Promise<boolean> {
+    if (slotNumber < 1 || slotNumber > 8) return false;
+    const deck = this.getDeckState(deckId);
+    if (!deck.track) return false;
+
+    const currentCues = deck.hotCues || [];
+    const cueExists = currentCues.some((c) => c.id === slotNumber);
+    if (!cueExists) return false;
+
+    const updatedCues = currentCues.filter((c) => c.id !== slotNumber);
+    const updatedTrack: Track = {
+      ...deck.track,
+      hotCues: updatedCues,
+    };
+
+    const updates: Partial<DJStoreState> = {};
+    if (deckId === 'A') {
+      updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: updatedTrack };
+    } else {
+      updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: updatedTrack };
+    }
+
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const otherDeck = this.getDeckState(otherDeckId);
+    if (otherDeck.track?.id === deck.track.id) {
+      const otherUpdatedTrack: Track = { ...otherDeck.track, hotCues: updatedCues };
+      if (otherDeckId === 'A') {
+        updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: otherUpdatedTrack };
+      } else {
+        updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: otherUpdatedTrack };
+      }
+    }
+
+    this.setState(updates);
+
+    try {
+      await indexedDBStorage.updateTrackCues(deck.track.id, { hotCues: updatedCues });
+      return true;
+    } catch (err) {
+      console.warn(`[useDJStore] Error eliminando hotCue en almacenamiento para ${deck.track.id}:`, err);
+      return false;
+    }
   }
 
   /**
@@ -529,6 +862,7 @@ class DJStore {
    * Descarga la pista del deck indicado y libera sus recursos en memoria.
    */
   public unloadDeck(deckId: DeckId): void {
+    this.cancelCup(deckId);
     this.loadTokens[deckId]++;
     audioEngine.unloadDeck(deckId);
     this.checkStopTimeLoop();
@@ -540,6 +874,7 @@ class DJStore {
       playbackRate: currentDeck.playbackRate,
     });
   }
+
 
   public unloadDeckA(): void {
     this.unloadDeck('A');
@@ -895,6 +1230,18 @@ export function useDJStore(): {
   // Análisis musical y sincronización
   analyzeTrack: (track: Track, force?: boolean) => Promise<TrackAnalysis>;
   updateTrackAnalysis: (trackId: string, analysis: TrackAnalysis) => Promise<boolean>;
+
+  // CUE principal y CUP
+  setMainCue: (deckId: DeckId, positionSeconds?: number) => Promise<void>;
+  jumpToMainCue: (deckId: DeckId) => void;
+  handleCueDown: (deckId: DeckId) => Promise<void>;
+  handleCueUp: (deckId: DeckId) => void;
+  cancelCup: (deckId: DeckId) => void;
+
+  // Hot Cues (1 a 8)
+  setHotCue: (deckId: DeckId, slotNumber: number, positionSeconds?: number) => Promise<boolean>;
+  jumpToHotCue: (deckId: DeckId, slotNumber: number) => void;
+  deleteHotCue: (deckId: DeckId, slotNumber: number) => Promise<boolean>;
 } {
   const state = useSyncExternalStore(djStore.subscribe, djStore.getSnapshot);
 
@@ -956,6 +1303,17 @@ export function useDJStore(): {
     // Análisis musical y sincronización
     analyzeTrack: djStore.analyzeTrack.bind(djStore),
     updateTrackAnalysis: djStore.updateTrackAnalysis.bind(djStore),
+
+    // CUE principal y CUP
+    setMainCue: djStore.setMainCue.bind(djStore),
+    jumpToMainCue: djStore.jumpToMainCue.bind(djStore),
+    handleCueDown: djStore.handleCueDown.bind(djStore),
+    handleCueUp: djStore.handleCueUp.bind(djStore),
+    cancelCup: djStore.cancelCup.bind(djStore),
+
+    // Hot Cues
+    setHotCue: djStore.setHotCue.bind(djStore),
+    jumpToHotCue: djStore.jumpToHotCue.bind(djStore),
+    deleteHotCue: djStore.deleteHotCue.bind(djStore),
   };
 }
-

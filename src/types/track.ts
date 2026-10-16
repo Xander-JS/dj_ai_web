@@ -39,6 +39,19 @@ export interface TrackFileMetadata {
 }
 
 /**
+ * Marcador Hot Cue individual asociado a una pista musical.
+ */
+export interface HotCue {
+  id: number;                        // Índice 1 a 8
+  position: number;                  // Posición temporal en segundos (>= 0, finita)
+  trackId: string;                   // Identificador de la pista propietaria
+  label?: string;                    // Etiqueta descriptiva opcional
+  color: string;                     // Color distintivo del marcador
+  createdAt: number;                 // Timestamp de creación
+  updatedAt?: number;                // Timestamp de última actualización
+}
+
+/**
  * Entidad principal de pista musical en la biblioteca.
  * No contiene AudioBuffer decodificado en memoria para evitar saturar el estado de React.
  */
@@ -53,5 +66,7 @@ export interface Track {
   source: TrackAudioSource;
   analysis: TrackAnalysis;
   fileMeta?: TrackFileMetadata;
+  mainCue?: number | null;           // Posición en segundos del CUE principal
+  hotCues?: HotCue[];                // Lista de Hot Cues configurados para la pista
   dateAdded: number;                 // Timestamp de incorporación
 }

@@ -3,7 +3,7 @@
  * Contratos y estados para las tornamesas digitales Deck A y Deck B.
  */
 
-import type { Track } from './track';
+import type { Track, HotCue } from './track';
 
 export type DeckId = 'A' | 'B';
 
@@ -18,7 +18,8 @@ export interface DeckState {
   pitch: number;                // Porcentaje de variación (-8% a +8%, 0 = centro)
   calculatedBpm: number;        // BPM resultante tras aplicar pitch
   isKeyLocked: boolean;         // Conservación de tono al variar pitch (Master Tempo)
-  cuePoint: number | null;      // Posición de CUE en segundos
+  cuePoint: number | null;      // Posición de CUE en segundos (mainCue)
+  hotCues: HotCue[];            // 8 Hot Cues (vacíos o definidos)
   isSyncActive: boolean;        // Sincronización automática de BPM activada
   volume: number;               // Nivel de fader asignado al deck (0 a 100)
   errorMessage?: string | null; // Mensajes de fallo al decodificar o reproducir
@@ -31,8 +32,13 @@ export interface DeckActions {
   stop: () => void;
   seek: (timeSeconds: number) => void;
   setPitch: (pitchPercent: number) => void;
-  setCue: () => void;
+  setCue: () => Promise<void>;
   jumpToCue: () => void;
+  handleCueDown: () => Promise<void>;
+  handleCueUp: () => void;
+  setHotCue: (slotNumber: number, position?: number) => Promise<boolean>;
+  jumpToHotCue: (slotNumber: number) => void;
+  deleteHotCue: (slotNumber: number) => Promise<boolean>;
   toggleSync: () => void;
   toggleKeyLock: () => void;
 }

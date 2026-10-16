@@ -593,3 +593,294 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
     assert.match(snap.deckB.errorMessage, /no se encuentra/i);
   });
 });
+
+describe('useDJStore — Centralización del Estado del Mixer y Sincronización DSP', () => {
+  const originalWindow = globalThis.window;
+
+  beforeEach(async () => {
+    (globalThis as unknown as { window: unknown }).window = {
+      AudioContext: MockAudioContext,
+    };
+    await audioEngine.initialize();
+    // Restablecer valores de prueba
+    djStore.setMasterVolume(80);
+    if (djStore.getSnapshot().isMasterMuted) {
+      djStore.toggleMasterMute();
+    }
+    djStore.setChannelGain('A', 50);
+    djStore.setChannelGain('B', 50);
+    djStore.setChannelVolume('A', 80);
+    djStore.setChannelVolume('B', 80);
+    djStore.setCrossfader(50);
+    djStore.setCrossfaderCurve('constant-power');
+    djStore.setCuePfl('A', false);
+    djStore.setCuePfl('B', false);
+    djStore.setChannelEq('A', 'high', 50);
+    djStore.setChannelEq('A', 'mid', 50);
+    djStore.setChannelEq('A', 'low', 50);
+    djStore.setChannelFilter('A', 50);
+    djStore.setChannelEq('B', 'high', 50);
+    djStore.setChannelEq('B', 'mid', 50);
+    djStore.setChannelEq('B', 'low', 50);
+    djStore.setChannelFilter('B', 50);
+  });
+
+  afterEach(async () => {
+    await audioEngine.dispose();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+  });
+
+  test('1. Estado inicial del Mixer posee los valores nominales y simétricos', () => {
+    const snap = djStore.getSnapshot();
+    assert.ok(snap.mixer, 'El snapshot debe contener la sección mixer');
+
+    // Canal A
+    assert.equal(snap.mixer.channelA.deckId, 'A');
+    assert.equal(snap.mixer.channelA.gain, 50);
+    assert.equal(snap.mixer.channelA.volume, 80);
+    assert.equal(snap.mixer.channelA.cuePfl, false);
+    assert.equal(snap.mixer.channelA.eq.high, 50);
+    assert.equal(snap.mixer.channelA.eq.mid, 50);
+    assert.equal(snap.mixer.channelA.eq.low, 50);
+    assert.equal(snap.mixer.channelA.eq.filter, 50);
+
+    // Canal B
+    assert.equal(snap.mixer.channelB.deckId, 'B');
+    assert.equal(snap.mixer.channelB.gain, 50);
+    assert.equal(snap.mixer.channelB.volume, 80);
+    assert.equal(snap.mixer.channelB.cuePfl, false);
+    assert.equal(snap.mixer.channelB.eq.high, 50);
+    assert.equal(snap.mixer.channelB.eq.mid, 50);
+    assert.equal(snap.mixer.channelB.eq.low, 50);
+    assert.equal(snap.mixer.channelB.eq.filter, 50);
+
+    // Crossfader y Master
+    assert.equal(snap.mixer.crossfader, 50);
+    assert.equal(snap.mixer.crossfaderCurve, 'constant-power');
+    assert.equal(snap.mixer.masterVolume, 80);
+    assert.equal(snap.masterVolume, 80);
+    assert.equal(snap.isMasterMuted, false);
+  });
+
+  test('2. Actualización independiente de ganancia en canales A y B y sincronización con motor', () => {
+    djStore.setChannelGain('A', 75);
+    let snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.gain, 75);
+    assert.equal(snap.mixer.channelB.gain, 50);
+
+    const graphA = audioEngine.getDeckAudioGraph?.('A');
+    const graphB = audioEngine.getDeckAudioGraph?.('B');
+    assert.equal((graphA?.gainNode as unknown as { gain: { value: number } }).gain.value, 1.5);
+    assert.equal((graphB?.gainNode as unknown as { gain: { value: number } }).gain.value, 1.0);
+
+    // Modificar B no altera A
+    djStore.setChannelGain('B', 25);
+    snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.gain, 75);
+    assert.equal(snap.mixer.channelB.gain, 25);
+    assert.equal((graphB?.gainNode as unknown as { gain: { value: number } }).gain.value, 0.5);
+    assert.equal((graphA?.gainNode as unknown as { gain: { value: number } }).gain.value, 1.5);
+  });
+
+  test('3. Actualización independiente de las bandas EQ (high, mid, low) con mapeo a dB', () => {
+    djStore.setChannelEq('A', 'high', 75); // 75 -> +6 dB
+    djStore.setChannelEq('A', 'mid', 25);  // 25 -> -6 dB
+    djStore.setChannelEq('A', 'low', 100); // 100 -> +12 dB
+
+    const snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.eq.high, 75);
+    assert.equal(snap.mixer.channelA.eq.mid, 25);
+    assert.equal(snap.mixer.channelA.eq.low, 100);
+    assert.equal(snap.mixer.channelB.eq.high, 50);
+
+    const graphA = audioEngine.getDeckAudioGraph?.('A');
+    const graphB = audioEngine.getDeckAudioGraph?.('B');
+    assert.equal((graphA?.eqHighNode as unknown as { gain: { value: number } }).gain.value, 6.0);
+    assert.equal((graphA?.eqMidNode as unknown as { gain: { value: number } }).gain.value, -6.0);
+    assert.equal((graphA?.eqLowNode as unknown as { gain: { value: number } }).gain.value, 12.0);
+    assert.equal((graphB?.eqHighNode as unknown as { gain: { value: number } }).gain.value, 0.0);
+  });
+
+  test('4. Ajuste del filtro bipolar y llamada correcta al motor', () => {
+    // Lowpass: slider a 25 -> bipolar -50
+    djStore.setChannelFilter('A', 25);
+    let snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.eq.filter, 25);
+
+    const graphA = audioEngine.getDeckAudioGraph?.('A');
+    const filterA = graphA?.filterNode as unknown as { type: string; frequency: { value: number } };
+    assert.equal(filterA.type, 'lowpass');
+
+    // Highpass: slider a 75 -> bipolar +50
+    djStore.setChannelFilter('A', 75);
+    snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.eq.filter, 75);
+    assert.equal(filterA.type, 'highpass');
+
+    // Bypass: slider a 50 -> allpass
+    djStore.setChannelFilter('A', 50);
+    snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.eq.filter, 50);
+    assert.equal(filterA.type, 'allpass');
+  });
+
+  test('5. Ajuste independiente del volumen del canal', () => {
+    djStore.setChannelVolume('A', 60);
+    let snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.volume, 60);
+    assert.equal(snap.mixer.channelB.volume, 80);
+
+    const graphA = audioEngine.getDeckAudioGraph?.('A');
+    const graphB = audioEngine.getDeckAudioGraph?.('B');
+    assert.equal((graphA?.volumeNode as unknown as { gain: { value: number } }).gain.value, 0.6);
+    assert.equal((graphB?.volumeNode as unknown as { gain: { value: number } }).gain.value, 0.8);
+
+    djStore.setChannelVolume('B', 0);
+    snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelB.volume, 0);
+    assert.equal((graphB?.volumeNode as unknown as { gain: { value: number } }).gain.value, 0.0);
+  });
+
+  test('6. Posición del crossfader se actualiza en el store y sincroniza con el motor usando la curva actual', () => {
+    djStore.setCrossfader(0);
+    let snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.crossfader, 0);
+
+    const graphA = audioEngine.getDeckAudioGraph?.('A');
+    const graphB = audioEngine.getDeckAudioGraph?.('B');
+    assert.equal((graphA?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 1.0);
+    assert.equal((graphB?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 0.0);
+
+    // 100% Deck B
+    djStore.setCrossfader(100);
+    snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.crossfader, 100);
+    assert.equal((graphA?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 0.0);
+    assert.equal((graphB?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 1.0);
+  });
+
+  test('7. Cambio de curva recalcula las ganancias usando la posición actual del crossfader', () => {
+    // Crossfader al centro (50)
+    djStore.setCrossfader(50);
+    djStore.setCrossfaderCurve('linear');
+
+    const snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.crossfaderCurve, 'linear');
+
+    const graphA = audioEngine.getDeckAudioGraph?.('A');
+    const graphB = audioEngine.getDeckAudioGraph?.('B');
+    assert.equal((graphA?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 0.5);
+    assert.equal((graphB?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 0.5);
+
+    // Cambiar a cut: en el centro ambos deben estar al 100% (1.0)
+    djStore.setCrossfaderCurve('cut');
+    assert.equal((graphA?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 1.0);
+    assert.equal((graphB?.crossfaderGainNode as unknown as { gain: { value: number } }).gain.value, 1.0);
+  });
+
+  test('8. Volumen Master mantiene una única fuente de verdad entre state.masterVolume y state.mixer.masterVolume', () => {
+    djStore.setMasterVolume(65);
+    const snap = djStore.getSnapshot();
+    assert.equal(snap.masterVolume, 65);
+    assert.equal(snap.mixer.masterVolume, 65);
+
+    const master = audioEngine.getMasterGraph?.();
+    assert.equal((master?.masterGainNode as unknown as { gain: { value: number } }).gain.value, 0.65);
+  });
+
+  test('9. Conservación del estado de mute al cambiar el volumen Master', () => {
+    djStore.setMasterVolume(80);
+    assert.equal(djStore.getSnapshot().isMasterMuted, false);
+
+    // Silenciar
+    djStore.toggleMasterMute();
+    assert.equal(djStore.getSnapshot().isMasterMuted, true);
+    const master = audioEngine.getMasterGraph?.();
+    assert.equal((master?.masterGainNode as unknown as { gain: { value: number } }).gain.value, 0.0);
+
+    // Cambiar volumen mientras está silenciado NO debe desmutear accidentalmente
+    djStore.setMasterVolume(40);
+    const snap = djStore.getSnapshot();
+    assert.equal(snap.isMasterMuted, true);
+    assert.equal(snap.masterVolume, 40);
+    assert.equal(snap.mixer.masterVolume, 40);
+    // La salida física del motor debe permanecer en 0.0
+    assert.equal((master?.masterGainNode as unknown as { gain: { value: number } }).gain.value, 0.0);
+
+    // Al desmutear, recupera el nuevo nivel fijado (40)
+    djStore.toggleMasterMute();
+    assert.equal(djStore.getSnapshot().isMasterMuted, false);
+    assert.equal((master?.masterGainNode as unknown as { gain: { value: number } }).gain.value, 0.4);
+  });
+
+  test('10. Normalización y clamping de valores fuera de rango', () => {
+    // Ganancia
+    djStore.setChannelGain('A', 150);
+    assert.equal(djStore.getSnapshot().mixer.channelA.gain, 100);
+    djStore.setChannelGain('A', -50);
+    assert.equal(djStore.getSnapshot().mixer.channelA.gain, 0);
+
+    // Volumen
+    djStore.setChannelVolume('A', 200);
+    assert.equal(djStore.getSnapshot().mixer.channelA.volume, 100);
+    djStore.setChannelVolume('A', -20);
+    assert.equal(djStore.getSnapshot().mixer.channelA.volume, 0);
+
+    // Crossfader
+    djStore.setCrossfader(120);
+    assert.equal(djStore.getSnapshot().mixer.crossfader, 100);
+    djStore.setCrossfader(-30);
+    assert.equal(djStore.getSnapshot().mixer.crossfader, 0);
+
+    // Master
+    djStore.setMasterVolume(180);
+    assert.equal(djStore.getSnapshot().masterVolume, 100);
+    assert.equal(djStore.getSnapshot().mixer.masterVolume, 100);
+    djStore.setMasterVolume(-10);
+    assert.equal(djStore.getSnapshot().masterVolume, 0);
+    assert.equal(djStore.getSnapshot().mixer.masterVolume, 0);
+  });
+
+  test('11. Comportamiento seguro cuando el motor de audio no está inicializado o falla', async () => {
+    // Cerrar AudioEngine para simular entorno no inicializado
+    await audioEngine.dispose();
+
+    // Las acciones del store deben actualizar el estado sin lanzar excepciones
+    assert.doesNotThrow(() => {
+      djStore.setChannelGain('A', 70);
+      djStore.setChannelEq('A', 'high', 80);
+      djStore.setChannelFilter('A', 30);
+      djStore.setChannelVolume('A', 90);
+      djStore.setCrossfader(60);
+      djStore.setCrossfaderCurve('linear');
+      djStore.setCuePfl('A', true);
+      djStore.setMasterVolume(50);
+    });
+
+    const snap = djStore.getSnapshot();
+    assert.equal(snap.mixer.channelA.gain, 70);
+    assert.equal(snap.mixer.channelA.eq.high, 80);
+    assert.equal(snap.mixer.channelA.eq.filter, 30);
+    assert.equal(snap.mixer.channelA.volume, 90);
+    assert.equal(snap.mixer.crossfader, 60);
+    assert.equal(snap.mixer.crossfaderCurve, 'linear');
+    assert.equal(snap.mixer.channelA.cuePfl, true);
+    assert.equal(snap.masterVolume, 50);
+    assert.equal(snap.mixer.masterVolume, 50);
+  });
+
+  test('12. Inmutabilidad y preservación de transporte de Deck A y Deck B', () => {
+    const snapBefore = djStore.getSnapshot();
+    djStore.setChannelGain('A', 90);
+    const snapAfter = djStore.getSnapshot();
+
+    // Snapshots deben ser instancias distintas (inmutabilidad)
+    assert.notEqual(snapBefore, snapAfter);
+    assert.notEqual(snapBefore.mixer, snapAfter.mixer);
+
+    // Deck A y Deck B no deben ser mutados por acciones del mixer
+    assert.equal(snapBefore.deckA, snapAfter.deckA);
+    assert.equal(snapBefore.deckB, snapAfter.deckB);
+  });
+});
+

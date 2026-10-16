@@ -197,6 +197,16 @@
   gap: var(--space-1);
 }
 
+.deck-prepared-tag.deck-b-tag {
+  color: var(--color-secondary-500);
+}
+
+.deck-action-badge {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-xs);
+  line-height: var(--line-height-none);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;

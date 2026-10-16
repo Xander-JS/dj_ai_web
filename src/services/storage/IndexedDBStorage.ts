@@ -4,7 +4,7 @@
  * Base de datos: SystemDJ_Storage | Almacén: tracks
  */
 
-import type { Track, TrackAnalysis } from '../../types/track.ts';
+import type { Track, TrackAnalysis, HotCue } from '../../types/track.ts';
 
 export interface StoredTrackRecord {
   id: string;
@@ -22,8 +22,11 @@ export interface StoredTrackRecord {
     lastModified: number;
   };
   analysis: Track['analysis'];
+  mainCue?: number | null;
+  hotCues?: HotCue[];
   dateAdded: number;
 }
+
 
 const DB_NAME = 'SystemDJ_Storage';
 const DB_VERSION = 1;
@@ -158,6 +161,8 @@ export class IndexedDBStorage {
         lastModified: Date.now(),
       },
       analysis: track.analysis,
+      mainCue: track.mainCue ?? null,
+      hotCues: track.hotCues ?? [],
       dateAdded: track.dateAdded || Date.now(),
     };
 
@@ -165,6 +170,13 @@ export class IndexedDBStorage {
     // invalidar el análisis previo para evitar asociar métricas de otra canción
     const existingMem = this.memoryStore.get(record.id);
     if (existingMem) {
+      if ((!track.hotCues || track.hotCues.length === 0) && existingMem.hotCues && existingMem.hotCues.length > 0) {
+        record.hotCues = existingMem.hotCues;
+      }
+      if (track.mainCue === undefined && existingMem.mainCue !== undefined) {
+        record.mainCue = existingMem.mainCue;
+      }
+
       const fileChanged =
         existingMem.fileMeta.fileSize !== record.fileMeta.fileSize ||
         existingMem.fileMeta.fileName !== record.fileMeta.fileName ||
@@ -173,6 +185,8 @@ export class IndexedDBStorage {
       if (fileChanged) {
         record.analysis = { status: 'pending' };
         track.analysis = record.analysis;
+        record.mainCue = null;
+        record.hotCues = [];
       }
     }
 
@@ -211,6 +225,13 @@ export class IndexedDBStorage {
         getReq.onsuccess = () => {
           const existingDb = getReq.result as StoredTrackRecord | undefined;
           if (existingDb) {
+            if ((!track.hotCues || track.hotCues.length === 0) && existingDb.hotCues && existingDb.hotCues.length > 0) {
+              record.hotCues = existingDb.hotCues;
+            }
+            if (track.mainCue === undefined && existingDb.mainCue !== undefined) {
+              record.mainCue = existingDb.mainCue;
+            }
+
             const fileChanged =
               existingDb.fileMeta.fileSize !== record.fileMeta.fileSize ||
               existingDb.fileMeta.fileName !== record.fileMeta.fileName ||
@@ -219,6 +240,8 @@ export class IndexedDBStorage {
             if (fileChanged) {
               record.analysis = { status: 'pending' };
               track.analysis = record.analysis;
+              record.mainCue = null;
+              record.hotCues = [];
             }
           }
           store.put(record);
@@ -230,6 +253,7 @@ export class IndexedDBStorage {
         // Solo la finalización de la transacción garantiza que los datos se escribieron
         tx.oncomplete = () => {
           this.memoryStore.set(record.id, record);
+
           this.memoryOnlyIds.delete(record.id);
           settle({ persisted: true });
         };
@@ -479,6 +503,103 @@ export class IndexedDBStorage {
   }
 
   /**
+   * Actualiza atómicamente los puntos CUE (CUE principal y Hot Cues) de una pista
+   * sin reescribir ni clonar el archivo binario de audio (audioBlob) ni alterar su análisis musical.
+   */
+  public async updateTrackCues(
+    id: string,
+    cues: { mainCue?: number | null; hotCues?: HotCue[] }
+  ): Promise<boolean> {
+    // 1. Actualizar en memoria si existe
+    const memRecord = this.memoryStore.get(id);
+    if (memRecord) {
+      if (cues.mainCue !== undefined) memRecord.mainCue = cues.mainCue;
+      if (cues.hotCues !== undefined) memRecord.hotCues = [...cues.hotCues];
+    }
+
+    const wasMemoryOnly = this.memoryOnlyIds.has(id);
+    if (wasMemoryOnly) {
+      return Boolean(memRecord);
+    }
+
+    const db = await this.init();
+    if (!db) {
+      return Boolean(memRecord);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const getRequest = store.get(id);
+
+        getRequest.onsuccess = () => {
+          const record = getRequest.result as StoredTrackRecord | undefined;
+          if (!record) {
+            resolve(false);
+            return;
+          }
+
+          if (cues.mainCue !== undefined) record.mainCue = cues.mainCue;
+          if (cues.hotCues !== undefined) record.hotCues = [...cues.hotCues];
+          store.put(record);
+        };
+
+        getRequest.onerror = () => resolve(false);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (event) => {
+          console.warn('[IndexedDBStorage] Error al persistir CUEs de pista:', event);
+          resolve(false);
+        };
+        tx.onabort = () => resolve(false);
+      } catch (err) {
+        console.warn('[IndexedDBStorage] Excepción al actualizar CUEs de pista:', err);
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Obtiene exclusivamente los puntos CUE (mainCue y hotCues) de una pista persistida.
+   */
+  public async getTrackCues(id: string): Promise<{ mainCue: number | null; hotCues: HotCue[] } | null> {
+    const memRecord = this.memoryStore.get(id);
+    if (memRecord) {
+      return {
+        mainCue: memRecord.mainCue ?? null,
+        hotCues: memRecord.hotCues ? [...memRecord.hotCues] : [],
+      };
+    }
+
+    const db = await this.init();
+    if (!db) return null;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(id);
+
+        request.onsuccess = () => {
+          const record = request.result as StoredTrackRecord | undefined;
+          if (record) {
+            this.memoryStore.set(id, record);
+            resolve({
+              mainCue: record.mainCue ?? null,
+              hotCues: record.hotCues ? [...record.hotCues] : [],
+            });
+          } else {
+            resolve(null);
+          }
+        };
+        request.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /**
    * Obtiene una pista completa por su identificador único desde memoria o IndexedDB.
    */
   public async getTrack(id: string): Promise<Track | null> {
@@ -557,9 +678,12 @@ export class IndexedDBStorage {
       fileMeta: record.fileMeta,
       // Compatibilidad con pistas históricas sin metadatos de análisis
       analysis: record.analysis || { status: 'pending' },
+      mainCue: record.mainCue ?? null,
+      hotCues: record.hotCues ? [...record.hotCues] : [],
       dateAdded: record.dateAdded,
     };
   }
 }
+
 
 export const indexedDBStorage = IndexedDBStorage.getInstance();

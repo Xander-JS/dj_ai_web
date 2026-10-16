@@ -12,7 +12,7 @@ export const Mixer: React.FC = () => {
         <Deck deckName="A" />
       </div>
 
-      {/* Mixer Central Console (Visual hasta Fase 21) */}
+      {/* Mixer Central Console (Conectado a useDJStore y AudioEngine) */}
       <div className="mixer-console-container">
         <MixerConsole />
       </div>

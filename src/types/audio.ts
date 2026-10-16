@@ -59,6 +59,8 @@ export interface IAudioEngineService {
   getDeckCurrentTime(deckId: DeckId): number;
   getDeckDuration(deckId: DeckId): number;
   getDeckVUMeter(deckId: DeckId): number; // Nivel RMS/Pico (0 a 100)
+  isDeckPlaying(deckId: DeckId): boolean;
+  getDeckPlaybackRate(deckId: DeckId): number;
   
   // Liberación de recursos
   dispose(): Promise<void>;

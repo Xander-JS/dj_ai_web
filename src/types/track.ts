@@ -16,6 +16,8 @@ export interface TrackAnalysis {
   camelot?: MusicalKeyCamelot;       // Notación armónica Camelot: '8A', '11A'
   energy?: number;                   // Escala de intensidad/energía (0 a 10)
   waveformPeaks?: number[];          // Muestras normalizadas (0.0 a 1.0) para renderizado rápido
+  bpmConfidence?: number;            // Nivel de certeza/confianza métrica (0.0 a 1.0)
+  keyConfidence?: number;            // Nivel de correlación/certeza tonal (0.0 a 1.0)
   analysisError?: string;
 }
 

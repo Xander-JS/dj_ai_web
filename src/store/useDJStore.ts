@@ -13,6 +13,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Track } from '../types/track';
 import type { DeckId } from '../types/deck';
+import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
 
@@ -42,6 +43,7 @@ export interface DJStoreState {
   deckB: DeckStoreState;
   masterVolume: number;   // 0 a 100
   isMasterMuted: boolean;
+  mixer: MixerState;
 }
 
 /** Margen para que un Seek al 100 % no reinicie la pista desde 0:00. */
@@ -93,12 +95,48 @@ const INITIAL_DECK_B: DeckStoreState = {
   errorMessage: null,
 };
 
+const INITIAL_CHANNEL_A: ChannelStripState = {
+  deckId: 'A',
+  gain: 50,    // 50 = 1.0x (unitario)
+  eq: {
+    high: 50,  // 50 = 0 dB
+    mid: 50,   // 50 = 0 dB
+    low: 50,   // 50 = 0 dB
+    filter: 50 // 50 = bypass allpass
+  },
+  volume: 80,  // 80% fader inicial
+  cuePfl: false,
+};
+
+const INITIAL_CHANNEL_B: ChannelStripState = {
+  deckId: 'B',
+  gain: 50,
+  eq: {
+    high: 50,
+    mid: 50,
+    low: 50,
+    filter: 50
+  },
+  volume: 80,
+  cuePfl: false,
+};
+
+const INITIAL_MIXER_STATE: MixerState = {
+  channelA: INITIAL_CHANNEL_A,
+  channelB: INITIAL_CHANNEL_B,
+  crossfader: 50,
+  crossfaderCurve: 'constant-power',
+  masterVolume: 80,
+};
+
 const INITIAL_STATE: DJStoreState = {
   deckA: INITIAL_DECK_A,
   deckB: INITIAL_DECK_B,
   masterVolume: 80,
   isMasterMuted: false,
+  mixer: INITIAL_MIXER_STATE,
 };
+
 
 /** BPM analizado real, o null si la pista no tiene BPM analizado/almacenado. */
 function getAnalyzedBpm(track: Track | null): number | null {
@@ -439,21 +477,225 @@ class DJStore {
 
   /**
    * Ajusta el volumen maestro general (0 a 100).
+   * Mantiene una única fuente de verdad sincronizando state.masterVolume y state.mixer.masterVolume.
+   * Si el master está silenciado, actualiza el nivel nominal pero mantiene la salida física en 0.
    */
   public setMasterVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(100, volume));
-    audioEngine.setMasterVolume(clamped);
-    this.setState({ masterVolume: clamped, isMasterMuted: false });
+    try {
+      audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : clamped);
+    } catch {
+      // Ignorar si el motor de audio aún no se encuentra inicializado
+    }
+
+    this.setState({
+      masterVolume: clamped,
+      mixer: {
+        ...this.state.mixer,
+        masterVolume: clamped,
+      },
+    });
   }
 
   /**
-   * Alterna el silencio del volumen maestro.
+   * Alterna el silencio del volumen maestro conservando el nivel fijado.
    */
   public toggleMasterMute(): void {
     const isMasterMuted = !this.state.isMasterMuted;
-    audioEngine.setMasterVolume(isMasterMuted ? 0 : this.state.masterVolume);
+    try {
+      audioEngine.setMasterVolume(isMasterMuted ? 0 : this.state.masterVolume);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
     this.setState({ isMasterMuted });
   }
+
+  /**
+   * Ajusta la ganancia / trim de entrada del canal especificado (0 a 100, centro 50 = 1.0x).
+   */
+  public setChannelGain(deckId: DeckId, gain: number): void {
+    const clamped = Math.max(0, Math.min(100, gain));
+    try {
+      audioEngine.setChannelGain(deckId, clamped);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
+
+    const channelKey = deckId === 'A' ? 'channelA' : 'channelB';
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        [channelKey]: {
+          ...this.state.mixer[channelKey],
+          gain: clamped,
+        },
+      },
+    });
+  }
+
+  /**
+   * Ajusta una banda del ecualizador (high, mid, low) para el deck especificado.
+   * Acepta escala de slider (0..100 con centro 50 = 0 dB) o valores en dB (-12..+12).
+   */
+  public setChannelEq(deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, value: number): void {
+    let sliderValue: number;
+    let dbValue: number;
+
+    if (value < 0) {
+      dbValue = Math.max(-12, value);
+      sliderValue = Number((50 + (dbValue / 12) * 50).toFixed(2));
+    } else {
+      sliderValue = Math.max(0, Math.min(100, value));
+      dbValue = Number((((sliderValue - 50) / 50) * 12).toFixed(2));
+    }
+
+    try {
+      audioEngine.setChannelEq(deckId, band, dbValue);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
+
+    const channelKey = deckId === 'A' ? 'channelA' : 'channelB';
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        [channelKey]: {
+          ...this.state.mixer[channelKey],
+          eq: {
+            ...this.state.mixer[channelKey].eq,
+            [band]: sliderValue,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Ajusta el filtro bipolar de canal.
+   * Acepta escala de slider (0..100 con centro 50 = bypass) o valores bipolares (-100..+100).
+   */
+  public setChannelFilter(deckId: DeckId, value: number): void {
+    let sliderValue: number;
+    let bipolarValue: number;
+
+    if (value < 0) {
+      bipolarValue = Math.max(-100, value);
+      sliderValue = Number((50 + (bipolarValue / 100) * 50).toFixed(2));
+    } else {
+      sliderValue = Math.max(0, Math.min(100, value));
+      bipolarValue = Number((((sliderValue - 50) / 50) * 100).toFixed(2));
+    }
+
+    try {
+      audioEngine.setChannelFilter(deckId, bipolarValue);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
+
+    const channelKey = deckId === 'A' ? 'channelA' : 'channelB';
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        [channelKey]: {
+          ...this.state.mixer[channelKey],
+          eq: {
+            ...this.state.mixer[channelKey].eq,
+            filter: sliderValue,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Ajusta el fader lineal de volumen del canal (0 a 100).
+   */
+  public setChannelVolume(deckId: DeckId, volume: number): void {
+    const clamped = Math.max(0, Math.min(100, volume));
+    try {
+      audioEngine.setChannelVolume(deckId, clamped);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
+
+    const channelKey = deckId === 'A' ? 'channelA' : 'channelB';
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        [channelKey]: {
+          ...this.state.mixer[channelKey],
+          volume: clamped,
+        },
+      },
+    });
+  }
+
+  /**
+   * Ajusta la posición del crossfader (0 a 100) y sincroniza con el motor usando la curva actual.
+   */
+  public setCrossfader(position: number): void {
+    const clamped = Math.max(0, Math.min(100, position));
+    try {
+      audioEngine.setCrossfader(clamped, this.state.mixer.crossfaderCurve);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
+
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        crossfader: clamped,
+      },
+    });
+  }
+
+  /**
+   * Modifica la curva de atenuación del crossfader y recalcula las ganancias con la posición actual.
+   */
+  public setCrossfaderCurve(curve: CrossfaderCurve): void {
+    try {
+      audioEngine.setCrossfader(this.state.mixer.crossfader, curve);
+    } catch {
+      // Ignorar si el motor aún no está disponible
+    }
+
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        crossfaderCurve: curve,
+      },
+    });
+  }
+
+  /**
+   * Conmuta o establece la pre-escucha (CUE/PFL) del canal.
+   */
+  public setCuePfl(deckId: DeckId, active: boolean): void {
+    const channelKey = deckId === 'A' ? 'channelA' : 'channelB';
+    this.setState({
+      mixer: {
+        ...this.state.mixer,
+        [channelKey]: {
+          ...this.state.mixer[channelKey],
+          cuePfl: active,
+        },
+      },
+    });
+  }
+
+  // Aliases compatibles con MixerActions
+  public setGain(deckId: DeckId, gain: number): void {
+    this.setChannelGain(deckId, gain);
+  }
+
+  public setEq(deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, value: number): void {
+    this.setChannelEq(deckId, band, value);
+  }
+
+  public setFilter(deckId: DeckId, value: number): void {
+    this.setChannelFilter(deckId, value);
+  }
+
 
   /** Indica si hay un bucle de actualización temporal activo (uso en pruebas). */
   public isTimeLoopActive(): boolean {
@@ -534,6 +776,7 @@ export function useDJStore(): {
   deckB: DeckStoreState;
   masterVolume: number;
   isMasterMuted: boolean;
+  mixer: MixerState;
   loadTrackToDeckA: (track: Track) => Promise<boolean>;
   playDeckA: () => Promise<void>;
   pauseDeckA: () => void;
@@ -560,6 +803,20 @@ export function useDJStore(): {
   unloadDeck: (deckId: DeckId) => void;
   setMasterVolume: (volume: number) => void;
   toggleMasterMute: () => void;
+
+  // Acciones del Mixer
+  setChannelGain: (deckId: DeckId, gain: number) => void;
+  setChannelEq: (deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, value: number) => void;
+  setChannelFilter: (deckId: DeckId, value: number) => void;
+  setChannelVolume: (deckId: DeckId, volume: number) => void;
+  setCrossfader: (position: number) => void;
+  setCrossfaderCurve: (curve: CrossfaderCurve) => void;
+  setCuePfl: (deckId: DeckId, active: boolean) => void;
+
+  // Aliases compatibles con MixerActions
+  setGain: (deckId: DeckId, gain: number) => void;
+  setEq: (deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, value: number) => void;
+  setFilter: (deckId: DeckId, value: number) => void;
 } {
   const state = useSyncExternalStore(djStore.subscribe, djStore.getSnapshot);
 
@@ -568,6 +825,7 @@ export function useDJStore(): {
     deckB: state.deckB,
     masterVolume: state.masterVolume,
     isMasterMuted: state.isMasterMuted,
+    mixer: state.mixer,
 
     // Deck A
     loadTrackToDeckA: djStore.loadTrackToDeckA.bind(djStore),
@@ -602,5 +860,20 @@ export function useDJStore(): {
     // Master
     setMasterVolume: djStore.setMasterVolume.bind(djStore),
     toggleMasterMute: djStore.toggleMasterMute.bind(djStore),
+
+    // Mixer
+    setChannelGain: djStore.setChannelGain.bind(djStore),
+    setChannelEq: djStore.setChannelEq.bind(djStore),
+    setChannelFilter: djStore.setChannelFilter.bind(djStore),
+    setChannelVolume: djStore.setChannelVolume.bind(djStore),
+    setCrossfader: djStore.setCrossfader.bind(djStore),
+    setCrossfaderCurve: djStore.setCrossfaderCurve.bind(djStore),
+    setCuePfl: djStore.setCuePfl.bind(djStore),
+
+    // Aliases MixerActions
+    setGain: djStore.setChannelGain.bind(djStore),
+    setEq: djStore.setChannelEq.bind(djStore),
+    setFilter: djStore.setChannelFilter.bind(djStore),
   };
 }
+

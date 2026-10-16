@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
+import { useDJStore } from '../../store/useDJStore';
 import './MixerConsole.css';
 
 const ChannelStrip: React.FC<{ channelName: string; isPlaying?: boolean; vuLevel: number }> = ({ channelName, isPlaying, vuLevel }) => {
@@ -73,6 +74,7 @@ const VU_LEVEL_RANGE = 30;
 
 export const MixerConsole: React.FC = () => {
   const { t } = useTranslation();
+  const { deckA, deckB } = useDJStore();
   const [crossfader, setCrossfader] = useState(50);
   // Simulated VU meter level, refreshed on an interval (randomness kept out of render)
   const [vuLevel, setVuLevel] = useState(VU_MIN_LEVEL);
@@ -89,8 +91,8 @@ export const MixerConsole: React.FC = () => {
     <div className="mixer-console">
       
       <div className="mixer-channels-area">
-        <ChannelStrip channelName="1" isPlaying={true} vuLevel={vuLevel} />
-        <ChannelStrip channelName="2" isPlaying={false} vuLevel={vuLevel} />
+        <ChannelStrip channelName="1" isPlaying={deckA.playbackState === 'playing'} vuLevel={vuLevel} />
+        <ChannelStrip channelName="2" isPlaying={deckB.playbackState === 'playing'} vuLevel={vuLevel} />
       </div>
 
       <div className="mixer-crossfader-area">

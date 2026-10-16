@@ -47,6 +47,9 @@
     "col_size": "Size",
     "col_date": "Added",
     "load_deck_a": "Load into Deck A",
+    "load_deck_b": "Load into Deck B",
+    "load_success": "\"{{title}}\" loaded and ready in {{deck}}.",
+    "load_error": "Could not load \"{{title}}\" into {{deck}}.",
     "delete_track": "Delete from library",
     "delete_confirm": "Are you sure you want to delete \"{{title}}\" from local library?",
     "unsupported_format": "Unsupported format in \"{{name}}\". Only MP3 and WAV files are supported.",
@@ -79,13 +82,16 @@
     "deck_b": "DECK B",
     "sync": "SYNC",
     "cue": "CUE",
+    "cue_stop": "CUE / STOP",
+    "cue_stop_title": "Stop and rewind to start (0:00)",
     "play": "PLAY",
     "pause": "PAUSE",
     "tempo": "TEMPO",
     "key_lock": "KEY",
     "time": "TIME",
     "no_track": "No Track Loaded",
-    "unknown_artist": "Unknown"
+    "unknown_artist": "Unknown",
+    "seek_title": "Click to seek position"
   },
   "mixer": {
     "channel": "CH {{num}}",

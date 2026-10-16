@@ -4,7 +4,7 @@
  * Base de datos: SystemDJ_Storage | Almacén: tracks
  */
 
-import type { Track } from '../../types/track';
+import type { Track, TrackAnalysis } from '../../types/track.ts';
 
 export interface StoredTrackRecord {
   id: string;
@@ -161,6 +161,21 @@ export class IndexedDBStorage {
       dateAdded: track.dateAdded || Date.now(),
     };
 
+    // Si ya existía un registro previo con este mismo ID y el archivo cambió,
+    // invalidar el análisis previo para evitar asociar métricas de otra canción
+    const existingMem = this.memoryStore.get(record.id);
+    if (existingMem) {
+      const fileChanged =
+        existingMem.fileMeta.fileSize !== record.fileMeta.fileSize ||
+        existingMem.fileMeta.fileName !== record.fileMeta.fileName ||
+        existingMem.fileMeta.lastModified !== record.fileMeta.lastModified;
+
+      if (fileChanged) {
+        record.analysis = { status: 'pending' };
+        track.analysis = record.analysis;
+      }
+    }
+
     const keepInMemoryOnly = (reason: SaveTrackResult['reason']): SaveTrackResult => {
       this.memoryStore.set(record.id, record);
       this.memoryOnlyIds.add(record.id);
@@ -189,7 +204,28 @@ export class IndexedDBStorage {
 
       try {
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        tx.objectStore(STORE_NAME).put(record);
+        const store = tx.objectStore(STORE_NAME);
+
+        // Comprobar si ya existe en la base de datos para detectar reemplazo de archivo
+        const getReq = store.get(record.id);
+        getReq.onsuccess = () => {
+          const existingDb = getReq.result as StoredTrackRecord | undefined;
+          if (existingDb) {
+            const fileChanged =
+              existingDb.fileMeta.fileSize !== record.fileMeta.fileSize ||
+              existingDb.fileMeta.fileName !== record.fileMeta.fileName ||
+              existingDb.fileMeta.lastModified !== record.fileMeta.lastModified;
+
+            if (fileChanged) {
+              record.analysis = { status: 'pending' };
+              track.analysis = record.analysis;
+            }
+          }
+          store.put(record);
+        };
+        getReq.onerror = () => {
+          store.put(record);
+        };
 
         // Solo la finalización de la transacción garantiza que los datos se escribieron
         tx.oncomplete = () => {
@@ -340,6 +376,170 @@ export class IndexedDBStorage {
     });
   }
 
+  /**
+   * Actualiza atómicamente los resultados del análisis musical de una pista
+   * sin reescribir ni clonar el archivo binario de audio (audioBlob).
+   * Devuelve false si la pista ya no existe (evita escrituras obsoletas de pistas eliminadas).
+   */
+  public async updateTrackAnalysis(id: string, analysis: TrackAnalysis): Promise<boolean> {
+    // 1. Actualizar almacén de memoria si la pista existe allí
+    const memRecord = this.memoryStore.get(id);
+    if (memRecord) {
+      memRecord.analysis = analysis;
+    }
+
+    const wasMemoryOnly = this.memoryOnlyIds.has(id);
+    if (wasMemoryOnly) {
+      return Boolean(memRecord);
+    }
+
+    const db = await this.init();
+    if (!db) {
+      // Sin IndexedDB disponible, depende exclusivamente del almacén en memoria
+      return Boolean(memRecord);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const getRequest = store.get(id);
+
+        getRequest.onsuccess = () => {
+          const record = getRequest.result as StoredTrackRecord | undefined;
+          if (!record) {
+            // La pista fue eliminada durante el análisis: evitar resurrección o escritura obsoleta
+            resolve(false);
+            return;
+          }
+
+          record.analysis = analysis;
+          store.put(record);
+        };
+
+        getRequest.onerror = () => {
+          resolve(false);
+        };
+
+        tx.oncomplete = () => {
+          resolve(true);
+        };
+
+        tx.onerror = (event) => {
+          console.warn('[IndexedDBStorage] Error al persistir metadatos de análisis:', event);
+          resolve(false);
+        };
+
+        tx.onabort = () => {
+          resolve(false);
+        };
+      } catch (err) {
+        console.warn('[IndexedDBStorage] Excepción al actualizar metadatos de análisis:', err);
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Obtiene exclusivamente los metadatos de análisis musical de una pista almacenada.
+   */
+  public async getTrackAnalysis(id: string): Promise<TrackAnalysis | null> {
+    // 1. Revisar memoria
+    const memRecord = this.memoryStore.get(id);
+    if (memRecord?.analysis) {
+      return memRecord.analysis;
+    }
+
+    // 2. Revisar IndexedDB
+    const db = await this.init();
+    if (!db) return memRecord?.analysis || null;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(id);
+
+        request.onsuccess = () => {
+          const record = request.result as StoredTrackRecord | undefined;
+          if (record?.analysis) {
+            resolve(record.analysis);
+          } else if (record) {
+            resolve({ status: 'pending' });
+          } else {
+            resolve(null);
+          }
+        };
+
+        request.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /**
+   * Obtiene una pista completa por su identificador único desde memoria o IndexedDB.
+   */
+  public async getTrack(id: string): Promise<Track | null> {
+    const memRecord = this.memoryStore.get(id);
+    if (memRecord) {
+      return this.mapRecordToTrack(memRecord);
+    }
+
+    const db = await this.init();
+    if (!db) return null;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(id);
+
+        request.onsuccess = () => {
+          const record = request.result as StoredTrackRecord | undefined;
+          if (record) {
+            this.memoryStore.set(id, record);
+            resolve(this.mapRecordToTrack(record));
+          } else {
+            resolve(null);
+          }
+        };
+
+        request.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /**
+   * Comprueba si una pista existe actualmente en el almacenamiento (memoria o IndexedDB).
+   */
+  public async hasTrack(id: string): Promise<boolean> {
+    if (this.memoryStore.has(id)) {
+      return true;
+    }
+
+    const db = await this.init();
+    if (!db) return false;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.count(id);
+
+        request.onsuccess = () => {
+          resolve(request.result > 0);
+        };
+        request.onerror = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+
   private mapRecordToTrack(record: StoredTrackRecord): Track {
     return {
       id: record.id,
@@ -355,7 +555,8 @@ export class IndexedDBStorage {
         indexedDbKey: record.id,
       },
       fileMeta: record.fileMeta,
-      analysis: record.analysis,
+      // Compatibilidad con pistas históricas sin metadatos de análisis
+      analysis: record.analysis || { status: 'pending' },
       dateAdded: record.dateAdded,
     };
   }

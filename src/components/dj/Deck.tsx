@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
 import { clsx } from 'clsx';
-import { useDJStore } from '../../store/useDJStore';
+import { useDJStore, HOT_CUE_COLORS } from '../../store/useDJStore';
 import { formatDuration } from '../../utils/formatters';
+import type { AnalysisStatus } from '../../types/track';
 import './Deck.css';
 
 export interface DeckProps {
@@ -19,8 +20,6 @@ export const Deck: React.FC<DeckProps> = ({
   deckName, 
   trackTitle, 
   trackArtist,
-  bpm = 120.0,
-  keyStr = 'Am',
   timeRemaining = '-0:00'
 }) => {
   const { t } = useTranslation();
@@ -28,30 +27,59 @@ export const Deck: React.FC<DeckProps> = ({
     deckA, 
     deckB, 
     togglePlayDeck, 
-    stopDeck, 
     seekDeck, 
-    setPitchDeck 
+    setPitchDeck,
+    unloadDeck,
+    analyzeTrack,
+    handleCueDown,
+    handleCueUp,
+    cancelCup,
+    setHotCue,
+    jumpToHotCue,
+    deleteHotCue,
   } = useDJStore();
 
+  const [isTriggeringAnalysis, setIsTriggeringAnalysis] = useState(false);
+  const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const isCuePressedRef = useRef(false);
+
   const deck = deckName === 'A' ? deckA : deckB;
+  const hasTrack = Boolean(deck.track);
+  const track = deck.track;
+  const analysis = track?.analysis;
+  const isAnalyzed = analysis?.status === 'analyzed';
 
   const isPlaying = deck.playbackState === 'playing';
   const isLoading = deck.playbackState === 'loading';
-  const hasTrack = Boolean(deck.track);
   const isError = deck.playbackState === 'error';
 
-  const finalTitle = deck.track?.title || trackTitle || t('dj.no_track');
-  const finalArtist = deck.track 
-    ? (deck.track.artist || t('dj.unknown_artist')) 
+  const finalTitle = track?.title || trackTitle || t('dj.no_track');
+  const finalArtist = track
+    ? (track.artist || t('dj.unknown_artist'))
     : (trackArtist || (trackTitle ? t('dj.unknown_artist') : ''));
 
   const currentPitch = deck.pitch;
 
-  const currentBpm = deck.calculatedBpm !== null 
-    ? deck.calculatedBpm.toFixed(1) 
-    : (deck.track ? '—' : bpm.toFixed(1));
+  // 4.1 Información musical en los decks:
+  // BPM: efectivo con pitch aplicado o '—' si no hay análisis
+  const currentBpm = deck.calculatedBpm !== null
+    ? deck.calculatedBpm.toFixed(1)
+    : '—';
 
-  const currentKey = deck.keyStr || (deck.track ? '—' : keyStr);
+  // Tonalidad (Key): nota musical canónica o '—'
+  const currentKey = isAnalyzed && analysis?.key
+    ? analysis.key
+    : '—';
+
+  // Camelot: código armónico Camelot Wheel o null
+  const currentCamelot = isAnalyzed && analysis?.camelot
+    ? analysis.camelot
+    : null;
+
+  // Energía: intensidad acústica en escala 0 a 10 o '—'
+  const currentEnergy = isAnalyzed && typeof analysis?.energy === 'number'
+    ? analysis.energy.toFixed(1)
+    : '—';
 
   const duration = deck.duration;
   const currentTime = deck.currentTime;
@@ -61,14 +89,94 @@ export const Deck: React.FC<DeckProps> = ({
     ? `-${formatDuration(Math.max(0, duration - currentTime))}` 
     : timeRemaining;
 
+  // 4.2 Estado del análisis:
+  const analysisStatus: AnalysisStatus | null = analysis?.status || (hasTrack ? 'pending' : null);
+  const isAnalyzing = analysisStatus === 'analyzing' || isTriggeringAnalysis;
+  const canTriggerAnalysis = hasTrack && !isAnalyzing && (analysisStatus === 'pending' || analysisStatus === 'failed');
+
+  // Cancelar reproducción CUP ante pérdida de foco de la ventana o desmontaje
+  useEffect(() => {
+    const handleWindowBlur = () => {
+      if (isCuePressedRef.current) {
+        isCuePressedRef.current = false;
+        cancelCup(deckName);
+      }
+    };
+    window.addEventListener('blur', handleWindowBlur);
+    return () => {
+      window.removeEventListener('blur', handleWindowBlur);
+      cancelCup(deckName);
+    };
+  }, [deckName, cancelCup]);
+
   const handlePlayToggle = async () => {
-    if (!deck.track || isLoading) return;
+    if (!hasTrack || isLoading) return;
     await togglePlayDeck(deckName);
   };
 
-  const handleStopOrCue = () => {
+  const handleCueButtonDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (!hasTrack || isLoading) return;
-    stopDeck(deckName);
+    isCuePressedRef.current = true;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si el navegador no soporta pointer capture
+    }
+    handleCueDown(deckName);
+  };
+
+  const handleCueButtonUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!hasTrack || isLoading) return;
+    if (isCuePressedRef.current) {
+      isCuePressedRef.current = false;
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignorar
+      }
+      handleCueUp(deckName);
+    }
+  };
+
+  const handleCueKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!hasTrack || isLoading || e.repeat) return;
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'c' || e.key === 'C') {
+      e.preventDefault();
+      isCuePressedRef.current = true;
+      handleCueDown(deckName);
+    }
+  };
+
+  const handleCueKeyUp = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!hasTrack || isLoading) return;
+    if (e.key === ' ' || e.key === 'Enter' || e.key === 'c' || e.key === 'C') {
+      e.preventDefault();
+      if (isCuePressedRef.current) {
+        isCuePressedRef.current = false;
+        handleCueUp(deckName);
+      }
+    }
+  };
+
+  const handleHotCueClick = (slotNumber: number, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!hasTrack || isLoading) return;
+    const existingCue = deck.hotCues?.find((c) => c.id === slotNumber);
+    const shouldDelete = isDeleteMode || e.shiftKey;
+
+    if (shouldDelete) {
+      if (existingCue) {
+        deleteHotCue(deckName, slotNumber);
+      }
+      return;
+    }
+
+    if (existingCue) {
+      jumpToHotCue(deckName, slotNumber);
+    } else {
+      setHotCue(deckName, slotNumber);
+    }
   };
 
   const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -84,35 +192,151 @@ export const Deck: React.FC<DeckProps> = ({
     setPitchDeck(deckName, Number(e.target.value));
   };
 
+  const handleUnloadTrack = () => {
+    if (isLoading) return;
+    unloadDeck(deckName);
+  };
+
+  const handleTriggerAnalysis = async () => {
+    if (!track || isAnalyzing) return;
+    setIsTriggeringAnalysis(true);
+    try {
+      await analyzeTrack(track, analysisStatus === 'failed');
+    } catch (err) {
+      console.error(`[Deck ${deckName}] Error solicitando análisis musical:`, err);
+    } finally {
+      setIsTriggeringAnalysis(false);
+    }
+  };
+
   return (
+
     <div className={clsx('dj-deck', 'deck-real', `deck-${deckName.toLowerCase()}`, isError && 'deck-has-error')}>
       
       {/* Header Info */}
       <div className="deck-header">
         <div className="deck-title-group">
-          <span className="deck-track-title">{finalTitle}</span>
-          <span className="deck-track-artist">
-            {isError && deck.errorMessage ? (
-              <span className="deck-error-badge" title={deck.errorMessage}>
-                {deck.errorMessage}
-              </span>
-            ) : (
-              finalArtist
+          <div className="deck-title-row">
+            <span className="deck-track-title">{finalTitle}</span>
+            {hasTrack && (
+              <button
+                type="button"
+                className="deck-eject-btn"
+                onClick={handleUnloadTrack}
+                title={t('dj.eject_title')}
+                aria-label={t('dj.eject')}
+                data-testid={`deck-eject-${deckName.toLowerCase()}`}
+              >
+                ⏏
+              </button>
             )}
-          </span>
-        </div>
-        <div className="deck-stats">
-          <div className="deck-stat-item">
-            <span className="deck-stat-label">{t('dj.tempo')}</span>
-            <span>{currentBpm}</span>
           </div>
-          <div className="deck-stat-item">
+
+          <div className="deck-subtitle-row">
+            <span className="deck-track-artist">
+              {isError && deck.errorMessage ? (
+                <span className="deck-error-badge" title={deck.errorMessage}>
+                  {deck.errorMessage}
+                </span>
+              ) : (
+                finalArtist
+              )}
+            </span>
+
+            {/* Indicador de estado del análisis musical */}
+            {hasTrack && analysisStatus && (
+              <span
+                className={clsx(
+                  'status-badge',
+                  `status-badge-${analysisStatus}`,
+                  canTriggerAnalysis && 'interactive'
+                )}
+                onClick={canTriggerAnalysis ? handleTriggerAnalysis : undefined}
+                title={
+                  analysisStatus === 'pending'
+                    ? t('library.status_pending_title')
+                    : analysisStatus === 'analyzing'
+                    ? t('library.status_analyzing_title')
+                    : analysisStatus === 'analyzed'
+                    ? t('library.status_analyzed_title')
+                    : analysisStatus === 'unsupported'
+                    ? (analysis?.analysisError || t('library.status_unsupported_title'))
+                    : (analysis?.analysisError || t('library.status_failed_title'))
+                }
+                role={canTriggerAnalysis ? 'button' : undefined}
+                tabIndex={canTriggerAnalysis ? 0 : undefined}
+                onKeyDown={
+                  canTriggerAnalysis
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleTriggerAnalysis();
+                        }
+                      }
+                    : undefined
+                }
+                data-testid={`deck-status-${deckName.toLowerCase()}`}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <span className="spin-anim" aria-hidden="true">⏳</span>
+                    <span>{t('library.status_analyzing')}</span>
+                  </>
+                ) : analysisStatus === 'analyzed' ? (
+                  <>
+                    <span aria-hidden="true">✓</span>
+                    <span>{t('library.status_analyzed')}</span>
+                  </>
+                ) : analysisStatus === 'pending' ? (
+                  <>
+                    <span aria-hidden="true">🕒</span>
+                    <span>{t('library.status_pending')}</span>
+                  </>
+                ) : analysisStatus === 'unsupported' ? (
+                  <>
+                    <span aria-hidden="true">ℹ️</span>
+                    <span>{t('library.status_unsupported')}</span>
+                  </>
+                ) : (
+                  <>
+                    <span aria-hidden="true">⚠️</span>
+                    <span>{t('library.status_failed')}</span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Métricas musicales y estadísticas */}
+        <div className="deck-stats">
+          <div className="deck-stat-item" data-testid={`deck-${deckName.toLowerCase()}-bpm`}>
+            <span className="deck-stat-label">{t('dj.tempo')}</span>
+            <span className="deck-stat-value deck-bpm-value">{currentBpm}</span>
+          </div>
+          <div className="deck-stat-item" data-testid={`deck-${deckName.toLowerCase()}-key`}>
             <span className="deck-stat-label">{t('dj.key_lock')}</span>
-            <span className="deck-key-str">{currentKey}</span>
+            <span className="deck-stat-value deck-key-value">{currentKey}</span>
+          </div>
+          <div className="deck-stat-item" data-testid={`deck-${deckName.toLowerCase()}-camelot`}>
+            <span className="deck-stat-label">{t('dj.camelot')}</span>
+            <span className="deck-stat-value deck-camelot-value">
+              {currentCamelot ? (
+                <span className="track-camelot-badge">{currentCamelot}</span>
+              ) : (
+                '—'
+              )}
+            </span>
+          </div>
+          <div className="deck-stat-item" data-testid={`deck-${deckName.toLowerCase()}-energy`}>
+            <span className="deck-stat-label">{t('dj.energy')}</span>
+            <span className="deck-stat-value deck-energy-value">
+              {currentEnergy !== '—' ? `${currentEnergy}/10` : '—'}
+            </span>
           </div>
           <div className="deck-stat-item">
             <span className="deck-stat-label">{t('dj.time')}</span>
-            <span>{formattedTimeRemaining}</span>
+            <span className="deck-stat-value">{formattedTimeRemaining}</span>
           </div>
         </div>
       </div>
@@ -122,9 +346,41 @@ export const Deck: React.FC<DeckProps> = ({
         className={clsx('deck-waveform-container', duration > 0 && 'waveform-interactive')}
         onClick={handleWaveformClick}
         title={duration > 0 ? t('dj.seek_title') : undefined}
+        role="slider"
+        aria-label={t('dj.seek_title')}
+        aria-valuenow={currentTime}
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        data-testid={`deck-${deckName.toLowerCase()}-waveform`}
       >
-        <div className={clsx('deck-waveform-mock', isPlaying && 'playing-anim-wave')}></div>
-        
+        {/* Renderizado de forma de onda real con picos precalculados */}
+        <svg
+          className={clsx('deck-waveform-svg', isAnalyzing && 'waveform-analyzing')}
+          viewBox="0 0 100 60"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <line x1="0" y1="30" x2="100" y2="30" className="deck-waveform-baseline" />
+          {analysis?.waveformPeaks && analysis.waveformPeaks.length > 0 && (
+            analysis.waveformPeaks.map((peak, idx) => {
+              const clampedPeak = Math.max(0, Math.min(1, peak));
+              const barHeight = Math.max(2, clampedPeak * 54);
+              const y = (60 - barHeight) / 2;
+              return (
+                <rect
+                  key={idx}
+                  x={idx}
+                  y={y}
+                  width={0.75}
+                  height={barHeight}
+                  rx={0.3}
+                  className="deck-waveform-bar"
+                />
+              );
+            })
+          )}
+        </svg>
+
         {/* Relleno de progreso transcurrido */}
         {duration > 0 && (
           <div 
@@ -133,10 +389,104 @@ export const Deck: React.FC<DeckProps> = ({
           ></div>
         )}
 
+        {/* Marcadores de Hot Cues superpuestos en la forma de onda */}
+        {duration > 0 && deck.hotCues && deck.hotCues.map((cue) => {
+          const cuePercent = Math.min(100, Math.max(0, (cue.position / duration) * 100));
+          return (
+            <div
+              key={cue.id}
+              className="deck-waveform-marker-hotcue"
+              style={{ left: `${cuePercent}%`, '--marker-color': cue.color } as React.CSSProperties}
+              title={`Hot Cue ${cue.id} (${formatDuration(cue.position)})`}
+              data-testid={`deck-${deckName.toLowerCase()}-waveform-marker-${cue.id}`}
+            >
+              <span className="deck-waveform-marker-tag" style={{ backgroundColor: cue.color }}>
+                {cue.id}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* Marcador del CUE principal en la forma de onda */}
+        {duration > 0 && deck.mainCue !== null && (
+          <div
+            className="deck-waveform-marker-maincue"
+            style={{ left: `${Math.min(100, Math.max(0, (deck.mainCue / duration) * 100))}%` }}
+            title={`CUE (${formatDuration(deck.mainCue)})`}
+            data-testid={`deck-${deckName.toLowerCase()}-waveform-marker-cue`}
+          >
+            <span className="deck-waveform-marker-cue-tag">C</span>
+          </div>
+        )}
+
+        {/* Cursor Playhead */}
         <div 
           className="deck-playhead" 
           style={duration > 0 ? { left: `${progressPercent}%` } : undefined}
         ></div>
+      </div>
+
+      {/* Banco de 8 Hot Cues */}
+      <div
+        className="deck-hotcues-section"
+        data-testid={`deck-${deckName.toLowerCase()}-hotcues-section`}
+      >
+        <div className="deck-hotcues-header">
+          <span className="deck-hotcues-title">{t('dj.hot_cues')}</span>
+          <button
+            type="button"
+            className={clsx('deck-hotcues-clear-toggle', isDeleteMode && 'active')}
+            onClick={() => setIsDeleteMode(!isDeleteMode)}
+            disabled={!hasTrack || isLoading || (deck.hotCues?.length ?? 0) === 0}
+            title={t('dj.hotcue_clear_title')}
+            data-testid={`deck-${deckName.toLowerCase()}-hotcue-clear-btn`}
+          >
+            {t('dj.hotcue_clear')}
+          </button>
+        </div>
+        <div className="deck-hotcues-grid">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((slot) => {
+            const cue = deck.hotCues?.find((c) => c.id === slot);
+            const isDefined = Boolean(cue);
+            const cueColor = cue?.color || HOT_CUE_COLORS[slot - 1];
+            return (
+              <button
+                key={slot}
+                type="button"
+                className={clsx(
+                  'deck-hotcue-pad',
+                  isDefined ? 'pad-defined' : 'pad-empty',
+                  isDeleteMode && isDefined && 'pad-delete-mode'
+                )}
+                style={isDefined ? ({ '--pad-color': cueColor } as React.CSSProperties) : undefined}
+                onClick={(e) => handleHotCueClick(slot, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (isDefined && hasTrack && !isLoading) {
+                    deleteHotCue(deckName, slot);
+                  }
+                }}
+                disabled={!hasTrack || isLoading}
+                title={
+                  isDeleteMode
+                    ? t('dj.hotcue_delete', { slot })
+                    : isDefined
+                      ? `${t('dj.hotcue_jump', { slot })} (${formatDuration(cue!.position)})`
+                      : t('dj.hotcue_set', { slot })
+                }
+                data-testid={`deck-${deckName.toLowerCase()}-hotcue-${slot}`}
+                data-defined={isDefined}
+              >
+                <span className="pad-slot-num">{slot}</span>
+                {isDefined && (
+                  <span className="pad-cue-time">
+                    {formatDuration(cue!.position)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Main Deck Controls */}
@@ -145,6 +495,7 @@ export const Deck: React.FC<DeckProps> = ({
         {/* Transport buttons */}
         <div className="deck-transport">
           <button 
+            type="button"
             className="btn btn-dj btn-dj-sync"
             title="Función SYNC (En desarrollo)"
             disabled
@@ -152,17 +503,26 @@ export const Deck: React.FC<DeckProps> = ({
             {t('dj.sync')}
           </button>
           <button 
+            type="button"
             className="btn btn-dj btn-dj-cue"
-            onClick={handleStopOrCue}
-            title={t('dj.cue_stop_title')}
+            onPointerDown={handleCueButtonDown}
+            onPointerUp={handleCueButtonUp}
+            onPointerCancel={() => handleCueUp(deckName)}
+            onKeyDown={handleCueKeyDown}
+            onKeyUp={handleCueKeyUp}
+            title={t('dj.cue_pro_title')}
+            aria-label={t('dj.cue')}
             disabled={!hasTrack || isLoading}
+            data-testid={`deck-${deckName.toLowerCase()}-cue`}
           >
-            {t('dj.cue_stop')}
+            {t('dj.cue')}
           </button>
           <button 
+            type="button"
             className={clsx('btn btn-dj', isPlaying ? 'btn-dj-play' : 'btn-outline')}
             onClick={handlePlayToggle}
             disabled={!hasTrack || isLoading}
+            data-testid={`deck-${deckName.toLowerCase()}-play`}
           >
             {isLoading ? '...' : (isPlaying ? t('dj.pause') : t('dj.play'))}
           </button>
@@ -195,6 +555,7 @@ export const Deck: React.FC<DeckProps> = ({
         </div>
 
       </div>
+
 
     </div>
   );

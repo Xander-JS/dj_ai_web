@@ -7,7 +7,7 @@
 
 import type { DeckId } from '../types/deck';
 import type { ChannelEq, CrossfaderCurve } from '../types/mixer';
-import type { AudioEngineStatus, DeckAudioGraph, IAudioEngineService } from '../types/audio';
+import type { AudioEngineStatus, DeckAudioGraph, MasterAudioGraph, IAudioEngineService } from '../types/audio';
 
 /**
  * Estado interno de transporte y seguimiento temporal por deck.
@@ -34,6 +34,13 @@ export class AudioEngineService implements IAudioEngineService {
 
   private audioContext: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
+  private masterAnalyserNode: AnalyserNode | null = null;
+  private limiterNode: DynamicsCompressorNode | null = null;
+  private masterVolumeLevel: number = 0.8; // 80% volumen maestro inicial
+
+  private crossfaderPosition: number = 0.5; // Centro exacto inicial
+  private crossfaderCurve: CrossfaderCurve = 'constant-power';
+
   private deckGraphs: Map<DeckId, DeckAudioGraph> = new Map();
   private deckTransports: Map<DeckId, DeckTransportInternal> = new Map();
 
@@ -84,10 +91,8 @@ export class AudioEngineService implements IAudioEngineService {
 
     this.audioContext = new AudioContextClass();
 
-    // Configurar nodo maestro
-    this.masterGainNode = this.audioContext.createGain();
-    this.masterGainNode.gain.setValueAtTime(1.0, this.audioContext.currentTime);
-    this.masterGainNode.connect(this.audioContext.destination);
+    // Configurar etapa Master (Gain -> Analyser / Limiter -> Destination)
+    this.setupMasterStage(this.audioContext);
 
     // Inicializar grafos de audio para Deck A y Deck B
     this.deckGraphs.set('A', this.buildDeckAudioGraph('A'));
@@ -218,7 +223,7 @@ export class AudioEngineService implements IAudioEngineService {
     const sourceNode = ctx.createBufferSource();
     sourceNode.buffer = graph.buffer;
     sourceNode.playbackRate.setValueAtTime(transport.playbackRate, ctx.currentTime);
-    sourceNode.connect(graph.filterNode);
+    sourceNode.connect(graph.gainNode);
 
     // Manejar finalización natural de la reproducción
     sourceNode.onended = () => {
@@ -326,7 +331,8 @@ export class AudioEngineService implements IAudioEngineService {
   }
 
   /**
-   * Ajusta la ganancia / trim del canal (0 a 100, centro 50 = unitario).
+   * Ajusta la ganancia / trim de entrada del canal (0 a 100, centro 50 = unitario 1.0x).
+   * Rango resultante: 0.0 a 2.0 (+6 dB de realce máximo).
    */
   public setChannelGain(deckId: DeckId, gainValue: number): void {
     this.ensureInitialized();
@@ -334,12 +340,16 @@ export class AudioEngineService implements IAudioEngineService {
     if (!this.audioContext) return;
 
     // 0..100 -> ganancia lineal 0.0 a 2.0 (50 = 1.0)
-    const normalizedGain = Math.max(0, Math.min(100, gainValue)) / 50;
+    const clamped = Math.max(0, Math.min(100, gainValue));
+    const normalizedGain = Number((clamped / 50).toFixed(4));
     graph.gainNode.gain.setValueAtTime(normalizedGain, this.audioContext.currentTime);
   }
 
   /**
    * Ajusta una banda del ecualizador de 3 bandas (-12 dB a +12 dB).
+   * - high: Highshelf en 2500 Hz
+   * - mid: Peaking en 1000 Hz (Q = 1.0)
+   * - low: Lowshelf en 300 Hz
    */
   public setChannelEq(deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, dbValue: number): void {
     this.ensureInitialized();
@@ -347,22 +357,23 @@ export class AudioEngineService implements IAudioEngineService {
     if (!this.audioContext) return;
 
     const clampedDb = Math.max(-12, Math.min(12, dbValue));
+    const now = this.audioContext.currentTime;
 
     switch (band) {
       case 'high':
-        graph.eqHighNode.gain.setValueAtTime(clampedDb, this.audioContext.currentTime);
+        graph.eqHighNode.gain.setValueAtTime(clampedDb, now);
         break;
       case 'mid':
-        graph.eqMidNode.gain.setValueAtTime(clampedDb, this.audioContext.currentTime);
+        graph.eqMidNode.gain.setValueAtTime(clampedDb, now);
         break;
       case 'low':
-        graph.eqLowNode.gain.setValueAtTime(clampedDb, this.audioContext.currentTime);
+        graph.eqLowNode.gain.setValueAtTime(clampedDb, now);
         break;
     }
   }
 
   /**
-   * Ajusta el filtro bipolar de canal (-100 LowPass a +100 HighPass, 0 bypass).
+   * Ajusta el filtro bipolar de canal (-100 LowPass a +100 HighPass, 0 bypass allpass).
    */
   public setChannelFilter(deckId: DeckId, filterNormalized: number): void {
     this.ensureInitialized();
@@ -381,18 +392,18 @@ export class AudioEngineService implements IAudioEngineService {
       filter.type = 'lowpass';
       const factor = (val + 100) / 100; // 0.0 a 1.0
       const freq = 200 * Math.pow(20000 / 200, factor);
-      filter.frequency.setValueAtTime(freq, now);
+      filter.frequency.setValueAtTime(Number(freq.toFixed(2)), now);
     } else {
       // Filtro Highpass (corte de graves progresivo de 20 Hz a 8 kHz)
       filter.type = 'highpass';
       const factor = val / 100; // 0.0 a 1.0
       const freq = 20 * Math.pow(8000 / 20, factor);
-      filter.frequency.setValueAtTime(freq, now);
+      filter.frequency.setValueAtTime(Number(freq.toFixed(2)), now);
     }
   }
 
   /**
-   * Ajusta el volumen del fader lineal del canal (0 a 100).
+   * Ajusta el volumen del fader lineal del canal (0 a 100 -> ganancia 0.0 a 1.0).
    */
   public setChannelVolume(deckId: DeckId, volumeLinear: number): void {
     this.ensureInitialized();
@@ -400,40 +411,23 @@ export class AudioEngineService implements IAudioEngineService {
     if (!this.audioContext) return;
 
     const normalizedVol = Math.max(0, Math.min(100, volumeLinear)) / 100;
-    graph.volumeNode.gain.setValueAtTime(normalizedVol, this.audioContext.currentTime);
+    graph.volumeNode.gain.setValueAtTime(Number(normalizedVol.toFixed(4)), this.audioContext.currentTime);
   }
 
   /**
-   * Ajusta la atenuación del crossfader entre Deck A y Deck B según la curva seleccionada.
+   * Ajusta la atenuación del crossfader entre Deck A y Deck B según la posición y curva seleccionada.
+   * positionNormalized: 0.0 a 1.0 (o 0 a 100). 0 = 100% Deck A, 1 = 100% Deck B.
    */
-  public setCrossfader(positionNormalized: number, curve: CrossfaderCurve): void {
+  public setCrossfader(positionNormalized: number, curve: CrossfaderCurve = this.crossfaderCurve): void {
     this.ensureInitialized();
+    this.crossfaderPosition = positionNormalized;
+    this.crossfaderCurve = curve;
+
     if (!this.audioContext) return;
 
-    // Normaliza a rango 0.0 (Deck A) a 1.0 (Deck B)
-    const pos = positionNormalized > 1
-      ? Math.max(0, Math.min(100, positionNormalized)) / 100
-      : Math.max(0, Math.min(1, positionNormalized));
-
-    let gainA = 1.0;
-    let gainB = 1.0;
-
-    switch (curve) {
-      case 'linear':
-        gainA = 1.0 - pos;
-        gainB = pos;
-        break;
-      case 'constant-power':
-        gainA = Math.cos(pos * 0.5 * Math.PI);
-        gainB = Math.sin(pos * 0.5 * Math.PI);
-        break;
-      case 'cut':
-        gainA = pos < 0.95 ? 1.0 : (1.0 - pos) * 20;
-        gainB = pos > 0.05 ? 1.0 : pos * 20;
-        break;
-    }
-
+    const { gainA, gainB } = this.calculateCrossfaderGains(positionNormalized, curve);
     const now = this.audioContext.currentTime;
+
     const graphA = this.deckGraphs.get('A');
     const graphB = this.deckGraphs.get('B');
 
@@ -446,14 +440,23 @@ export class AudioEngineService implements IAudioEngineService {
   }
 
   /**
-   * Ajusta el volumen de salida maestro (0 a 100).
+   * Cambia la curva matemática de atenuación del crossfader y recalcula las ganancias.
+   */
+  public setCrossfaderCurve(curve: CrossfaderCurve): void {
+    this.setCrossfader(this.crossfaderPosition, curve);
+  }
+
+  /**
+   * Ajusta el volumen de salida maestro (0 a 100 -> ganancia 0.0 a 1.0).
    */
   public setMasterVolume(volumeLinear: number): void {
     this.ensureInitialized();
-    if (!this.audioContext || !this.masterGainNode) return;
-
     const normalized = Math.max(0, Math.min(100, volumeLinear)) / 100;
-    this.masterGainNode.gain.setValueAtTime(normalized, this.audioContext.currentTime);
+    this.masterVolumeLevel = Number(normalized.toFixed(4));
+
+    if (this.audioContext && this.masterGainNode) {
+      this.masterGainNode.gain.setValueAtTime(this.masterVolumeLevel, this.audioContext.currentTime);
+    }
   }
 
   /**
@@ -486,26 +489,73 @@ export class AudioEngineService implements IAudioEngineService {
   }
 
   /**
-   * Obtiene el nivel RMS calculado del medidor VU del deck (0 a 100).
+   * Obtiene el valor RMS matemático puro (0.0 a 1.0+) de la señal del deck
+   * medido en el dominio del tiempo antes del crossfader.
    */
-  public getDeckVUMeter(deckId: DeckId): number {
+  public getDeckRMS(deckId: DeckId): number {
     const graph = this.deckGraphs.get(deckId);
     const transport = this.deckTransports.get(deckId);
     if (!graph || !transport || !transport.isPlaying) {
       return 0;
     }
 
-    const analyser = graph.analyserNode;
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteTimeDomainData(dataArray);
+    return this.calculateRMSFromAnalyser(graph.analyserNode);
+  }
 
-    let sumSquares = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      const normalized = (dataArray[i] - 128) / 128; // Rango -1.0 a 1.0
-      sumSquares += normalized * normalized;
+  /**
+   * Obtiene el valor RMS matemático puro (0.0 a 1.0+) de la mezcla combinada Master.
+   */
+  public getMasterRMS(): number {
+    const aPlaying = this.isDeckPlaying('A');
+    const bPlaying = this.isDeckPlaying('B');
+    if ((!aPlaying && !bPlaying) || !this.masterAnalyserNode) {
+      return 0;
     }
-    const rms = Math.sqrt(sumSquares / dataArray.length);
+
+    return this.calculateRMSFromAnalyser(this.masterAnalyserNode);
+  }
+
+  /**
+   * Convierte un valor RMS matemático a un porcentaje de escala visual para vúmetros (0 a 100).
+   * Calibrado de tal forma que una onda senoidal pura a 0 dBFS (RMS ≈ 0.7071) alcance el nivel nominal (~99%).
+   */
+  public rmsToVUMeterLevel(rms: number): number {
+    if (rms <= 0.0001) return 0;
     return Math.min(100, Math.round(rms * 140));
+  }
+
+  /**
+   * Obtiene el nivel para el medidor VU visual del deck (0 a 100) medido pre-crossfader.
+   */
+  public getDeckVUMeter(deckId: DeckId): number {
+    return this.rmsToVUMeterLevel(this.getDeckRMS(deckId));
+  }
+
+  /**
+   * Obtiene el nivel para el medidor VU visual del Master (0 a 100).
+   */
+  public getMasterVUMeter(): number {
+    return this.rmsToVUMeterLevel(this.getMasterRMS());
+  }
+
+  /**
+   * Permite inspeccionar el grafo DSP de un canal (uso en pruebas de topología).
+   */
+  public getDeckAudioGraph(deckId: DeckId): DeckAudioGraph {
+    this.ensureInitialized();
+    return this.getDeckGraph(deckId);
+  }
+
+  /**
+   * Permite inspeccionar los nodos de la etapa Master (uso en pruebas de topología).
+   */
+  public getMasterGraph(): MasterAudioGraph {
+    this.ensureInitialized();
+    return {
+      masterGainNode: this.masterGainNode!,
+      masterAnalyserNode: this.masterAnalyserNode!,
+      limiterNode: this.limiterNode,
+    };
   }
 
   /**
@@ -552,10 +602,7 @@ export class AudioEngineService implements IAudioEngineService {
     this.unloadDeck('A');
     this.unloadDeck('B');
 
-    // Las suscripciones (onPlaybackEnded / onStateChange) pertenecen a sus suscriptores,
-    // que se desuscriben con la función devuelta. No se borran aquí para que un
-    // dispose seguido de una reinicialización no deje al store sin notificaciones.
-
+    // Desconectar y limpiar etapa Master
     if (this.masterGainNode) {
       try {
         this.masterGainNode.disconnect();
@@ -563,6 +610,40 @@ export class AudioEngineService implements IAudioEngineService {
         // Ignorar si ya estaba desconectado
       }
       this.masterGainNode = null;
+    }
+
+    if (this.masterAnalyserNode) {
+      try {
+        this.masterAnalyserNode.disconnect();
+      } catch {
+        // Ignorar
+      }
+      this.masterAnalyserNode = null;
+    }
+
+    if (this.limiterNode) {
+      try {
+        this.limiterNode.disconnect();
+      } catch {
+        // Ignorar
+      }
+      this.limiterNode = null;
+    }
+
+    // Desconectar y limpiar nodos de cada deck
+    for (const graph of this.deckGraphs.values()) {
+      try {
+        graph.gainNode.disconnect();
+        graph.filterNode.disconnect();
+        graph.eqHighNode.disconnect();
+        graph.eqMidNode.disconnect();
+        graph.eqLowNode.disconnect();
+        graph.volumeNode.disconnect();
+        graph.crossfaderGainNode.disconnect();
+        graph.analyserNode.disconnect();
+      } catch {
+        // Ignorar
+      }
     }
 
     this.deckGraphs.clear();
@@ -588,17 +669,58 @@ export class AudioEngineService implements IAudioEngineService {
     });
   }
 
+  private setupMasterStage(ctx: AudioContext): void {
+    const now = ctx.currentTime;
+
+    // 1. Nodo Maestro de Ganancia
+    this.masterGainNode = ctx.createGain();
+    this.masterGainNode.gain.setValueAtTime(this.masterVolumeLevel, now);
+
+    // 2. Analizador Master (mezcla combinada)
+    this.masterAnalyserNode = ctx.createAnalyser();
+    this.masterAnalyserNode.fftSize = 256;
+    this.masterAnalyserNode.smoothingTimeConstant = 0.8;
+
+    // Conectar masterGainNode al masterAnalyserNode en derivación (tap de medición)
+    this.masterGainNode.connect(this.masterAnalyserNode);
+
+    // 3. Etapa de limitación de seguridad / compresión dinámica contra picos
+    // NOTA TÉCNICA: DynamicsCompressorNode actúa como un supresor dinámico de picos
+    // y sobrecargas sostenidas (threshold -1.0 dBFS, ratio 20:1, ataque 1 ms).
+    // No constituye un limitador brickwall garantizado con lookahead de cero muestras;
+    // por ello, la protección contra distorsión se sustenta conjuntamente en una
+    // estructura de ganancias calibrada (headroom nominal) y límites estrictos.
+    if (typeof ctx.createDynamicsCompressor === 'function') {
+      try {
+        const limiter = ctx.createDynamicsCompressor();
+        limiter.threshold.setValueAtTime(-1.0, now);
+        limiter.knee.setValueAtTime(0.0, now);
+        limiter.ratio.setValueAtTime(20.0, now);
+        limiter.attack.setValueAtTime(0.001, now);
+        limiter.release.setValueAtTime(0.050, now);
+
+        this.limiterNode = limiter;
+        this.masterGainNode.connect(this.limiterNode);
+        this.limiterNode.connect(ctx.destination);
+      } catch (err) {
+        console.warn('[AudioEngineService] Fallo al configurar DynamicsCompressorNode:', err);
+        this.limiterNode = null;
+        this.masterGainNode.connect(ctx.destination);
+      }
+    } else {
+      this.limiterNode = null;
+      this.masterGainNode.connect(ctx.destination);
+    }
+  }
+
   private ensureInitialized(): void {
     if (!this.audioContext || this.audioContext.state === 'closed') {
-      // Inicialización síncrona de recursos base
       const AudioContextClass = getAudioContextConstructor();
       if (!AudioContextClass) {
         throw new Error('Web Audio API no está disponible en este entorno.');
       }
       this.audioContext = new AudioContextClass();
-      this.masterGainNode = this.audioContext.createGain();
-      this.masterGainNode.gain.setValueAtTime(1.0, this.audioContext.currentTime);
-      this.masterGainNode.connect(this.audioContext.destination);
+      this.setupMasterStage(this.audioContext);
 
       this.deckGraphs.set('A', this.buildDeckAudioGraph('A'));
       this.deckGraphs.set('B', this.buildDeckAudioGraph('B'));
@@ -610,69 +732,121 @@ export class AudioEngineService implements IAudioEngineService {
       throw new Error('AudioContext o masterGainNode no disponibles para crear el grafo de audio.');
     }
     const ctx = this.audioContext;
+    const now = ctx.currentTime;
 
-    // 1. Filtro Dual (Lowpass / Highpass con inicio allpass/bypass)
+    // 1. Ganancia / Trim de entrada (0 a 100, centro 50 = unitario 1.0)
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(1.0, now);
+
+    // 2. Filtro Dual (Lowpass / Highpass con inicio allpass/bypass)
     const filterNode = ctx.createBiquadFilter();
     filterNode.type = 'allpass';
 
-    // 2. Ecualizador de 3 bandas
+    // 3. Ecualizador de 3 bandas (-12 dB a +12 dB, centro 0 dB)
     const eqHighNode = ctx.createBiquadFilter();
     eqHighNode.type = 'highshelf';
-    eqHighNode.frequency.setValueAtTime(2500, ctx.currentTime);
-    eqHighNode.gain.setValueAtTime(0, ctx.currentTime);
+    eqHighNode.frequency.setValueAtTime(2500, now);
+    eqHighNode.gain.setValueAtTime(0, now);
 
     const eqMidNode = ctx.createBiquadFilter();
     eqMidNode.type = 'peaking';
-    eqMidNode.frequency.setValueAtTime(1000, ctx.currentTime);
-    eqMidNode.Q.setValueAtTime(1.0, ctx.currentTime);
-    eqMidNode.gain.setValueAtTime(0, ctx.currentTime);
+    eqMidNode.frequency.setValueAtTime(1000, now);
+    eqMidNode.Q.setValueAtTime(1.0, now);
+    eqMidNode.gain.setValueAtTime(0, now);
 
     const eqLowNode = ctx.createBiquadFilter();
     eqLowNode.type = 'lowshelf';
-    eqLowNode.frequency.setValueAtTime(300, ctx.currentTime);
-    eqLowNode.gain.setValueAtTime(0, ctx.currentTime);
+    eqLowNode.frequency.setValueAtTime(300, now);
+    eqLowNode.gain.setValueAtTime(0, now);
 
-    // 3. Ganancia / Trim de entrada
-    const gainNode = ctx.createGain();
-    gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
-
-    // 4. Fader de volumen de canal
+    // 4. Fader de volumen de canal (0 a 100, defecto 80% = 0.8)
     const volumeNode = ctx.createGain();
-    volumeNode.gain.setValueAtTime(0.8, ctx.currentTime);
+    volumeNode.gain.setValueAtTime(0.8, now);
 
-    // 5. Atenuador del crossfader
-    const crossfaderGainNode = ctx.createGain();
-    crossfaderGainNode.gain.setValueAtTime(1.0, ctx.currentTime);
-
-    // 6. Analizador para VU Meter y formas de onda
+    // 5. Analizador para VU Meter de canal (Pre-crossfader, post-volume)
     const analyserNode = ctx.createAnalyser();
     analyserNode.fftSize = 256;
     analyserNode.smoothingTimeConstant = 0.8;
 
-    // Enlazar cadena en serie: filter -> eqHigh -> eqMid -> eqLow -> gain -> volume -> crossfader -> analyser -> master
+    // 6. Atenuador del crossfader
+    const crossfaderGainNode = ctx.createGain();
+    const gains = this.calculateCrossfaderGains(this.crossfaderPosition, this.crossfaderCurve);
+    const initialCrossGain = deckId === 'A' ? gains.gainA : gains.gainB;
+    crossfaderGainNode.gain.setValueAtTime(initialCrossGain, now);
+
+    // Enlazar cadena en serie: gain -> filter -> eqHigh -> eqMid -> eqLow -> volume
+    gainNode.connect(filterNode);
     filterNode.connect(eqHighNode);
     eqHighNode.connect(eqMidNode);
     eqMidNode.connect(eqLowNode);
-    eqLowNode.connect(gainNode);
-    gainNode.connect(volumeNode);
+    eqLowNode.connect(volumeNode);
+
+    // Tapping del analizador de canal: Pre-crossfader, post-volume
+    volumeNode.connect(analyserNode);
+
+    // Enrutamiento al crossfader y salida al master
     volumeNode.connect(crossfaderGainNode);
-    crossfaderGainNode.connect(analyserNode);
-    analyserNode.connect(this.masterGainNode);
+    crossfaderGainNode.connect(this.masterGainNode);
 
     return {
       deckId,
       sourceNode: null,
       buffer: null,
+      gainNode,
       filterNode,
       eqHighNode,
       eqMidNode,
       eqLowNode,
-      gainNode,
       volumeNode,
       crossfaderGainNode,
       analyserNode,
     };
   }
+
+  private calculateCrossfaderGains(pos: number, curve: CrossfaderCurve): { gainA: number; gainB: number } {
+    // Normalizar a rango [0.0, 1.0]
+    const p = Math.max(0, Math.min(1, pos > 1 ? pos / 100 : pos));
+    let gainA = 1.0;
+    let gainB = 1.0;
+
+    switch (curve) {
+      case 'linear':
+        gainA = 1.0 - p;
+        gainB = p;
+        break;
+
+      case 'constant-power':
+        gainA = Math.cos(p * 0.5 * Math.PI);
+        gainB = Math.sin(p * 0.5 * Math.PI);
+        break;
+
+      case 'cut':
+        // Curva scratch/cut:
+        // En los extremos [0.0 .. 0.05] y [0.95 .. 1.0] transición rápida
+        // En el rango central [0.05 .. 0.95] ambos canales al 100% (1.0)
+        gainA = p >= 0.95 ? Math.max(0, (1.0 - p) * 20) : 1.0;
+        gainB = p <= 0.05 ? Math.max(0, p * 20) : 1.0;
+        break;
+    }
+
+    return {
+      gainA: Math.max(0, Math.min(1, Number(gainA.toFixed(4)))),
+      gainB: Math.max(0, Math.min(1, Number(gainB.toFixed(4)))),
+    };
+  }
+
+  private calculateRMSFromAnalyser(analyser: AnalyserNode): number {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteTimeDomainData(dataArray);
+
+    let sumSquares = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const normalized = (dataArray[i] - 128) / 128; // -1.0 a 1.0
+      sumSquares += normalized * normalized;
+    }
+    return Math.sqrt(sumSquares / dataArray.length);
+  }
+
 
   private stopSourceNode(graph: DeckAudioGraph): void {
     if (graph.sourceNode) {

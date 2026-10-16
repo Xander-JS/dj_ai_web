@@ -7,3 +7,4 @@ export * from './deck';
 export * from './mixer';
 export * from './audio';
 export * from './database';
+export * from './analysis.ts';

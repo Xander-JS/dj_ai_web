@@ -12,16 +12,19 @@
 
 import { useSyncExternalStore } from 'react';
 import type { Track, TrackAnalysis, HotCue } from '../types/track.ts';
-import type { DeckId } from '../types/deck';
+import type { DeckId, PhaseAlignmentState } from '../types/deck.ts';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
 import { analysisSyncManager } from '../services/analysis/index.ts';
+import {
+  calculatePhaseAlignmentPlan,
+} from '../audio/analysis/phaseAlignment.ts';
 
 export type DeckPlaybackStatus = 'stopped' | 'playing' | 'paused' | 'loading' | 'error';
 
 /** Códigos de error traducibles por la interfaz. */
-export type DeckErrorCode = 'file_missing' | 'decode_failed' | 'playback_failed';
+export type DeckErrorCode = 'file_missing' | 'decode_failed' | 'playback_failed' | 'sync_failed';
 
 /** Paleta de 8 colores distintivos para los pads de Hot Cue estilo DJ profesional. */
 export const HOT_CUE_COLORS: readonly string[] = [
@@ -51,8 +54,16 @@ export interface DeckStoreState {
   mainCue: number | null;
   /** Lista de 8 Hot Cues definidos para la pista cargada. */
   hotCues: HotCue[];
+  /** Desviación porcentual momentánea de pitch bend (+3.5, -3.5 o 0). */
+  pitchBend: number;
   /** Indica si el deck se encuentra en reproducción provisional CUP (manteniendo CUE presionado). */
   isCupPlaying: boolean;
+  /** Sincronización automática de BPM activada (Esclavo sincronizado). */
+  isSyncActive: boolean;
+  /** Indica si el deck actúa como referencia Master de tempo. */
+  isMaster: boolean;
+  /** Estado de alineación progresiva de fase mediante micro-slew. */
+  phaseAlignment: PhaseAlignmentState;
   errorCode: DeckErrorCode | null;
   errorMessage: string | null;
 }
@@ -61,6 +72,7 @@ export interface DeckStoreState {
 export interface DJStoreState {
   deckA: DeckStoreState;
   deckB: DeckStoreState;
+  syncMasterDeck: DeckId | null;
   masterVolume: number;   // 0 a 100
   isMasterMuted: boolean;
   mixer: MixerState;
@@ -99,7 +111,14 @@ const INITIAL_DECK_A: DeckStoreState = {
   keyStr: null,
   mainCue: null,
   hotCues: [],
+  pitchBend: 0,
   isCupPlaying: false,
+  isSyncActive: false,
+  isMaster: false,
+  phaseAlignment: {
+    status: 'idle',
+    progressPercent: 0,
+  },
   errorCode: null,
   errorMessage: null,
 };
@@ -116,7 +135,14 @@ const INITIAL_DECK_B: DeckStoreState = {
   keyStr: null,
   mainCue: null,
   hotCues: [],
+  pitchBend: 0,
   isCupPlaying: false,
+  isSyncActive: false,
+  isMaster: false,
+  phaseAlignment: {
+    status: 'idle',
+    progressPercent: 0,
+  },
   errorCode: null,
   errorMessage: null,
 };
@@ -159,6 +185,7 @@ const INITIAL_MIXER_STATE: MixerState = {
 const INITIAL_STATE: DJStoreState = {
   deckA: INITIAL_DECK_A,
   deckB: INITIAL_DECK_B,
+  syncMasterDeck: null,
   masterVolume: 80,
   isMasterMuted: false,
   mixer: INITIAL_MIXER_STATE,
@@ -407,12 +434,24 @@ class DJStore {
       audioEngine.setDeckPlaybackRate(deckId, this.getDeckState(deckId).playbackRate);
       audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : this.state.masterVolume);
 
+      // Si este deck era Master o Esclavo, desacoplar vínculos
+      const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+      if (this.state.syncMasterDeck === deckId) {
+        this.setState({ syncMasterDeck: null });
+        this.setDeck(otherDeckId, { isSyncActive: false, isMaster: false });
+      } else if (this.state.syncMasterDeck === otherDeckId) {
+        this.setState({ syncMasterDeck: null });
+        this.setDeck(otherDeckId, { isMaster: false });
+      }
+
       this.setDeck(deckId, {
         duration: audioBuffer.duration,
         currentTime: 0,
         playbackState: 'stopped',
         mainCue: effectiveTrack.mainCue ?? null,
         hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
+        isSyncActive: false,
+        isMaster: false,
         errorCode: null,
         errorMessage: null,
       });
@@ -483,6 +522,10 @@ class DJStore {
    */
   public pauseDeck(deckId: DeckId): void {
     this.isCupPlaying[deckId] = false;
+    this.cancelPhaseAlignment(deckId);
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    this.cancelPhaseAlignment(otherDeckId);
+
     const deckState = this.getDeckState(deckId);
     if (deckState.playbackState !== 'playing') {
       return;
@@ -530,6 +573,10 @@ class DJStore {
    */
   public stopDeck(deckId: DeckId): void {
     this.isCupPlaying[deckId] = false;
+    this.cancelPhaseAlignment(deckId);
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    this.cancelPhaseAlignment(otherDeckId);
+
     const deckState = this.getDeckState(deckId);
     if (deckState.playbackState === 'loading' || deckState.playbackState === 'error') return;
 
@@ -551,6 +598,10 @@ class DJStore {
    */
   public seekDeck(deckId: DeckId, positionSeconds: number): void {
     this.isCupPlaying[deckId] = false;
+    this.cancelPhaseAlignment(deckId);
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    this.cancelPhaseAlignment(otherDeckId);
+
     const deckState = this.getDeckState(deckId);
     if (!deckState.track || deckState.duration === 0 || deckState.playbackState === 'loading' || deckState.playbackState === 'error') {
       return;
@@ -833,21 +884,70 @@ class DJStore {
 
   /**
    * Modifica el slider de pitch (0 a 100, 50 = centro) alterando el playbackRate real (±8%).
+   * Al mover manualmente el fader de un deck con SYNC activo (Esclavo), desactiva SYNC
+   * de forma inmediata para restaurar el control manual sin saltos de velocidad ni discrepancias.
+   * Si el deck modificado es el Master, propaga el nuevo tempo al Esclavo si está dentro de ±8%.
    */
   public setPitchDeck(deckId: DeckId, pitchValue: number): void {
     const clampedPitch = Math.max(0, Math.min(100, pitchValue));
     const rate = Number((1.0 + ((clampedPitch - 50) / 50) * PITCH_RANGE).toFixed(4));
     const deckState = this.getDeckState(deckId);
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const otherDeck = this.getDeckState(otherDeckId);
+
+    // Cancelar cualquier micro-slew activo ante cambio manual de pitch
+    this.cancelPhaseAlignment(deckId);
+    this.cancelPhaseAlignment(otherDeckId);
 
     if (deckState.track && deckState.duration > 0) {
       audioEngine.setDeckPlaybackRate(deckId, rate);
+    }
+
+    // 1. Si el usuario mueve manualmente el fader del Esclavo, desacoplar SYNC
+    let isSyncActive = deckState.isSyncActive;
+    if (isSyncActive) {
+      isSyncActive = false;
+      if (this.state.syncMasterDeck === otherDeckId) {
+        this.setDeck(otherDeckId, { isMaster: false });
+        this.setState({ syncMasterDeck: null });
+      }
     }
 
     this.setDeck(deckId, {
       pitch: clampedPitch,
       playbackRate: rate,
       calculatedBpm: computeEffectiveBpm(deckState.track, rate),
+      isSyncActive,
     });
+
+    // 2. Si este deck es el Master y el otro deck es Esclavo (isSyncActive), propagar nuevo tempo
+    if (this.state.syncMasterDeck === deckId && otherDeck.isSyncActive && otherDeck.track) {
+      const masterBaseBpm = getAnalyzedBpm(deckState.track);
+      const slaveBaseBpm = getAnalyzedBpm(otherDeck.track);
+      if (masterBaseBpm && slaveBaseBpm) {
+        const newMasterTargetBpm = masterBaseBpm * rate;
+        const newSlaveRate = Number((newMasterTargetBpm / slaveBaseBpm).toFixed(4));
+        if (newSlaveRate >= 0.92 && newSlaveRate <= 1.08) {
+          const newSlavePitch = Number(
+            Math.max(0, Math.min(100, 50 + ((newSlaveRate - 1.0) / PITCH_RANGE) * 50)).toFixed(1)
+          );
+          audioEngine.setDeckPlaybackRate(otherDeckId, newSlaveRate);
+          this.setDeck(otherDeckId, {
+            pitch: newSlavePitch,
+            playbackRate: newSlaveRate,
+            calculatedBpm: Number((slaveBaseBpm * newSlaveRate).toFixed(1)),
+          });
+        } else {
+          // Desacoplar esclavo de forma segura si el Master excede el rango de pitch alcanzable (±8%)
+          this.setDeck(otherDeckId, {
+            isSyncActive: false,
+            errorMessage: 'SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±8%).',
+          });
+          this.setDeck(deckId, { isMaster: false });
+          this.setState({ syncMasterDeck: null });
+        }
+      }
+    }
   }
 
   public setPitchDeckA(pitchValue: number): void {
@@ -859,22 +959,429 @@ class DJStore {
   }
 
   /**
+   * Modifica temporalmente la velocidad de reproducción mediante Pitch Bend (+ / - momentáneo).
+   * direction: 'up' (+3.5%), 'down' (-3.5%), 'release' (0%).
+   * Al soltar el control (release), retorna suavemente al playbackRate nominal.
+   * Cancela inmediatamente cualquier micro-slew activo en el deck o en el esclavo dependiente.
+   */
+  public pitchBend(deckId: DeckId, direction: 'up' | 'down' | 'release'): void {
+    const PITCH_BEND_PERCENT = 3.5;
+    const bendPercent = direction === 'up'
+      ? PITCH_BEND_PERCENT
+      : direction === 'down'
+        ? -PITCH_BEND_PERCENT
+        : 0;
+
+    const bendAmount = bendPercent / 100;
+    const deckState = this.getDeckState(deckId);
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+
+    // Cancelar cualquier micro-slew activo ante intervención manual de Pitch Bend
+    this.cancelPhaseAlignment(deckId);
+    this.cancelPhaseAlignment(otherDeckId);
+
+    if (deckState.track && deckState.duration > 0) {
+      audioEngine.setDeckPitchBend(deckId, bendAmount);
+    }
+
+    this.setDeck(deckId, {
+      pitchBend: bendPercent,
+    });
+  }
+
+  public pitchBendDeckA(direction: 'up' | 'down' | 'release'): void {
+    this.pitchBend('A', direction);
+  }
+
+  public pitchBendDeckB(direction: 'up' | 'down' | 'release'): void {
+    this.pitchBend('B', direction);
+  }
+
+  /**
+   * Sincroniza el tempo (BPM) del deck indicado con el deck de referencia (Master).
+   * Si SYNC ya está activo en este deck, lo desactiva conservando exactamente
+   * la velocidad escuchada y la posición del fader visual.
+   *
+   * Reglas de selección de Master:
+   * 1. Si un solo deck está en reproducción, ese deck es el MASTER indiscutible.
+   * 2. Si ambos están en reproducción, el deck opuesto al que pulsa SYNC actúa como MASTER.
+   * 3. Si ambos están detenidos, el deck opuesto actúa como MASTER determinista.
+   *
+   * Reglas de validación:
+   * 1. No utiliza relaciones de medio/doble tiempo automáticamente.
+   * 2. Rechaza si falta pista o BPM analizado en cualquiera de los dos decks.
+   * 3. Rechaza si la velocidad requerida excede [0.92, 1.08] (±8%) sin recortar silenciosamente.
+   * 4. Asimetría estricta: Master inmutable (isMaster: true, isSyncActive: false),
+   *    Slave dependiente (isMaster: false, isSyncActive: true).
+   */
+  public syncDeck(deckId: DeckId): boolean {
+    const slaveDeck = this.getDeckState(deckId);
+    const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const masterDeck = this.getDeckState(masterDeckId);
+
+    // Cancelar cualquier micro-slew activo antes de alterar el acoplamiento de sincronización
+    this.cancelPhaseAlignment(deckId);
+    this.cancelPhaseAlignment(masterDeckId);
+
+    // 1. Si SYNC ya está activo en este deck: DESACTIVAR conservando la velocidad actual
+    if (slaveDeck.isSyncActive) {
+      this.setDeck(deckId, {
+        isSyncActive: false,
+      });
+
+      // Si el otro deck era el Master y ya no tiene esclavos, liberar rol de Master
+      if (this.state.syncMasterDeck === masterDeckId) {
+        this.setDeck(masterDeckId, { isMaster: false });
+        this.setState({ syncMasterDeck: null });
+      }
+      return false;
+    }
+
+    // 2. Validación de la pista del deck solicitante (Esclavo)
+    if (!slaveDeck.track || slaveDeck.duration <= 0) {
+      this.setDeck(deckId, {
+        errorCode: 'sync_failed',
+        errorMessage: 'No es posible sincronizar: este deck no tiene una pista cargada.',
+      });
+      return false;
+    }
+
+    const slaveBaseBpm = getAnalyzedBpm(slaveDeck.track);
+    if (typeof slaveBaseBpm !== 'number' || slaveBaseBpm <= 0) {
+      this.setDeck(deckId, {
+        errorCode: 'sync_failed',
+        errorMessage: 'No es posible sincronizar: la pista no tiene un BPM analizado válido.',
+      });
+      return false;
+    }
+
+    // 3. Validación de la pista del deck de referencia (Maestro)
+    if (!masterDeck.track || masterDeck.duration <= 0) {
+      this.setDeck(deckId, {
+        errorCode: 'sync_failed',
+        errorMessage: 'No es posible sincronizar: el deck opuesto no tiene una pista cargada para actuar como Master.',
+      });
+      return false;
+    }
+
+    const masterBaseBpm = getAnalyzedBpm(masterDeck.track);
+    if (typeof masterBaseBpm !== 'number' || masterBaseBpm <= 0) {
+      this.setDeck(deckId, {
+        errorCode: 'sync_failed',
+        errorMessage: 'No es posible sincronizar: el deck opuesto no tiene un BPM analizado válido.',
+      });
+      return false;
+    }
+
+    // 4. Determinación del tempo objetivo del Maestro
+    // El tempo nominal objetivo se basa en el fader nominal del Maestro (excluye Pitch Bend momentáneo)
+    const masterTargetBpm = masterBaseBpm * masterDeck.playbackRate;
+
+    // 5. Cálculo del factor de velocidad requerido para el Esclavo
+    // R_req = masterTargetBpm / slaveBaseBpm
+    const requiredRate = Number((masterTargetBpm / slaveBaseBpm).toFixed(4));
+
+    // 6. Validación estricta del rango de velocidad [0.92, 1.08] (±8%)
+    // No recortar silenciosamente; rechazar si está fuera de rango
+    if (requiredRate < 0.92 || requiredRate > 1.08) {
+      this.setDeck(deckId, {
+        errorCode: 'sync_failed',
+        errorMessage: `No es posible sincronizar: el tempo requerido (${masterTargetBpm.toFixed(1)} BPM) excede el rango de pitch (±8%) para la pista actual (${slaveBaseBpm.toFixed(1)} BPM).`,
+      });
+      return false;
+    }
+
+    // 7. Cálculo de la posición del fader visual correspondiente exactamente a requiredRate
+    const targetPitch = Number(
+      Math.max(0, Math.min(100, 50 + ((requiredRate - 1.0) / PITCH_RANGE) * 50)).toFixed(1)
+    );
+
+    // 8. Aplicar la velocidad al motor de audio
+    audioEngine.setDeckPlaybackRate(deckId, requiredRate);
+
+    // 9. Actualizar estado garantizando asimetría Maestro/Esclavo
+    this.setState({ syncMasterDeck: masterDeckId });
+
+    // Deck Maestro
+    this.setDeck(masterDeckId, {
+      isMaster: true,
+      isSyncActive: false,
+    });
+
+    // Deck Esclavo
+    this.setDeck(deckId, {
+      isMaster: false,
+      isSyncActive: true,
+      pitch: targetPitch,
+      playbackRate: requiredRate,
+      calculatedBpm: Number((slaveBaseBpm * requiredRate).toFixed(1)),
+      errorCode: null,
+      errorMessage: null,
+    });
+
+    return true;
+  }
+
+  public toggleSync(deckId: DeckId): boolean {
+    return this.syncDeck(deckId);
+  }
+
+  public syncDeckA(): boolean {
+    return this.syncDeck('A');
+  }
+
+  public syncDeckB(): boolean {
+    return this.syncDeck('B');
+  }
+
+  /**
+   * Ejecuta la alineación progresiva de fase (micro-slew) entre el deck solicitante y el deck de referencia.
+   * Modula suavemente la velocidad del AudioParam sin usar seekDeck destructivo,
+   * respetando los límites globales de velocidad [0.92, 1.08] y las retículas provisionales.
+   *
+   * Distingue claramente:
+   * - Beatgrid provisional (no downbeat musical garantizado).
+   * - SYNC de tempo nominal de Etapa 3.
+   * - Alineación temporal de pulsos estimados mediante micro-slew.
+   */
+  public alignPhase(deckId: DeckId): boolean {
+    const slaveDeckId: DeckId = deckId;
+    const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+
+    const slaveState = this.getDeckState(slaveDeckId);
+    const masterState = this.getDeckState(masterDeckId);
+
+    // 0. Comprobación estricta de roles: el deck Master no puede actuar como esclavo ni modular su fase
+    if (slaveState.isMaster || this.state.syncMasterDeck === slaveDeckId) {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_state',
+          progressPercent: 0,
+          reason: 'El deck actúa como Master de sincronización; solo el deck esclavo modula su fase.',
+        },
+      });
+      return false;
+    }
+
+    // 1. Validar que el esclavo esté en reproducción activa
+    if (slaveState.playbackState !== 'playing') {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_state',
+          progressPercent: 0,
+          reason: 'El deck esclavo debe estar en reproducción activa para alinear fase.',
+        },
+      });
+      return false;
+    }
+
+    // 2. Validar que el maestro esté en reproducción activa
+    if (masterState.playbackState !== 'playing') {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_state',
+          progressPercent: 0,
+          reason: 'El deck maestro debe estar en reproducción activa para alinear fase.',
+        },
+      });
+      return false;
+    }
+
+    // 3. Validar pistas y análisis musical en ambos decks
+    const slaveTrack = slaveState.track;
+    const masterTrack = masterState.track;
+
+    if (!slaveTrack || !masterTrack || slaveState.duration <= 0 || masterState.duration <= 0) {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_confidence',
+          progressPercent: 0,
+          reason: 'Ambos decks deben tener pistas cargadas para alinear fase.',
+        },
+      });
+      return false;
+    }
+
+    const slaveBpm = getAnalyzedBpm(slaveTrack);
+    const masterBpm = getAnalyzedBpm(masterTrack);
+
+    if (!slaveBpm || !masterBpm) {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_confidence',
+          progressPercent: 0,
+          reason: 'Ambos decks deben tener un BPM analizado válido.',
+        },
+      });
+      return false;
+    }
+
+    const slaveAnalysis = slaveTrack.analysis;
+    const masterAnalysis = masterTrack.analysis;
+
+    const slaveFirstBeat = typeof slaveAnalysis?.firstBeatTime === 'number' && Number.isFinite(slaveAnalysis.firstBeatTime)
+      ? slaveAnalysis.firstBeatTime
+      : 0;
+
+    const masterFirstBeat = typeof masterAnalysis?.firstBeatTime === 'number' && Number.isFinite(masterAnalysis.firstBeatTime)
+      ? masterAnalysis.firstBeatTime
+      : 0;
+
+    const slaveBend = (slaveState.pitchBend || 0) / 100;
+    const masterBend = (masterState.pitchBend || 0) / 100;
+
+    // 4. Calcular el plan de alineación mediante el motor matemático de micro-slew
+    const calcResult = calculatePhaseAlignmentPlan({
+      masterCurrentTime: audioEngine.getDeckCurrentTime(masterDeckId),
+      masterBpm,
+      masterFirstBeatTime: masterFirstBeat,
+      masterDuration: masterState.duration,
+      masterPlaybackRate: masterState.playbackRate,
+      masterBendAmount: masterBend,
+      masterBpmConfidence: masterAnalysis?.bpmConfidence,
+      masterIsAmbiguous: masterAnalysis?.status === 'unsupported',
+
+      slaveCurrentTime: audioEngine.getDeckCurrentTime(slaveDeckId),
+      slaveBpm,
+      slaveFirstBeatTime: slaveFirstBeat,
+      slaveDuration: slaveState.duration,
+      slavePlaybackRate: slaveState.playbackRate,
+      slaveBendAmount: slaveBend,
+      slaveBpmConfidence: slaveAnalysis?.bpmConfidence,
+      slaveIsAmbiguous: slaveAnalysis?.status === 'unsupported',
+      validateTempoCompatibility: true,
+    });
+
+    if (calcResult.status === 'already_aligned') {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'already_aligned',
+          progressPercent: 100,
+          arrivalErrorSec: calcResult.arrivalErrorSec,
+          targetDisplacementSec: 0,
+          reason: calcResult.reason,
+        },
+      });
+      return true;
+    }
+
+    if (!calcResult.success || !calcResult.plan) {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: calcResult.status,
+          progressPercent: 0,
+          arrivalErrorSec: calcResult.arrivalErrorSec,
+          targetDisplacementSec: calcResult.targetDisplacementSec,
+          reason: calcResult.reason,
+        },
+      });
+      return false;
+    }
+
+    const plan = calcResult.plan;
+
+    // 5. Actualizar estado a activo en el esclavo
+    this.setDeck(slaveDeckId, {
+      phaseAlignment: {
+        status: 'active',
+        progressPercent: 0,
+        targetDisplacementSec: plan.targetDisplacement,
+        estimatedDurationSec: plan.tSlew,
+        deviationPercent: Number((plan.deltaRPeak * 100).toFixed(2)),
+        arrivalErrorSec: plan.arrivalErrorSec,
+        reason: null,
+      },
+    });
+
+    // 6. Aplicar la automatización al motor Web Audio
+    const applied = audioEngine.applyDeckSlew(slaveDeckId, plan, () => {
+      // Callback de finalización al expirar el tiempo del micro-slew
+      const currentDeck = this.getDeckState(slaveDeckId);
+      if (currentDeck.phaseAlignment.status === 'active') {
+        this.setDeck(slaveDeckId, {
+          phaseAlignment: {
+            status: 'completed',
+            progressPercent: 100,
+            targetDisplacementSec: plan.targetDisplacement,
+            estimatedDurationSec: plan.tSlew,
+            deviationPercent: Number((plan.deltaRPeak * 100).toFixed(2)),
+            arrivalErrorSec: plan.arrivalErrorSec,
+            reason: null,
+          },
+        });
+      }
+    });
+
+    if (!applied) {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_state',
+          progressPercent: 0,
+          reason: 'Fallo al programar la automatización de micro-slew en el motor de audio.',
+        },
+      });
+      return false;
+    }
+
+    return true;
+  }
+
+  public cancelPhaseAlignment(deckId: DeckId): void {
+    audioEngine.cancelDeckSlew(deckId);
+    const deckState = this.getDeckState(deckId);
+    if (deckState.phaseAlignment.status === 'active') {
+      this.setDeck(deckId, {
+        phaseAlignment: {
+          status: 'cancelled',
+          progressPercent: 0,
+          reason: 'Alineación de fase cancelada por intervención del usuario o cambio de transporte.',
+        },
+      });
+    }
+  }
+
+  public alignPhaseDeckA(): boolean {
+    return this.alignPhase('A');
+  }
+
+  public alignPhaseDeckB(): boolean {
+    return this.alignPhase('B');
+  }
+
+  /**
    * Descarga la pista del deck indicado y libera sus recursos en memoria.
    */
   public unloadDeck(deckId: DeckId): void {
     this.cancelCup(deckId);
+    this.cancelPhaseAlignment(deckId);
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    this.cancelPhaseAlignment(otherDeckId);
     this.loadTokens[deckId]++;
+    audioEngine.setDeckPitchBend(deckId, 0);
     audioEngine.unloadDeck(deckId);
     this.checkStopTimeLoop();
+
+    if (this.state.syncMasterDeck === deckId) {
+      // El Maestro fue descargado: desacoplar el Esclavo conservando su tempo actual
+      this.setState({ syncMasterDeck: null });
+      this.setDeck(otherDeckId, { isSyncActive: false, isMaster: false });
+    } else if (this.state.syncMasterDeck === otherDeckId) {
+      // El Esclavo fue descargado: desvincular el Maestro
+      this.setState({ syncMasterDeck: null });
+      this.setDeck(otherDeckId, { isMaster: false });
+    }
+
     const initialDeck = deckId === 'A' ? INITIAL_DECK_A : INITIAL_DECK_B;
     const currentDeck = this.getDeckState(deckId);
     this.setDeck(deckId, {
       ...initialDeck,
       pitch: currentDeck.pitch,
       playbackRate: currentDeck.playbackRate,
+      isSyncActive: false,
+      isMaster: false,
+      phaseAlignment: { status: 'idle', progressPercent: 0 },
     });
   }
-
 
   public unloadDeckA(): void {
     this.unloadDeck('A');
@@ -1140,15 +1647,29 @@ class DJStore {
       if (timestamp - this.lastRafUpdate >= TIME_UPDATE_INTERVAL_MS) {
         const updates: Partial<DJStoreState> = {};
         if (aPlaying) {
+          const currentA = audioEngine.getDeckCurrentTime('A');
+          let phaseA = this.state.deckA.phaseAlignment;
+          if (phaseA.status === 'active') {
+            const progress = audioEngine.getDeckSlewProgressPercent('A');
+            phaseA = { ...phaseA, progressPercent: progress };
+          }
           updates.deckA = {
             ...this.state.deckA,
-            currentTime: audioEngine.getDeckCurrentTime('A'),
+            currentTime: currentA,
+            phaseAlignment: phaseA,
           };
         }
         if (bPlaying) {
+          const currentB = audioEngine.getDeckCurrentTime('B');
+          let phaseB = this.state.deckB.phaseAlignment;
+          if (phaseB.status === 'active') {
+            const progress = audioEngine.getDeckSlewProgressPercent('B');
+            phaseB = { ...phaseB, progressPercent: progress };
+          }
           updates.deckB = {
             ...this.state.deckB,
-            currentTime: audioEngine.getDeckCurrentTime('B'),
+            currentTime: currentB,
+            phaseAlignment: phaseB,
           };
         }
         this.setState(updates);
@@ -1193,6 +1714,7 @@ export function useDJStore(): {
   stopDeckA: () => void;
   seekDeckA: (positionSeconds: number) => void;
   setPitchDeckA: (pitchValue: number) => void;
+  pitchBendDeckA: (direction: 'up' | 'down' | 'release') => void;
   unloadDeckA: () => void;
   loadTrackToDeckB: (track: Track) => Promise<boolean>;
   playDeckB: () => Promise<void>;
@@ -1201,6 +1723,7 @@ export function useDJStore(): {
   stopDeckB: () => void;
   seekDeckB: (positionSeconds: number) => void;
   setPitchDeckB: (pitchValue: number) => void;
+  pitchBendDeckB: (direction: 'up' | 'down' | 'release') => void;
   unloadDeckB: () => void;
   loadTrackToDeck: (deckId: DeckId, track: Track) => Promise<boolean>;
   playDeck: (deckId: DeckId) => Promise<void>;
@@ -1209,6 +1732,7 @@ export function useDJStore(): {
   stopDeck: (deckId: DeckId) => void;
   seekDeck: (deckId: DeckId, positionSeconds: number) => void;
   setPitchDeck: (deckId: DeckId, pitchValue: number) => void;
+  pitchBend: (deckId: DeckId, direction: 'up' | 'down' | 'release') => void;
   unloadDeck: (deckId: DeckId) => void;
   setMasterVolume: (volume: number) => void;
   toggleMasterMute: () => void;
@@ -1242,12 +1766,26 @@ export function useDJStore(): {
   setHotCue: (deckId: DeckId, slotNumber: number, positionSeconds?: number) => Promise<boolean>;
   jumpToHotCue: (deckId: DeckId, slotNumber: number) => void;
   deleteHotCue: (deckId: DeckId, slotNumber: number) => Promise<boolean>;
+
+  // Sincronización de tempo
+  syncMasterDeck: DeckId | null;
+  syncDeckA: () => boolean;
+  syncDeckB: () => boolean;
+  syncDeck: (deckId: DeckId) => boolean;
+  toggleSync: (deckId: DeckId) => boolean;
+
+  // Alineación de fase mediante micro-slew
+  alignPhaseA: () => boolean;
+  alignPhaseB: () => boolean;
+  alignPhase: (deckId: DeckId) => boolean;
+  cancelPhaseAlignment: (deckId: DeckId) => void;
 } {
   const state = useSyncExternalStore(djStore.subscribe, djStore.getSnapshot);
 
   return {
     deckA: state.deckA,
     deckB: state.deckB,
+    syncMasterDeck: state.syncMasterDeck,
     masterVolume: state.masterVolume,
     isMasterMuted: state.isMasterMuted,
     mixer: state.mixer,
@@ -1260,6 +1798,9 @@ export function useDJStore(): {
     stopDeckA: djStore.stopDeckA.bind(djStore),
     seekDeckA: djStore.seekDeckA.bind(djStore),
     setPitchDeckA: djStore.setPitchDeckA.bind(djStore),
+    pitchBendDeckA: djStore.pitchBendDeckA.bind(djStore),
+    syncDeckA: djStore.syncDeckA.bind(djStore),
+    alignPhaseA: djStore.alignPhaseDeckA.bind(djStore),
     unloadDeckA: djStore.unloadDeckA.bind(djStore),
 
     // Deck B
@@ -1270,6 +1811,9 @@ export function useDJStore(): {
     stopDeckB: djStore.stopDeckB.bind(djStore),
     seekDeckB: djStore.seekDeckB.bind(djStore),
     setPitchDeckB: djStore.setPitchDeckB.bind(djStore),
+    pitchBendDeckB: djStore.pitchBendDeckB.bind(djStore),
+    syncDeckB: djStore.syncDeckB.bind(djStore),
+    alignPhaseB: djStore.alignPhaseDeckB.bind(djStore),
     unloadDeckB: djStore.unloadDeckB.bind(djStore),
 
     // Acciones genéricas por deckId
@@ -1280,6 +1824,11 @@ export function useDJStore(): {
     stopDeck: djStore.stopDeck.bind(djStore),
     seekDeck: djStore.seekDeck.bind(djStore),
     setPitchDeck: djStore.setPitchDeck.bind(djStore),
+    pitchBend: djStore.pitchBend.bind(djStore),
+    syncDeck: djStore.syncDeck.bind(djStore),
+    toggleSync: djStore.toggleSync.bind(djStore),
+    alignPhase: djStore.alignPhase.bind(djStore),
+    cancelPhaseAlignment: djStore.cancelPhaseAlignment.bind(djStore),
     unloadDeck: djStore.unloadDeck.bind(djStore),
 
     // Master

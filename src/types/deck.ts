@@ -9,6 +9,26 @@ export type DeckId = 'A' | 'B';
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused' | 'loading' | 'error';
 
+export type PhaseAlignmentStatus =
+  | 'idle'
+  | 'active'
+  | 'completed'
+  | 'cancelled'
+  | 'rejected_limits'
+  | 'rejected_confidence'
+  | 'rejected_state'
+  | 'already_aligned';
+
+export interface PhaseAlignmentState {
+  status: PhaseAlignmentStatus;
+  progressPercent: number;          // 0 a 100
+  targetDisplacementSec?: number;   // Δx_target en segundos de buffer
+  estimatedDurationSec?: number;    // T_slew en segundos
+  deviationPercent?: number;        // δR_peak en porcentaje (ej. +2.5%)
+  arrivalErrorSec?: number;         // Δt_arr de llegada inicial
+  reason?: string | null;
+}
+
 export interface DeckState {
   deckId: DeckId;
   track: Track | null;
@@ -20,7 +40,10 @@ export interface DeckState {
   isKeyLocked: boolean;         // Conservación de tono al variar pitch (Master Tempo)
   cuePoint: number | null;      // Posición de CUE en segundos (mainCue)
   hotCues: HotCue[];            // 8 Hot Cues (vacíos o definidos)
+  pitchBend: number;            // Desviación porcentual momentánea de pitch bend (+3.5, -3.5 o 0)
   isSyncActive: boolean;        // Sincronización automática de BPM activada
+  isMaster: boolean;            // Indica si el deck actúa como referencia Master de tempo
+  phaseAlignment?: PhaseAlignmentState; // Estado de alineación de pulsos mediante micro-slew
   volume: number;               // Nivel de fader asignado al deck (0 a 100)
   errorMessage?: string | null; // Mensajes de fallo al decodificar o reproducir
 }
@@ -32,6 +55,7 @@ export interface DeckActions {
   stop: () => void;
   seek: (timeSeconds: number) => void;
   setPitch: (pitchPercent: number) => void;
+  pitchBend: (direction: 'up' | 'down' | 'release') => void;
   setCue: () => Promise<void>;
   jumpToCue: () => void;
   handleCueDown: () => Promise<void>;
@@ -40,5 +64,8 @@ export interface DeckActions {
   jumpToHotCue: (slotNumber: number) => void;
   deleteHotCue: (slotNumber: number) => Promise<boolean>;
   toggleSync: () => void;
+  syncDeck: (deckId: DeckId) => boolean;
+  alignPhase?: (deckId: DeckId) => boolean;
+  cancelPhaseAlign?: (deckId: DeckId) => void;
   toggleKeyLock: () => void;
 }

@@ -5,8 +5,16 @@
 
 import type { DeckId } from './deck';
 import type { CrossfaderCurve, ChannelEq } from './mixer';
+import type { SlewProfilePlan } from '../audio/analysis/phaseAlignment.ts';
 
 export type AudioEngineStatus = 'uninitialized' | 'suspended' | 'running' | 'closed';
+
+export interface ActiveDeckSlew {
+  readonly plan: SlewProfilePlan;
+  readonly startedAtCtxTime: number;
+  readonly slewEpoch: number;
+  readonly epoch?: number;
+}
 
 /**
  * Grafo de nodos Web Audio instanciado para cada canal independiente (Deck A / Deck B).
@@ -55,6 +63,8 @@ export interface IAudioEngineService {
   stopDeck(deckId: DeckId): void;
   seekDeck(deckId: DeckId, positionSeconds: number): void;
   setDeckPlaybackRate(deckId: DeckId, rate: number): void;
+  setDeckPitchBend(deckId: DeckId, bendAmount: number): void;
+  getDeckPitchBend(deckId: DeckId): number;
   
   // Mixer y DSP en tiempo real
   setChannelGain(deckId: DeckId, gainValue: number): void;
@@ -75,6 +85,14 @@ export interface IAudioEngineService {
   isDeckPlaying(deckId: DeckId): boolean;
   getDeckPlaybackRate(deckId: DeckId): number;
   
+  // Micro-Slew y alineación progresiva de fase
+  applyDeckSlew(deckId: DeckId, plan: SlewProfilePlan, onCompleted?: () => void): boolean;
+  cancelDeckSlew(deckId: DeckId, restoreRamp?: boolean): void;
+  isDeckSlewActive(deckId: DeckId): boolean;
+  getDeckActiveSlew(deckId: DeckId): ActiveDeckSlew | null;
+  getDeckSlewEpoch(deckId: DeckId): number;
+  getDeckSlewProgressPercent(deckId: DeckId): number;
+
   // Inspección para pruebas
   getDeckAudioGraph?(deckId: DeckId): DeckAudioGraph;
   getMasterGraph?(): MasterAudioGraph;

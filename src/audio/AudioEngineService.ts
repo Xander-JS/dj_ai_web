@@ -7,7 +7,25 @@
 
 import type { DeckId } from '../types/deck';
 import type { ChannelEq, CrossfaderCurve } from '../types/mixer';
-import type { AudioEngineStatus, DeckAudioGraph, MasterAudioGraph, IAudioEngineService } from '../types/audio';
+import type { AudioEngineStatus, DeckAudioGraph, MasterAudioGraph, IAudioEngineService, ActiveDeckSlew } from '../types/audio';
+import {
+  type SlewProfilePlan,
+  evaluateSlewRateAt,
+  integrateSlewTrajectory,
+} from './analysis/phaseAlignment.ts';
+
+/**
+ * Representa la automatización activa de micro-slew sobre un deck.
+ */
+export interface ActiveSlewInternal {
+  slewId: string;
+  slewEpoch: number;
+  readonly epoch?: number;
+  plan: SlewProfilePlan;
+  startedAtCtxTime: number;
+  timerId: ReturnType<typeof setTimeout> | null;
+  onCompleted?: () => void;
+}
 
 /**
  * Estado interno de transporte y seguimiento temporal por deck.
@@ -16,7 +34,10 @@ interface DeckTransportInternal {
   isPlaying: boolean;
   startedAt: number;        // audioContext.currentTime en el momento de reproducir
   startOffset: number;      // Desplazamiento en segundos dentro del buffer
-  playbackRate: number;     // Multiplicador de velocidad (0.92 a 1.08 para ±8% pitch)
+  playbackRate: number;     // Multiplicador de velocidad base fijado por pitch (0.92 a 1.08 para ±8%)
+  bendAmount: number;       // Desviación momentánea de pitch bend (-0.08 a +0.08)
+  slewEpoch: number;        // Contador monotónico para invalidación de automatizaciones obsoletas
+  activeSlew: ActiveSlewInternal | null; // Perfil de micro-slew activo en ejecución
 }
 
 /**
@@ -147,6 +168,7 @@ export class AudioEngineService implements IAudioEngineService {
    */
   public loadBufferToDeck(deckId: DeckId, buffer: AudioBuffer): void {
     this.ensureInitialized();
+    this.cancelDeckSlew(deckId);
     const graph = this.getDeckGraph(deckId);
     const transport = this.getDeckTransport(deckId);
 
@@ -163,12 +185,14 @@ export class AudioEngineService implements IAudioEngineService {
     transport.isPlaying = false;
     transport.startOffset = 0;
     transport.startedAt = 0;
+    transport.activeSlew = null;
   }
 
   /**
    * Descarga la pista del deck y libera la memoria del AudioBuffer.
    */
   public unloadDeck(deckId: DeckId): void {
+    this.cancelDeckSlew(deckId);
     const graph = this.deckGraphs.get(deckId);
     if (!graph) return;
 
@@ -180,6 +204,8 @@ export class AudioEngineService implements IAudioEngineService {
       transport.isPlaying = false;
       transport.startOffset = 0;
       transport.startedAt = 0;
+      transport.bendAmount = 0;
+      transport.activeSlew = null;
     }
   }
 
@@ -222,12 +248,14 @@ export class AudioEngineService implements IAudioEngineService {
     const ctx = this.audioContext!;
     const sourceNode = ctx.createBufferSource();
     sourceNode.buffer = graph.buffer;
-    sourceNode.playbackRate.setValueAtTime(transport.playbackRate, ctx.currentTime);
+    const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+    sourceNode.playbackRate.setValueAtTime(effectiveRate, ctx.currentTime);
     sourceNode.connect(graph.gainNode);
 
     // Manejar finalización natural de la reproducción
     sourceNode.onended = () => {
       if (graph.sourceNode === sourceNode) {
+        this.cancelDeckSlew(deckId);
         graph.sourceNode = null;
         transport.isPlaying = false;
         transport.startOffset = 0;
@@ -253,6 +281,7 @@ export class AudioEngineService implements IAudioEngineService {
       return;
     }
 
+    this.cancelDeckSlew(deckId);
     const currentPosition = this.getDeckCurrentTime(deckId);
     transport.isPlaying = false;
     transport.startOffset = currentPosition;
@@ -271,9 +300,11 @@ export class AudioEngineService implements IAudioEngineService {
       return;
     }
 
+    this.cancelDeckSlew(deckId);
     transport.isPlaying = false;
     transport.startOffset = 0;
     transport.startedAt = 0;
+    transport.bendAmount = 0;
 
     this.stopSourceNode(graph);
   }
@@ -283,6 +314,7 @@ export class AudioEngineService implements IAudioEngineService {
    */
   public seekDeck(deckId: DeckId, positionSeconds: number): void {
     this.ensureInitialized();
+    this.cancelDeckSlew(deckId);
     const graph = this.getDeckGraph(deckId);
     const transport = this.getDeckTransport(deckId);
 
@@ -306,28 +338,114 @@ export class AudioEngineService implements IAudioEngineService {
   /**
    * Modifica el factor de velocidad de reproducción (playbackRate) del deck.
    * Respeta el rango de pitch definido en el plan: ±8% (factor 0.92 a 1.08).
+   * Tiene prioridad absoluta sobre cualquier micro-slew activo, cancelándolo inmediatamente.
    */
   public setDeckPlaybackRate(deckId: DeckId, rate: number): void {
     this.ensureInitialized();
+    this.cancelDeckSlew(deckId, false);
     const transport = this.getDeckTransport(deckId);
     const graph = this.getDeckGraph(deckId);
 
     // Limitar estrictamente al rango ±8%: 0.92 a 1.08
     const clampedRate = Math.max(0.92, Math.min(1.08, rate));
+    const previousEffective = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
 
     // Si está sonando, actualizar el offset acumulado antes del cambio de ritmo
     if (transport.isPlaying && this.audioContext) {
       const now = this.audioContext.currentTime;
-      const elapsed = (now - transport.startedAt) * transport.playbackRate;
+      const elapsed = (now - transport.startedAt) * previousEffective;
       transport.startOffset += elapsed;
       transport.startedAt = now;
     }
 
     transport.playbackRate = clampedRate;
+    const newEffective = this.calculateEffectiveRate(clampedRate, transport.bendAmount);
 
     if (graph.sourceNode && this.audioContext) {
-      graph.sourceNode.playbackRate.setValueAtTime(clampedRate, this.audioContext.currentTime);
+      const now = this.audioContext.currentTime;
+      const param = graph.sourceNode.playbackRate;
+      const paramWithHold = param as AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
+      try {
+        if (typeof paramWithHold.cancelAndHoldAtTime === 'function') {
+          paramWithHold.cancelAndHoldAtTime(now);
+        } else {
+          param.cancelScheduledValues(now);
+        }
+      } catch {
+        try {
+          param.cancelScheduledValues(now);
+        } catch {
+          // Ignorar si el nodo ya no está activo
+        }
+      }
+      param.setValueAtTime(newEffective, now);
     }
+  }
+
+  /**
+   * Calcula la velocidad de reproducción efectiva combinando el pitch base y el bend momentáneo.
+   * Acota estrictamente al rango global de ±8% (0.92 a 1.08).
+   */
+  public calculateEffectiveRate(baseRate: number, bendAmount: number = 0): number {
+    const safeBase = typeof baseRate === 'number' && !Number.isNaN(baseRate) ? baseRate : 1.0;
+    const safeBend = typeof bendAmount === 'number' && !Number.isNaN(bendAmount) ? bendAmount : 0;
+    const rawRate = safeBase * (1 + safeBend);
+    const clamped = Math.max(0.92, Math.min(1.08, rawRate));
+    return Number(clamped.toFixed(4));
+  }
+
+  /**
+   * Modifica temporalmente la velocidad de reproducción mediante Pitch Bend (+ / - momentáneo).
+   * Al soltar el control (bendAmount = 0), retorna suavemente al playbackRate nominal.
+   * Acota estrictamente la velocidad efectiva al rango global de pitch: ±8% (0.92 a 1.08).
+   * Cancela inmediatamente cualquier micro-slew activo para evitar colisiones en AudioParam.
+   */
+  public setDeckPitchBend(deckId: DeckId, bendAmount: number): void {
+    this.ensureInitialized();
+    this.cancelDeckSlew(deckId, false);
+    const transport = this.getDeckTransport(deckId);
+    const graph = this.getDeckGraph(deckId);
+
+    const clampedBend = Math.max(-0.08, Math.min(0.08, bendAmount));
+    const previousEffective = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+
+    if (transport.isPlaying && this.audioContext) {
+      const now = this.audioContext.currentTime;
+      const elapsed = (now - transport.startedAt) * previousEffective;
+      transport.startOffset += elapsed;
+      transport.startedAt = now;
+    }
+
+    transport.bendAmount = clampedBend;
+    const newEffective = this.calculateEffectiveRate(transport.playbackRate, clampedBend);
+
+    if (graph.sourceNode && this.audioContext) {
+      const now = this.audioContext.currentTime;
+      const param = graph.sourceNode.playbackRate;
+      const paramWithHold = param as AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
+      try {
+        if (typeof paramWithHold.cancelAndHoldAtTime === 'function') {
+          paramWithHold.cancelAndHoldAtTime(now);
+        } else {
+          param.cancelScheduledValues(now);
+        }
+      } catch {
+        try {
+          param.cancelScheduledValues(now);
+        } catch {
+          // Ignorar si el nodo ya no está activo
+        }
+      }
+      param.setValueAtTime(newEffective, now);
+    }
+  }
+
+  /**
+   * Obtiene la cantidad de pitch bend momentánea activa en el deck.
+   */
+  public getDeckPitchBend(deckId: DeckId): number {
+    const transport = this.deckTransports.get(deckId);
+    return transport?.bendAmount ?? 0;
   }
 
   /**
@@ -461,6 +579,8 @@ export class AudioEngineService implements IAudioEngineService {
 
   /**
    * Obtiene la posición actual de reproducción en segundos con precisión matemática.
+   * Integra analíticamente la trayectoria del micro-slew cuando se encuentra activo,
+   * preservando continuidad matemática C^0 en todo momento.
    */
   public getDeckCurrentTime(deckId: DeckId): number {
     const graph = this.deckGraphs.get(deckId);
@@ -471,7 +591,31 @@ export class AudioEngineService implements IAudioEngineService {
       return transport.startOffset;
     }
 
-    const elapsed = (this.audioContext.currentTime - transport.startedAt) * transport.playbackRate;
+    // Si hay un micro-slew activo en ejecución, integrar su trayectoria analítica
+    if (transport.activeSlew) {
+      const now = this.audioContext.currentTime;
+      const relTime = now - transport.activeSlew.startedAtCtxTime;
+      const plan = transport.activeSlew.plan;
+      let elapsedInSlew: number;
+
+      if (relTime >= plan.tSlew) {
+        const totalSlewArea = integrateSlewTrajectory(plan, 0, plan.tSlew);
+        const postSlewTime = now - (transport.activeSlew.startedAtCtxTime + plan.tSlew);
+        const effectiveBase = this.calculateEffectiveRate(plan.baseRate, transport.bendAmount);
+        elapsedInSlew = totalSlewArea + (postSlewTime * effectiveBase);
+      } else {
+        elapsedInSlew = integrateSlewTrajectory(plan, 0, Math.max(0, relTime));
+      }
+
+      const current = transport.startOffset + elapsedInSlew;
+      if (graph.buffer) {
+        return Math.min(current, graph.buffer.duration);
+      }
+      return current;
+    }
+
+    const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+    const elapsed = Math.max(0, this.audioContext.currentTime - transport.startedAt) * effectiveRate;
     const current = transport.startOffset + elapsed;
 
     if (graph.buffer) {
@@ -569,7 +713,251 @@ export class AudioEngineService implements IAudioEngineService {
    * Obtiene la velocidad de reproducción / factor de pitch actual del deck (0.92 a 1.08).
    */
   public getDeckPlaybackRate(deckId: DeckId): number {
-    return this.deckTransports.get(deckId)?.playbackRate ?? 1.0;
+    const transport = this.deckTransports.get(deckId);
+    if (!transport) return 1.0;
+    return this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+  }
+
+  /**
+   * Aplica un perfil de corrección progresiva de velocidad (micro-slew) al AudioParam
+   * del deck para compensar el desfase temporal con el Master.
+   *
+   * CONTRATO DE GESTIÓN Y EXCLUSIÓN MUTUA DE AUTOMATIZACIONES:
+   * 1. Invalida lógicamente callbacks y timers anteriores mediante el incremento de slewEpoch.
+   * 2. Si existía una automatización previa en curso, la cancela consolidando la posición del transporte.
+   * 3. Programa en la cola de AudioParam los tramos (rampa subida, meseta, rampa retorno).
+   * 4. Registra un temporizador de finalización condicionado a que el slewEpoch coincida.
+   * 5. Al expirar, consolida la posición final del transporte y notifica a los oyentes.
+   */
+  public applyDeckSlew(
+    deckId: DeckId,
+    plan: SlewProfilePlan,
+    onCompleted?: () => void
+  ): boolean {
+    this.ensureInitialized();
+    const transport = this.getDeckTransport(deckId);
+    const graph = this.getDeckGraph(deckId);
+
+    if (!transport.isPlaying || !this.audioContext || !graph.sourceNode) {
+      console.warn(`[AudioEngineService] No se puede aplicar micro-slew al Deck ${deckId}: no se encuentra en reproducción activa.`);
+      return false;
+    }
+
+    const ctx = this.audioContext;
+    const now = ctx.currentTime;
+    const t0 = now;
+
+    // Si había un micro-slew previo en curso, cancelarlo consolidando su avance
+    if (transport.activeSlew) {
+      this.cancelDeckSlew(deckId, false);
+    } else {
+      // Consolidar el tiempo de reproducción nominal acumulado antes de activar el nuevo micro-slew
+      const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+      const elapsed = Math.max(0, now - transport.startedAt) * effectiveRate;
+      transport.startOffset += elapsed;
+      transport.startedAt = now;
+    }
+
+    // Incrementar epoch para aislar de forma estricta los callbacks
+    transport.slewEpoch++;
+    const currentEpoch = transport.slewEpoch;
+
+    const t1 = t0 + plan.tRamp;
+    const t2 = t1 + plan.tPlateau;
+    const t3 = t2 + plan.tRamp;
+
+    // Calcular tasas efectivas combinando pitch base y bend momentáneo
+    const effectiveBase = this.calculateEffectiveRate(plan.baseRate, transport.bendAmount);
+    const effectivePeak = this.calculateEffectiveRate(plan.peakRate, transport.bendAmount);
+
+    const playbackRateParam = graph.sourceNode.playbackRate;
+
+    // Programar la trayectoria en AudioParam
+    try {
+      playbackRateParam.setValueAtTime(effectiveBase, t0);
+      playbackRateParam.linearRampToValueAtTime(effectivePeak, t1);
+      if (plan.tPlateau > 0) {
+        playbackRateParam.setValueAtTime(effectivePeak, t2);
+      }
+      playbackRateParam.linearRampToValueAtTime(effectiveBase, t3);
+    } catch (err) {
+      console.error(`[AudioEngineService] Error programando automatización en AudioParam para Deck ${deckId}:`, err);
+      return false;
+    }
+
+    // Configurar temporizador de consolidación al finalizar el slew
+    const timeoutMs = Math.max(10, Math.ceil(plan.tSlew * 1000));
+    const timerId = setTimeout(() => {
+      // Comprobar invariante de generación: si el epoch cambió, descartar
+      if (transport.slewEpoch !== currentEpoch || !transport.activeSlew) {
+        return;
+      }
+
+      // Consolidar matemáticamente el transporte al término de la maniobra en t3
+      const totalSlewBuffer = integrateSlewTrajectory(plan, 0, plan.tSlew);
+      transport.startOffset += totalSlewBuffer;
+      transport.startedAt = t3;
+      transport.activeSlew = null;
+
+      if (onCompleted) {
+        try {
+          onCompleted();
+        } catch (cbErr) {
+          console.error(`[AudioEngineService] Error en callback de finalización de slew para Deck ${deckId}:`, cbErr);
+        }
+      }
+    }, timeoutMs);
+
+    transport.activeSlew = {
+      slewId: `slew_${deckId}_${Date.now()}_${currentEpoch}`,
+      slewEpoch: currentEpoch,
+      epoch: currentEpoch,
+      plan,
+      startedAtCtxTime: t0,
+      timerId,
+      onCompleted,
+    };
+
+    return true;
+  }
+
+  /**
+   * Cancela de forma inmediata y coordinada el micro-slew activo en el deck.
+   *
+   * ACCIONES COORDINADAS:
+   * 1. Invalida callbacks pendientes incrementando slewEpoch y cancelando el temporizador.
+   * 2. Calcula de forma analítica exacta el desplazamiento acumulado hasta el instante t_cut.
+   * 3. Consolida startOffset y startedAt para mantener estricta continuidad matemática C^0 de posición.
+   * 4. Cancela los eventos programados en AudioParam mediante cancelAndHoldAtTime o fallback con setValueAtTime.
+   * 5. Restaura la velocidad nominal efectiva del transporte si restoreRamp es verdadero.
+   */
+  public cancelDeckSlew(deckId: DeckId, restoreRamp: boolean = true): void {
+    const transport = this.deckTransports.get(deckId);
+    if (!transport) return;
+
+    // Incrementar epoch para invalidar cualquier callback asíncrono
+    transport.slewEpoch++;
+
+    const activeSlew = transport.activeSlew;
+    if (!activeSlew) {
+      return;
+    }
+
+    if (activeSlew.timerId !== null) {
+      clearTimeout(activeSlew.timerId);
+      activeSlew.timerId = null;
+    }
+
+    const graph = this.deckGraphs.get(deckId);
+
+    if (transport.isPlaying && this.audioContext) {
+      const now = this.audioContext.currentTime;
+      const tCut = now;
+      const relTime = tCut - activeSlew.startedAtCtxTime;
+      const plan = activeSlew.plan;
+
+      let elapsedBuffer: number;
+      let instantaneousRate: number;
+
+      if (relTime <= 0) {
+        elapsedBuffer = 0;
+        instantaneousRate = plan.baseRate;
+      } else if (relTime >= plan.tSlew) {
+        elapsedBuffer = integrateSlewTrajectory(plan, 0, plan.tSlew);
+        instantaneousRate = plan.baseRate;
+      } else {
+        elapsedBuffer = integrateSlewTrajectory(plan, 0, relTime);
+        instantaneousRate = evaluateSlewRateAt(plan, relTime);
+      }
+
+      // Consolidación continua de la posición del transporte
+      transport.startOffset += elapsedBuffer;
+      transport.startedAt = tCut;
+
+      const effectiveVcut = this.calculateEffectiveRate(instantaneousRate, transport.bendAmount);
+      const effectiveBase = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+
+      if (graph?.sourceNode) {
+        const param = graph.sourceNode.playbackRate;
+        try {
+          const RESTORE_RAMP_SEC = 0.030; // Micro-rampa de 30 ms para atenuar discontinuidades en AudioParam
+          const paramWithHold = param as AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
+          const needsRamp = restoreRamp && Math.abs(effectiveVcut - effectiveBase) > 0.0001;
+
+          if (typeof paramWithHold.cancelAndHoldAtTime === 'function') {
+            try {
+              paramWithHold.cancelAndHoldAtTime(tCut);
+              if (needsRamp) {
+                param.linearRampToValueAtTime(effectiveBase, tCut + RESTORE_RAMP_SEC);
+              } else if (restoreRamp) {
+                param.setValueAtTime(effectiveBase, tCut);
+              }
+            } catch {
+              param.cancelScheduledValues(tCut);
+              param.setValueAtTime(effectiveVcut, tCut);
+              if (needsRamp) {
+                param.linearRampToValueAtTime(effectiveBase, tCut + RESTORE_RAMP_SEC);
+              } else if (restoreRamp) {
+                param.setValueAtTime(effectiveBase, tCut);
+              }
+            }
+          } else {
+            // LIMITACIÓN DE PLATAFORMA (FALLBACK):
+            // cancelScheduledValues cancela eventos futuros pero no retiene la interpolación del hilo de audio;
+            // se inyecta la velocidad analítica estimada en JS (effectiveVcut) antes de transicionar al valor base.
+            param.cancelScheduledValues(tCut);
+            param.setValueAtTime(effectiveVcut, tCut);
+            if (needsRamp) {
+              param.linearRampToValueAtTime(effectiveBase, tCut + RESTORE_RAMP_SEC);
+            } else if (restoreRamp) {
+              param.setValueAtTime(effectiveBase, tCut);
+            }
+          }
+        } catch (paramErr) {
+          console.warn(`[AudioEngineService] Aviso cancelando automatización en AudioParam Deck ${deckId}:`, paramErr);
+        }
+      }
+    }
+
+    transport.activeSlew = null;
+  }
+
+  /**
+   * Indica si hay una maniobra de micro-slew activa en el deck indicado.
+   */
+  public isDeckSlewActive(deckId: DeckId): boolean {
+    return Boolean(this.deckTransports.get(deckId)?.activeSlew);
+  }
+
+  /**
+   * Obtiene la información del micro-slew activo en el deck indicado.
+   */
+  public getDeckActiveSlew(deckId: DeckId): ActiveDeckSlew | null {
+    const internal = this.deckTransports.get(deckId)?.activeSlew;
+    if (!internal) return null;
+    return {
+      plan: internal.plan,
+      startedAtCtxTime: internal.startedAtCtxTime,
+      slewEpoch: internal.slewEpoch,
+      epoch: internal.slewEpoch,
+    };
+  }
+
+  /**
+   * Obtiene el identificador monotónico de generación (slewEpoch) del deck.
+   */
+  public getDeckSlewEpoch(deckId: DeckId): number {
+    return this.deckTransports.get(deckId)?.slewEpoch ?? 0;
+  }
+
+  /**
+   * Obtiene el porcentaje de avance estimado (0 a 100) del micro-slew activo.
+   */
+  public getDeckSlewProgressPercent(deckId: DeckId): number {
+    const slew = this.deckTransports.get(deckId)?.activeSlew;
+    if (!slew || !this.audioContext || slew.plan.tSlew <= 0) return 0;
+    const elapsed = this.audioContext.currentTime - slew.startedAtCtxTime;
+    return Math.min(100, Math.max(0, Math.round((elapsed / slew.plan.tSlew) * 100)));
   }
 
   /**
@@ -666,6 +1054,9 @@ export class AudioEngineService implements IAudioEngineService {
       startedAt: 0,
       startOffset: 0,
       playbackRate: 1.0,
+      bendAmount: 0,
+      slewEpoch: 0,
+      activeSlew: null,
     });
   }
 

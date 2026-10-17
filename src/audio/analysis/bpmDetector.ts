@@ -366,3 +366,87 @@ export function detectBpm(
     isAmbiguous: false,
   };
 }
+
+/**
+ * Detecta el instante en segundos del primer beat/transitorio rítmico significativo
+ * a partir de la curva de novedad (ODF) y filtrado percusivo.
+ * No asume compás 4/4 ni downbeat forzado (preparado para Fase 23.4).
+ * Retorna null si la pista no tiene transitorios percusivos claros (ej. ambient, drone o silencio).
+ */
+export function detectFirstBeatTime(
+  pcm: Float32Array,
+  sampleRate: number
+): number | null {
+  if (!pcm || pcm.length < sampleRate * 0.2) {
+    return null;
+  }
+
+  // Analizar primeros 12 segundos (o la pista entera si es más corta)
+  const maxSamples = Math.min(pcm.length, Math.round(sampleRate * 12));
+  const introPcm = pcm.subarray(0, maxSamples);
+
+  // Decimar a ~2205 Hz
+  const targetRate = 2205;
+  const { data: downsampled, actualRate: downRate } = downsampleAudio(
+    introPcm,
+    sampleRate,
+    targetRate
+  );
+
+  // Filtro pasobajos a 220 Hz para transitorios de percusión/bombo
+  const lowpassed = applyBiquadLowpass(downsampled, downRate, 220);
+
+  // Curva de novedad (ODF)
+  const frameSize = Math.max(16, Math.round(0.015 * downRate));
+  const hopSize = Math.max(8, Math.round(0.005 * downRate));
+
+  const odfLow = computeNoveltyCurve(lowpassed, hopSize, frameSize);
+  const odfFull = computeNoveltyCurve(downsampled, hopSize, frameSize);
+
+  const numFrames = Math.min(odfLow.length, odfFull.length);
+  if (numFrames < 10) {
+    return null;
+  }
+
+  const combinedOdf = new Float32Array(numFrames);
+  let odfMax = 0;
+  let odfSum = 0;
+
+  for (let i = 0; i < numFrames; i++) {
+    const val = 0.75 * odfLow[i] + 0.25 * odfFull[i];
+    combinedOdf[i] = val;
+    odfSum += val;
+    if (val > odfMax) odfMax = val;
+  }
+
+  if (odfMax < 1e-4) {
+    return null;
+  }
+
+  const odfMean = odfSum / numFrames;
+  let odfVar = 0;
+  for (let i = 0; i < numFrames; i++) {
+    const diff = combinedOdf[i] - odfMean;
+    odfVar += diff * diff;
+  }
+  const odfStd = Math.sqrt(odfVar / numFrames);
+
+  // Umbral adaptativo: al menos 20% del máximo transitorio y por encima del nivel medio + desviación
+  const threshold = Math.max(0.20 * odfMax, odfMean + 1.0 * odfStd);
+
+  // Buscar el primer pico local que supere el umbral
+  for (let i = 1; i < numFrames - 1; i++) {
+    if (
+      combinedOdf[i] >= threshold &&
+      combinedOdf[i] > combinedOdf[i - 1] &&
+      combinedOdf[i] >= combinedOdf[i + 1]
+    ) {
+      // Interpolación parabólica para precisión de milisegundos
+      const { preciseIndex } = parabolicInterpolation(combinedOdf, i);
+      const timeSeconds = (preciseIndex * hopSize) / downRate;
+      return Number(Math.max(0, timeSeconds).toFixed(3));
+    }
+  }
+
+  return null;
+}

@@ -26,9 +26,14 @@ export const Deck: React.FC<DeckProps> = ({
   const { 
     deckA, 
     deckB, 
+    syncMasterDeck,
+    toggleSync,
+    alignPhase,
+    cancelPhaseAlignment,
     togglePlayDeck, 
     seekDeck, 
     setPitchDeck,
+    pitchBend,
     unloadDeck,
     analyzeTrack,
     handleCueDown,
@@ -42,6 +47,14 @@ export const Deck: React.FC<DeckProps> = ({
   const [isTriggeringAnalysis, setIsTriggeringAnalysis] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
   const isCuePressedRef = useRef(false);
+
+  const handlePitchBendDown = (direction: 'up' | 'down') => {
+    pitchBend(deckName, direction);
+  };
+
+  const handlePitchBendRelease = () => {
+    pitchBend(deckName, 'release');
+  };
 
   const deck = deckName === 'A' ? deckA : deckB;
   const hasTrack = Boolean(deck.track);
@@ -59,6 +72,25 @@ export const Deck: React.FC<DeckProps> = ({
     : (trackArtist || (trackTitle ? t('dj.unknown_artist') : ''));
 
   const currentPitch = deck.pitch;
+  const isMaster = deck.isMaster || syncMasterDeck === deckName;
+  const isSyncActive = deck.isSyncActive;
+  const phaseAlignment = deck.phaseAlignment;
+  const isPhaseActive = phaseAlignment?.status === 'active';
+  const hasProvisionalGrid = isAnalyzed && typeof analysis?.firstBeatTime === 'number' && typeof analysis?.bpm === 'number';
+
+  const handleSyncToggle = () => {
+    if (!hasTrack || isLoading) return;
+    toggleSync(deckName);
+  };
+
+  const handlePhaseAlign = () => {
+    if (!hasTrack || isLoading || !isPlaying) return;
+    if (isPhaseActive) {
+      cancelPhaseAlignment(deckName);
+    } else {
+      alignPhase(deckName);
+    }
+  };
 
   // 4.1 Información musical en los decks:
   // BPM: efectivo con pitch aplicado o '—' si no hay análisis
@@ -305,6 +337,46 @@ export const Deck: React.FC<DeckProps> = ({
                 )}
               </span>
             )}
+
+            {/* Indicador explícito de Beatgrid Provisional (no downbeat confirmado) */}
+            {hasProvisionalGrid && (
+              <span
+                className="status-badge deck-grid-prov-badge"
+                title="Beatgrid provisional basado en primer transitorio detectado (no representa compás o downbeat garantizado)"
+                data-testid={`deck-${deckName.toLowerCase()}-grid-badge`}
+              >
+                {t('dj.phase_align_badge_prov')}
+              </span>
+            )}
+
+            {/* Indicador de estado de Fase / Micro-Slew */}
+            {phaseAlignment && phaseAlignment.status !== 'idle' && (
+              <span
+                className={clsx(
+                  'status-badge',
+                  'deck-phase-badge',
+                  `phase-badge-${phaseAlignment.status}`
+                )}
+                title={phaseAlignment.reason || undefined}
+                data-testid={`deck-${deckName.toLowerCase()}-phase-badge`}
+              >
+                {phaseAlignment.status === 'active'
+                  ? `${t('dj.phase_align_active')} (${Math.round(phaseAlignment.progressPercent)}%)`
+                  : phaseAlignment.status === 'completed'
+                  ? t('dj.phase_align_completed')
+                  : phaseAlignment.status === 'cancelled'
+                  ? t('dj.phase_align_cancelled')
+                  : phaseAlignment.status === 'rejected_limits'
+                  ? t('dj.phase_align_rejected_limits')
+                  : phaseAlignment.status === 'rejected_confidence'
+                  ? t('dj.phase_align_rejected_confidence')
+                  : phaseAlignment.status === 'already_aligned'
+                  ? t('dj.phase_align_already_aligned')
+                  : phaseAlignment.status === 'rejected_state'
+                  ? (phaseAlignment.reason || 'Rechazado')
+                  : phaseAlignment.status}
+              </span>
+            )}
           </div>
         </div>
 
@@ -496,11 +568,54 @@ export const Deck: React.FC<DeckProps> = ({
         <div className="deck-transport">
           <button 
             type="button"
-            className="btn btn-dj btn-dj-sync"
-            title="Función SYNC (En desarrollo)"
-            disabled
+            className={clsx(
+              'btn btn-dj btn-dj-sync',
+              isSyncActive && 'sync-active',
+              isMaster && 'sync-master'
+            )}
+            onClick={handleSyncToggle}
+            disabled={!hasTrack || isLoading}
+            title={
+              isMaster
+                ? t('dj.sync_master_tooltip')
+                : isSyncActive
+                ? t('dj.sync_active_tooltip')
+                : t('dj.sync')
+            }
+            data-testid={`deck-${deckName.toLowerCase()}-sync`}
           >
-            {t('dj.sync')}
+            {isMaster ? 'MASTER' : t('dj.sync')}
+          </button>
+          <button
+            type="button"
+            className={clsx(
+              'btn btn-dj btn-dj-align',
+              isPhaseActive && 'align-active',
+              phaseAlignment?.status === 'completed' && 'align-completed',
+              phaseAlignment?.status?.startsWith('rejected_') && 'align-rejected'
+            )}
+            onClick={handlePhaseAlign}
+            disabled={!hasTrack || isLoading || !isPlaying}
+            title={
+              phaseAlignment?.status === 'rejected_limits'
+                ? t('dj.phase_align_rejected_limits')
+                : phaseAlignment?.status === 'rejected_confidence'
+                ? t('dj.phase_align_rejected_confidence')
+                : phaseAlignment?.status === 'already_aligned'
+                ? t('dj.phase_align_already_aligned')
+                : phaseAlignment?.status === 'rejected_state'
+                ? (phaseAlignment.reason || t('dj.phase_align_tooltip'))
+                : phaseAlignment?.status === 'cancelled'
+                ? t('dj.phase_align_cancelled')
+                : phaseAlignment?.status === 'completed'
+                ? (t('dj.phase_align_completed_tooltip') || t('dj.phase_align_completed'))
+                : t('dj.phase_align_tooltip')
+            }
+            data-testid={`deck-${deckName.toLowerCase()}-align`}
+          >
+            {isPhaseActive
+              ? `${Math.round(phaseAlignment?.progressPercent || 0)}%`
+              : t('dj.phase_align')}
           </button>
           <button 
             type="button"
@@ -540,18 +655,87 @@ export const Deck: React.FC<DeckProps> = ({
           </div>
         </div>
 
-        {/* Pitch Slider */}
-        <div className="deck-pitch-slider">
-          <span className="deck-pitch-label top">-8%</span>
-          <div className="deck-pitch-slider-wrapper">
-            <Slider 
-              orientation="vertical" 
-              value={currentPitch} 
-              onChange={handlePitchChange}
-              disabled={!hasTrack || isLoading}
-            />
+        {/* Pitch Controls: Slider + Pitch Bend Buttons */}
+        <div className="deck-pitch-controls-container">
+          <div className="deck-pitch-slider">
+            <span className="deck-pitch-label top">-8%</span>
+            <div className="deck-pitch-slider-wrapper">
+              <Slider
+                orientation="vertical"
+                value={currentPitch}
+                onChange={handlePitchChange}
+                disabled={!hasTrack || isLoading}
+              />
+            </div>
+            <span className="deck-pitch-label bottom">+8%</span>
           </div>
-          <span className="deck-pitch-label bottom">+8%</span>
+
+          <div
+            className="deck-pitch-bend-controls"
+            role="group"
+            aria-label={t('dj.pitch_bend_label')}
+          >
+            <button
+              type="button"
+              className={clsx(
+                'btn-pitch-bend',
+                'btn-pitch-bend-down',
+                deck.pitchBend < 0 && 'btn-pitch-bend-active'
+              )}
+              onPointerDown={() => handlePitchBendDown('down')}
+              onPointerUp={handlePitchBendRelease}
+              onPointerLeave={handlePitchBendRelease}
+              onPointerCancel={handlePitchBendRelease}
+              onKeyDown={(e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                  e.preventDefault();
+                  handlePitchBendDown('down');
+                }
+              }}
+              onKeyUp={(e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                  e.preventDefault();
+                  handlePitchBendRelease();
+                }
+              }}
+              disabled={!hasTrack || isLoading}
+              title={t('dj.pitch_bend_down_tooltip')}
+              aria-label={t('dj.pitch_bend_down')}
+              data-testid={`deck-${deckName.toLowerCase()}-pitchbend-down`}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className={clsx(
+                'btn-pitch-bend',
+                'btn-pitch-bend-up',
+                deck.pitchBend > 0 && 'btn-pitch-bend-active'
+              )}
+              onPointerDown={() => handlePitchBendDown('up')}
+              onPointerUp={handlePitchBendRelease}
+              onPointerLeave={handlePitchBendRelease}
+              onPointerCancel={handlePitchBendRelease}
+              onKeyDown={(e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                  e.preventDefault();
+                  handlePitchBendDown('up');
+                }
+              }}
+              onKeyUp={(e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                  e.preventDefault();
+                  handlePitchBendRelease();
+                }
+              }}
+              disabled={!hasTrack || isLoading}
+              title={t('dj.pitch_bend_up_tooltip')}
+              aria-label={t('dj.pitch_bend_up')}
+              data-testid={`deck-${deckName.toLowerCase()}-pitchbend-up`}
+            >
+              +
+            </button>
+          </div>
         </div>
 
       </div>

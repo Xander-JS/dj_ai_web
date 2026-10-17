@@ -320,12 +320,67 @@
   justify-content: flex-end;
 }
 
+.deck-pitch-controls-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  gap: var(--space-2);
+}
+
 .deck-pitch-slider {
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: 100%;
-  padding-bottom: var(--space-4);
+  flex: 1;
+}
+
+.deck-pitch-bend-controls {
+  display: flex;
+  gap: var(--space-1);
+  justify-content: center;
+  width: 100%;
+  padding-bottom: var(--space-2);
+}
+
+.btn-pitch-bend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all var(--transition-fast);
+}
+
+.btn-pitch-bend:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn-pitch-bend:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-pitch-bend-active,
+.btn-pitch-bend:active:not(:disabled) {
+  background-color: var(--color-primary-500);
+  border-color: var(--color-primary-400);
+  color: var(--text-inverse);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+  transform: scale(0.95);
 }
 
 /* Button overrides for DJ feel */
@@ -631,3 +686,103 @@
   transform: scale(0.98);
 }
 
+/* Sync button active and master states */
+.btn-dj-sync.sync-active {
+  background-color: var(--color-primary-600);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-primary-500) 60%, transparent);
+}
+
+.btn-dj-sync.sync-master {
+  background-color: var(--color-warning);
+  color: var(--bg-base);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+
+/* Micro-slew Phase Alignment button */
+.btn-dj-align {
+  background-color: var(--bg-surface-active);
+  border: 1px solid var(--border-base);
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.btn-dj-align:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-dj-align.align-active {
+  background-color: var(--color-secondary-500);
+  color: var(--text-inverse);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-secondary-500) 60%, transparent);
+  animation: pulseSlew 0.8s ease-in-out infinite alternate;
+}
+
+.btn-dj-align.align-completed {
+  background-color: var(--color-success);
+  color: var(--bg-base);
+}
+
+.btn-dj-align.align-rejected {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+@keyframes pulseSlew {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+}
+
+/* Beatgrid Provisional badge */
+.deck-grid-prov-badge {
+  background-color: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Phase Alignment Status Badges */
+.deck-phase-badge {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.phase-badge-active {
+  background-color: color-mix(in srgb, var(--color-secondary-500) 15%, transparent);
+  border-color: var(--color-secondary-500);
+  color: var(--color-secondary-500);
+}
+
+.phase-badge-completed {
+  background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.phase-badge-cancelled {
+  background-color: var(--bg-surface-active);
+  border-color: var(--border-base);
+  color: var(--text-tertiary);
+}
+
+.phase-badge-rejected_limits,
+.phase-badge-rejected_confidence,
+.phase-badge-rejected_state {
+  background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.phase-badge-already_aligned {
+  background-color: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-500);
+}

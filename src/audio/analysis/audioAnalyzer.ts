@@ -6,7 +6,7 @@
  */
 
 import type { TrackAnalysis } from '../../types/track.ts';
-import { detectBpm, type BpmDetectorOptions } from './bpmDetector.ts';
+import { detectBpm, detectFirstBeatTime, type BpmDetectorOptions } from './bpmDetector.ts';
 import { detectKey } from './keyDetector.ts';
 import { calculateEnergy } from './energyCalculator.ts';
 
@@ -92,8 +92,9 @@ export function analyzeAudioPcm(
     // 3. Extracción de picos de onda para UI
     const waveformPeaks = extractWaveformPeaks(pcm, options.waveformBuckets ?? 100);
 
-    // 4. Detección de BPM
+    // 4. Detección de BPM y primer transitorio rítmico
     const bpmResult = detectBpm(pcm, sampleRate, options);
+    const firstBeatTime = detectFirstBeatTime(pcm, sampleRate);
 
     // 5. Detección de Tonalidad y Camelot
     const keyResult = detectKey(pcm, sampleRate);
@@ -113,6 +114,7 @@ export function analyzeAudioPcm(
         waveformPeaks,
         bpmConfidence: bpmResult.confidence,
         keyConfidence: keyResult.confidence,
+        firstBeatTime: null,
         analysisError: 'Audio no musical o sin estructura rítmica y armónica suficiente para análisis determinista',
       };
     }
@@ -126,6 +128,7 @@ export function analyzeAudioPcm(
       waveformPeaks,
       bpmConfidence: bpmResult.confidence,
       keyConfidence: keyResult.confidence,
+      firstBeatTime: hasBpm ? firstBeatTime : null,
     };
   } catch (err) {
     return {

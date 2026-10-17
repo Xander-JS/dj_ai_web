@@ -18,6 +18,7 @@ export interface TrackAnalysis {
   waveformPeaks?: number[];          // Muestras normalizadas (0.0 a 1.0) para renderizado rápido
   bpmConfidence?: number;            // Nivel de certeza/confianza métrica (0.0 a 1.0)
   keyConfidence?: number;            // Nivel de correlación/certeza tonal (0.0 a 1.0)
+  firstBeatTime?: number | null;     // Marca temporal en segundos del primer transitorio de beat
   analysisError?: string;
 }
 

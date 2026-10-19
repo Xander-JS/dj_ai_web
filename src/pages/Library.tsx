@@ -12,6 +12,7 @@ import { Badge } from '../components/ui/Badge';
 import { MOCK_LIBRARY } from '../mock/library';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { validateAudioFile, createTrackFromFile } from '../utils/audioValidation';
+import { computeFileHash } from '../utils/cryptoHash';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { audioEngine } from '../audio';
 import { useDJStore, djStore } from '../store/useDJStore';
@@ -212,8 +213,16 @@ export const Library: React.FC = () => {
         console.warn(`[Library] No se pudo decodificar la duración previa de ${file.name}:`, err);
       }
 
+      // Calcular huella criptográfica SHA-256 sobre el contenido exacto
+      let contentHash: string | undefined;
+      try {
+        contentHash = await computeFileHash(file);
+      } catch (hashErr) {
+        console.warn(`[Library] No se pudo calcular el hash de ${file.name}:`, hashErr);
+      }
+
       // 4. Crear entidad Track y persistir en IndexedDB
-      const newTrack = createTrackFromFile(file, durationSeconds);
+      const newTrack = createTrackFromFile(file, durationSeconds, contentHash);
       try {
         const result = await indexedDBStorage.saveTrack(newTrack, file);
         if (!result.persisted) {

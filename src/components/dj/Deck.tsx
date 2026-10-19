@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { useDJStore, HOT_CUE_COLORS } from '../../store/useDJStore';
 import { formatDuration } from '../../utils/formatters';
 import type { AnalysisStatus } from '../../types/track';
+import { isDownbeatConfirmed } from '../../utils/downbeat';
 import './Deck.css';
 
 export interface DeckProps {
@@ -30,6 +31,10 @@ export const Deck: React.FC<DeckProps> = ({
     toggleSync,
     alignPhase,
     cancelPhaseAlignment,
+    prepareBarSync,
+    cancelBarSync,
+    confirmDownbeat,
+    clearDownbeat,
     togglePlayDeck, 
     seekDeck, 
     setPitchDeck,
@@ -46,6 +51,11 @@ export const Deck: React.FC<DeckProps> = ({
 
   const [isTriggeringAnalysis, setIsTriggeringAnalysis] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
+  const [isPreparingBarSync, setIsPreparingBarSync] = useState(false);
+  const [editDownbeatPos, setEditDownbeatPos] = useState<string>('0.000');
+  const [editBeatsPerBar, setEditBeatsPerBar] = useState<number>(4);
+  const [isSavingDownbeat, setIsSavingDownbeat] = useState<boolean>(false);
+  const [downbeatError, setDownbeatError] = useState<string | null>(null);
   const isCuePressedRef = useRef(false);
 
   const handlePitchBendDown = (direction: 'up' | 'down') => {
@@ -89,6 +99,46 @@ export const Deck: React.FC<DeckProps> = ({
       cancelPhaseAlignment(deckName);
     } else {
       alignPhase(deckName);
+    }
+  };
+
+  const barSync = deck.barSync;
+  const barSyncStatus = barSync?.status || 'idle';
+  const isBarSyncArmed = barSyncStatus === 'armed';
+  const isBarSyncAligned = barSyncStatus === 'already_aligned';
+  const isDownbeatManuallyConfirmed = hasTrack && isDownbeatConfirmed(track?.downbeat, track?.fileMeta?.contentHash);
+  const hasValidHash = Boolean(
+    track?.fileMeta?.contentHash &&
+    typeof track.fileMeta.contentHash === 'string' &&
+    track.fileMeta.contentHash.length === 64 &&
+    /^[0-9a-f]{64}$/i.test(track.fileMeta.contentHash)
+  );
+  const suggestedPos = track?.downbeat?.suggestedPosition ?? (typeof analysis?.firstBeatTime === 'number' ? analysis.firstBeatTime : null);
+  const hasSuggested = typeof suggestedPos === 'number' && Number.isFinite(suggestedPos) && suggestedPos >= 0;
+
+  const formatDeltaSeconds = (val: number | null | undefined): string => {
+    if (val === null || val === undefined || Math.abs(val) < 0.0005) return '0.00s';
+    const sign = val > 0 ? '+' : '';
+    return `${sign}${val.toFixed(2)}s`;
+  };
+
+  const formatDeltaSigned = (val: number | null | undefined): string => {
+    if (val === null || val === undefined || Math.abs(val) < 0.0005) return '0.000';
+    const sign = val > 0 ? '+' : '';
+    return `${sign}${val.toFixed(3)}`;
+  };
+
+  const handleBarSync = () => {
+    if (!hasTrack || isLoading || isPreparingBarSync) return;
+    if (isBarSyncArmed || isBarSyncAligned) {
+      cancelBarSync(deckName);
+    } else {
+      setIsPreparingBarSync(true);
+      try {
+        prepareBarSync(deckName);
+      } finally {
+        setIsPreparingBarSync(false);
+      }
     }
   };
 
@@ -233,11 +283,97 @@ export const Deck: React.FC<DeckProps> = ({
     if (!track || isAnalyzing) return;
     setIsTriggeringAnalysis(true);
     try {
-      await analyzeTrack(track, analysisStatus === 'failed');
+      await analyzeTrack(track, analysisStatus === 'failed', deckName);
     } catch (err) {
       console.error(`[Deck ${deckName}] Error solicitando análisis musical:`, err);
     } finally {
       setIsTriggeringAnalysis(false);
+    }
+  };
+
+  const currentTrackId = track?.id ?? null;
+  const [prevTrackId, setPrevTrackId] = useState<string | null>(null);
+  const [prevConfirmed, setPrevConfirmed] = useState<boolean>(false);
+  const [selectedSource, setSelectedSource] = useState<'suggested' | 'playhead' | null>(null);
+
+  // Sincronización del editor manual de downbeat (reflejo inmediato al cambiar de pista o confirmar/limpiar)
+  if (currentTrackId !== prevTrackId || isDownbeatManuallyConfirmed !== prevConfirmed) {
+    setPrevTrackId(currentTrackId);
+    setPrevConfirmed(isDownbeatManuallyConfirmed);
+    setDownbeatError(null);
+    setIsSavingDownbeat(false);
+    setSelectedSource(null);
+
+    if (!hasTrack || !track) {
+      setEditDownbeatPos('0.000');
+      setEditBeatsPerBar(4);
+    } else if (isDownbeatManuallyConfirmed && track.downbeat?.confirmation) {
+      setEditDownbeatPos(track.downbeat.confirmation.position.toFixed(3));
+      setEditBeatsPerBar(track.downbeat.confirmation.beatsPerBar);
+    } else {
+      if (hasSuggested && typeof suggestedPos === 'number') {
+        setEditDownbeatPos(suggestedPos.toFixed(3));
+      } else {
+        setEditDownbeatPos('0.000');
+      }
+      setEditBeatsPerBar(4);
+    }
+  }
+
+  const handleUseSuggested = () => {
+    if (!hasTrack || isLoading || isSavingDownbeat || !hasSuggested || typeof suggestedPos !== 'number') return;
+    setDownbeatError(null);
+    setSelectedSource('suggested');
+    setEditDownbeatPos(suggestedPos.toFixed(3));
+  };
+
+  const handleCapturePlayhead = () => {
+    if (!hasTrack || isLoading || isSavingDownbeat) return;
+    setDownbeatError(null);
+    setSelectedSource('playhead');
+    setEditDownbeatPos(Math.max(0, currentTime).toFixed(3));
+  };
+
+  const handleConfirmDownbeat = async () => {
+    if (!hasTrack || !hasValidHash || isSavingDownbeat || isLoading) return;
+    setDownbeatError(null);
+
+    const parsedPos = parseFloat(editDownbeatPos);
+    if (isNaN(parsedPos) || parsedPos < 0 || (duration > 0 && parsedPos > duration)) {
+      setDownbeatError(t('dj.downbeat_error_invalid_pos'));
+      return;
+    }
+
+    setIsSavingDownbeat(true);
+    try {
+      const success = await confirmDownbeat(deckName, {
+        position: parsedPos,
+        beatsPerBar: editBeatsPerBar,
+        suggestedPosition: hasSuggested && typeof suggestedPos === 'number' ? suggestedPos : null,
+      });
+      if (!success) {
+        setDownbeatError(t('dj.downbeat_error_persist'));
+      }
+    } catch {
+      setDownbeatError(t('dj.downbeat_error_persist'));
+    } finally {
+      setIsSavingDownbeat(false);
+    }
+  };
+
+  const handleClearDownbeat = async () => {
+    if (!hasTrack || isSavingDownbeat || isLoading || !isDownbeatManuallyConfirmed) return;
+    setDownbeatError(null);
+    setIsSavingDownbeat(true);
+    try {
+      const success = await clearDownbeat(deckName);
+      if (!success) {
+        setDownbeatError(t('dj.downbeat_error_persist'));
+      }
+    } catch {
+      setDownbeatError(t('dj.downbeat_error_persist'));
+    } finally {
+      setIsSavingDownbeat(false);
     }
   };
 
@@ -377,6 +513,65 @@ export const Deck: React.FC<DeckProps> = ({
                   : phaseAlignment.status}
               </span>
             )}
+
+            {/* Indicador explícito de Downbeat Confirmado Manualmente (nunca mostrar sugerencias no confirmadas) */}
+            {isDownbeatManuallyConfirmed && (
+              <span
+                className="status-badge deck-downbeat-badge"
+                title={`${t('dj.bar_sync_badge_downbeat_title', 'Downbeat confirmado manualmente')}: ${track?.downbeat?.confirmation?.position.toFixed(3)}s (${track?.downbeat?.confirmation?.beatsPerBar}/4)`}
+                data-testid={`deck-${deckName.toLowerCase()}-downbeat-badge`}
+              >
+                {t('dj.bar_sync_badge_downbeat', 'DOWNBEAT ✓')}
+              </span>
+            )}
+
+            {/* Indicador de estado de BAR SYNC V1 */}
+            {barSync && barSync.status !== 'idle' && (
+              <span
+                className={clsx(
+                  'status-badge',
+                  'deck-barsync-badge',
+                  `barsync-badge-${barSync.status}`
+                )}
+                title={
+                  (barSync.status as string) === 'preparing'
+                    ? t('dj.bar_sync_preparing', 'PREPARANDO...')
+                    : barSync.status === 'armed'
+                    ? t('dj.bar_sync_armed_badge_tooltip', {
+                        prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
+                        prev: barSync.previousPosition?.toFixed(3) ?? '0.000',
+                        disp: formatDeltaSigned(barSync.displacementSec),
+                        target: barSync.targetDownbeatSec?.toFixed(3) ?? '0.000',
+                        beats: barSync.beatsPerBar ?? 4,
+                      })
+                    : barSync.status === 'already_aligned'
+                    ? t('dj.bar_sync_already_aligned_badge_tooltip', {
+                        prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
+                        prev: barSync.previousPosition?.toFixed(3) ?? '0.000',
+                        disp: formatDeltaSigned(barSync.displacementSec),
+                        beats: barSync.beatsPerBar ?? 4,
+                      })
+                    : barSync.status === 'completed'
+                    ? t('dj.bar_sync_completed_tooltip', 'Preparación de compás finalizada al arrancar la reproducción')
+                    : barSync.status === 'cancelled'
+                    ? t('dj.bar_sync_cancelled_tooltip', 'Preparación de compás cancelada manualmente')
+                    : (barSync.reason || 'Preparación de compás rechazada')
+                }
+                data-testid={`deck-${deckName.toLowerCase()}-barsync-badge`}
+              >
+                {(barSync.status as string) === 'preparing'
+                  ? 'BAR PREPARING...'
+                  : barSync.status === 'armed'
+                  ? `BAR ARMED (${barSync.preparedPosition?.toFixed(2)}s, Δ ${formatDeltaSeconds(barSync.displacementSec)})`
+                  : barSync.status === 'already_aligned'
+                  ? `BAR ALIGNED (${barSync.preparedPosition?.toFixed(2)}s, Δ ${formatDeltaSeconds(barSync.displacementSec)})`
+                  : barSync.status === 'completed'
+                  ? 'BAR COMPLETED'
+                  : barSync.status === 'cancelled'
+                  ? 'BAR CANCELLED'
+                  : `BAR REJECTED: ${barSync.reason || barSync.status}`}
+              </span>
+            )}
           </div>
         </div>
 
@@ -406,7 +601,14 @@ export const Deck: React.FC<DeckProps> = ({
               {currentEnergy !== '—' ? `${currentEnergy}/10` : '—'}
             </span>
           </div>
-          <div className="deck-stat-item">
+          <div
+            className="deck-stat-item"
+            data-testid={`deck-${deckName.toLowerCase()}-time`}
+            title={t('dj.bar_sync_time_tooltip', {
+              current: currentTime.toFixed(3),
+              total: duration.toFixed(3),
+            })}
+          >
             <span className="deck-stat-label">{t('dj.time')}</span>
             <span className="deck-stat-value">{formattedTimeRemaining}</span>
           </div>
@@ -561,6 +763,173 @@ export const Deck: React.FC<DeckProps> = ({
         </div>
       </div>
 
+      {/* Editor Manual de Downbeat & Compás (Fase 23.4 — Etapa C.8.2) */}
+      {hasTrack && (
+        <div
+          className="deck-downbeat-editor"
+          data-testid={`deck-${deckName.toLowerCase()}-downbeat-editor`}
+        >
+          <div className="deck-downbeat-header">
+            <span className="deck-downbeat-title">{t('dj.downbeat_editor_title')}</span>
+            <div className="deck-downbeat-status-wrapper">
+              <span
+                className={clsx(
+                  'downbeat-status-badge',
+                  isDownbeatManuallyConfirmed
+                    ? 'badge-confirmed'
+                    : hasSuggested
+                    ? 'badge-suggested'
+                    : 'badge-none'
+                )}
+                data-testid={`deck-${deckName.toLowerCase()}-downbeat-status-badge`}
+              >
+                {isDownbeatManuallyConfirmed
+                  ? t('dj.downbeat_badge_confirmed')
+                  : hasSuggested
+                  ? t('dj.downbeat_badge_suggested')
+                  : t('dj.downbeat_badge_none')}
+              </span>
+              {isDownbeatManuallyConfirmed && track?.downbeat?.confirmation && (
+                <span
+                  className="downbeat-status-detail"
+                  data-testid={`deck-${deckName.toLowerCase()}-downbeat-status-detail`}
+                >
+                  {track.downbeat.confirmation.position.toFixed(3)}s ({track.downbeat.confirmation.beatsPerBar}/4)
+                </span>
+              )}
+              {!isDownbeatManuallyConfirmed && hasSuggested && typeof suggestedPos === 'number' && (
+                <span
+                  className="downbeat-status-detail"
+                  data-testid={`deck-${deckName.toLowerCase()}-downbeat-status-detail`}
+                >
+                  {suggestedPos.toFixed(3)}s
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="deck-downbeat-controls-row">
+            <div className="deck-downbeat-input-group">
+              <label htmlFor={`deck-${deckName.toLowerCase()}-downbeat-input`}>
+                {t('dj.downbeat_pos_label')}
+              </label>
+              <input
+                id={`deck-${deckName.toLowerCase()}-downbeat-input`}
+                type="number"
+                step="0.001"
+                min="0"
+                max={duration > 0 ? duration : undefined}
+                value={editDownbeatPos}
+                onChange={(e) => {
+                  setEditDownbeatPos(e.target.value);
+                  setSelectedSource(null);
+                }}
+                disabled={!hasTrack || isLoading || isSavingDownbeat}
+                className="deck-downbeat-input"
+                data-testid={`deck-${deckName.toLowerCase()}-downbeat-pos-input`}
+              />
+            </div>
+
+            <button
+              type="button"
+              className={clsx(
+                'btn-downbeat-action',
+                'btn-downbeat-source',
+                selectedSource === 'playhead' && 'selected'
+              )}
+              onClick={handleCapturePlayhead}
+              disabled={!hasTrack || isLoading || isSavingDownbeat}
+              aria-pressed={selectedSource === 'playhead'}
+              title={t('dj.downbeat_btn_capture_tooltip')}
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-capture-btn`}
+              data-selected={selectedSource === 'playhead'}
+            >
+              {selectedSource === 'playhead' && (
+                <span className="source-indicator-dot" aria-hidden="true" />
+              )}
+              {t('dj.downbeat_btn_capture')}
+            </button>
+
+            <button
+              type="button"
+              className={clsx(
+                'btn-downbeat-action',
+                'btn-downbeat-source',
+                selectedSource === 'suggested' && 'selected'
+              )}
+              onClick={handleUseSuggested}
+              disabled={!hasTrack || isLoading || isSavingDownbeat || !hasSuggested}
+              aria-pressed={selectedSource === 'suggested'}
+              title={t('dj.downbeat_btn_use_suggested_tooltip')}
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-suggested-btn`}
+              data-selected={selectedSource === 'suggested'}
+            >
+              {selectedSource === 'suggested' && (
+                <span className="source-indicator-dot" aria-hidden="true" />
+              )}
+              {t('dj.downbeat_btn_use_suggested')}
+            </button>
+
+            <div className="deck-downbeat-input-group">
+              <label htmlFor={`deck-${deckName.toLowerCase()}-downbeat-metric-select`}>
+                {t('dj.downbeat_metric_label')}
+              </label>
+              <select
+                id={`deck-${deckName.toLowerCase()}-downbeat-metric-select`}
+                value={editBeatsPerBar}
+                onChange={(e) => setEditBeatsPerBar(Number(e.target.value))}
+                disabled={!hasTrack || isLoading || isSavingDownbeat}
+                className="deck-downbeat-select"
+                data-testid={`deck-${deckName.toLowerCase()}-downbeat-metric-select`}
+              >
+                <option value={4}>4/4</option>
+                <option value={3}>3/4</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              className="btn-downbeat-action btn-downbeat-confirm"
+              onClick={handleConfirmDownbeat}
+              disabled={!hasTrack || isLoading || isSavingDownbeat || !hasValidHash}
+              title={!hasValidHash ? t('dj.downbeat_btn_confirm_disabled_hash') : t('dj.downbeat_btn_confirm_tooltip')}
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-confirm-btn`}
+            >
+              {t('dj.downbeat_btn_confirm')}
+            </button>
+
+            <button
+              type="button"
+              className="btn-downbeat-action btn-downbeat-clear"
+              onClick={handleClearDownbeat}
+              disabled={!hasTrack || isLoading || isSavingDownbeat || !isDownbeatManuallyConfirmed}
+              title={t('dj.downbeat_btn_clear_tooltip')}
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-clear-btn`}
+            >
+              {t('dj.downbeat_btn_clear')}
+            </button>
+          </div>
+
+          {!hasValidHash && (
+            <div
+              className="downbeat-hash-warning"
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-hash-warning`}
+            >
+              {t('dj.downbeat_missing_hash_explanation')}
+            </div>
+          )}
+
+          {downbeatError && (
+            <div
+              className="downbeat-error-msg"
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-error`}
+            >
+              {downbeatError}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Deck Controls */}
       <div className="deck-controls">
         
@@ -616,6 +985,59 @@ export const Deck: React.FC<DeckProps> = ({
             {isPhaseActive
               ? `${Math.round(phaseAlignment?.progressPercent || 0)}%`
               : t('dj.phase_align')}
+          </button>
+          <button
+            type="button"
+            className={clsx(
+              'btn btn-dj btn-dj-barsync',
+              (isPreparingBarSync || (barSyncStatus as string) === 'preparing') && 'barsync-preparing',
+              isBarSyncArmed && 'barsync-armed',
+              isBarSyncAligned && 'barsync-aligned',
+              barSyncStatus === 'completed' && 'barsync-completed',
+              barSyncStatus?.startsWith('rejected_') && 'barsync-rejected',
+              barSyncStatus === 'cancelled' && 'barsync-cancelled'
+            )}
+            onClick={handleBarSync}
+            disabled={!hasTrack || isLoading || isPreparingBarSync}
+            title={
+              isPreparingBarSync || (barSyncStatus as string) === 'preparing'
+                ? t('dj.bar_sync_preparing', 'PREPARANDO...')
+                : isBarSyncArmed
+                ? t('dj.bar_sync_armed_btn_tooltip', {
+                    prepared: barSync?.preparedPosition?.toFixed(3) ?? '0.000',
+                    prev: barSync?.previousPosition?.toFixed(3) ?? '0.000',
+                    disp: formatDeltaSigned(barSync?.displacementSec),
+                    beats: barSync?.beatsPerBar ?? 4,
+                  })
+                : isBarSyncAligned
+                ? t('dj.bar_sync_aligned_btn_tooltip', {
+                    prepared: barSync?.preparedPosition?.toFixed(3) ?? '0.000',
+                    prev: barSync?.previousPosition?.toFixed(3) ?? '0.000',
+                    disp: formatDeltaSigned(barSync?.displacementSec),
+                    beats: barSync?.beatsPerBar ?? 4,
+                  })
+                : barSyncStatus === 'completed'
+                ? t('dj.bar_sync_completed_tooltip', 'Preparación de compás finalizada al arrancar la reproducción manual.')
+                : barSyncStatus === 'cancelled'
+                ? t('dj.bar_sync_cancelled_tooltip', 'Preparación cancelada manualmente.')
+                : barSyncStatus?.startsWith('rejected_')
+                ? `BAR SYNC RECHAZADO: ${barSync?.reason || 'Condiciones incompatibles'}`
+                : t('dj.bar_sync_tooltip', 'Preparar compás en frontera de downbeat confirmada (BAR SYNC V1)')
+            }
+            aria-label={t('dj.bar_sync', 'BAR SYNC')}
+            data-testid={`deck-${deckName.toLowerCase()}-barsync`}
+          >
+            {isPreparingBarSync || (barSyncStatus as string) === 'preparing'
+              ? t('dj.bar_sync_preparing', 'PREPARING...')
+              : isBarSyncArmed
+              ? t('dj.bar_sync_armed', 'ARMED')
+              : isBarSyncAligned
+              ? t('dj.bar_sync_already_aligned', 'ALIGNED')
+              : barSyncStatus === 'completed'
+              ? t('dj.bar_sync_completed', 'DONE')
+              : barSyncStatus?.startsWith('rejected_')
+              ? t('dj.bar_sync_rejected', 'REJECT')
+              : t('dj.bar_sync', 'BAR SYNC')}
           </button>
           <button 
             type="button"

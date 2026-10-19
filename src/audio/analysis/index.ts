@@ -62,3 +62,13 @@ export {
   type PhaseAlignmentCalculationResult,
   type PhaseAlignmentStatus,
 } from './phaseAlignment.ts';
+
+export {
+  calculateBarSyncPlan,
+  DEFAULT_BAR_SYNC_TOLERANCE_SEC,
+  MIN_EFFECTIVE_BPM,
+  MAX_EFFECTIVE_BPM,
+  type BarSyncDeckInput,
+  type BarSyncPlanInput,
+  type BarSyncPlanResult,
+} from './barSync.ts';

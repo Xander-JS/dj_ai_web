@@ -73,7 +73,7 @@ export function validateAudioFile(file: File): AudioValidationResult {
  * Genera la entidad Track a partir del archivo local importado.
  * No simula BPM ni Key; establece el análisis en 'pending'.
  */
-export function createTrackFromFile(file: File, durationSeconds = 0): Track {
+export function createTrackFromFile(file: File, durationSeconds = 0, contentHash?: string): Track {
   const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').trim();
   const id = `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -98,6 +98,7 @@ export function createTrackFromFile(file: File, durationSeconds = 0): Track {
       fileSize: file.size,
       mimeType: file.type || `audio/${file.name.endsWith('.wav') ? 'wav' : 'mpeg'}`,
       lastModified: file.lastModified || Date.now(),
+      ...(contentHash ? { contentHash } : {}),
     },
     dateAdded: Date.now(),
   };

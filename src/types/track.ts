@@ -37,6 +37,7 @@ export interface TrackFileMetadata {
   fileSize: number;                  // En bytes
   mimeType: string;
   lastModified: number;              // Timestamp
+  contentHash?: string;              // Digest hexadecimal SHA-256 opcional del contenido de audio
 }
 
 /**
@@ -69,5 +70,50 @@ export interface Track {
   fileMeta?: TrackFileMetadata;
   mainCue?: number | null;           // Posición en segundos del CUE principal
   hotCues?: HotCue[];                // Lista de Hot Cues configurados para la pista
+  downbeat?: TrackDownbeat | null;   // Configuración y confirmación de downbeat y métrica de compás
   dateAdded: number;                 // Timestamp de incorporación
+}
+
+/**
+ * Estado formal de la información de downbeat y métrica de compás.
+ * - 'none': No existe sugerencia ni confirmación de compás.
+ * - 'suggested': Existe una sugerencia preliminar generada por el analizador (no vinculante).
+ * - 'confirmed': El usuario ha confirmado explícitamente la posición del downbeat y su métrica.
+ */
+export type DownbeatStatus = 'none' | 'suggested' | 'confirmed';
+
+/**
+ * Confirmación manual explícita del tiempo 1 de compás fijada por el usuario.
+ * Está vinculada de forma inmutable a la identidad del contenido exacto (contentHash).
+ */
+export interface ManualDownbeatConfirmation {
+  /** Posición temporal precisa en segundos del downbeat confirmada por el usuario. */
+  readonly position: number;
+  /** Cantidad explícita de pulsos por compás elegida por el usuario (ej. 4, 3). */
+  readonly beatsPerBar: number;
+  /** Huella SHA-256 exacta del contenido binario para el cual es válida esta confirmación. */
+  readonly contentHash: string;
+  /** Timestamp en milisegundos en que se realizó la confirmación manual. */
+  readonly confirmedAt: number;
+  /** Procedencia explícita de la confirmación manual. */
+  readonly source: 'manual';
+}
+
+/**
+ * Representación de downbeat y métrica de compás para una pista.
+ * Mantiene separación estricta entre sugerencia preliminar y confirmación humana.
+ */
+export interface TrackDownbeat {
+  /** Estado actual de la información de compás / downbeat. */
+  status: DownbeatStatus;
+  /**
+   * Posición temporal en segundos del downbeat sugerido por el análisis rítmico.
+   * AVISO CONTRACTUAL: Es una sugerencia preliminar no vinculante. NUNCA equivale a una confirmación.
+   */
+  suggestedPosition?: number | null;
+  /**
+   * Confirmación manual explícita fijada por el usuario.
+   * Solo presente y válida cuando status === 'confirmed'.
+   */
+  confirmation?: ManualDownbeatConfirmation | null;
 }

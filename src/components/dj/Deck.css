@@ -786,3 +786,341 @@
   border-color: var(--color-primary-500);
   color: var(--color-primary-500);
 }
+
+/* BAR SYNC Button */
+.btn-dj-barsync {
+  background-color: var(--bg-surface-active);
+  border: 1px solid var(--border-base);
+  color: var(--text-primary);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  transition: all var(--transition-fast);
+}
+
+.btn-dj-barsync:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-dj-barsync.barsync-preparing {
+  background-color: color-mix(in srgb, var(--color-warning) 20%, var(--bg-surface-active));
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.btn-dj-barsync.barsync-armed {
+  background-color: color-mix(in srgb, var(--color-warning) 25%, var(--bg-surface-active));
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+
+.btn-dj-barsync.barsync-aligned {
+  background-color: color-mix(in srgb, var(--color-primary-500) 25%, var(--bg-surface-active));
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-500);
+}
+
+.btn-dj-barsync.barsync-completed {
+  background-color: color-mix(in srgb, var(--color-success) 20%, var(--bg-surface-active));
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.btn-dj-barsync.barsync-rejected {
+  background-color: color-mix(in srgb, var(--color-error) 15%, var(--bg-surface-active));
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.btn-dj-barsync.barsync-cancelled {
+  background-color: var(--bg-surface-active);
+  border-color: var(--border-base);
+  color: var(--text-tertiary);
+}
+
+/* BAR SYNC Status Badges */
+.deck-barsync-badge {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.barsync-badge-preparing {
+  background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.barsync-badge-armed {
+  background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.barsync-badge-already_aligned {
+  background-color: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-500);
+}
+
+.barsync-badge-completed {
+  background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.barsync-badge-cancelled {
+  background-color: var(--bg-surface-active);
+  border-color: var(--border-base);
+  color: var(--text-tertiary);
+}
+
+.barsync-badge-rejected_state,
+.barsync-badge-rejected_unconfirmed,
+.barsync-badge-rejected_metric_mismatch,
+.barsync-badge-rejected_limits,
+.barsync-badge-rejected_confidence {
+  background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+/* Downbeat confirmado badge */
+.deck-downbeat-badge {
+  background-color: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-500);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ==========================================================================
+   Downbeat Manual Editor (Fase 23.4 — Etapa C.8.2)
+   ========================================================================== */
+
+.deck-downbeat-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--bg-surface-active);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.deck-downbeat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.deck-downbeat-title {
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.deck-downbeat-status-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.downbeat-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.downbeat-status-badge.badge-confirmed {
+  background-color: color-mix(in srgb, var(--color-primary-500) 20%, transparent);
+  border: 1px solid var(--color-primary-500);
+  color: var(--color-primary-500);
+}
+
+.downbeat-status-badge.badge-suggested {
+  background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  border: 1px solid var(--color-warning);
+  color: var(--color-warning);
+}
+
+.downbeat-status-badge.badge-none {
+  background-color: var(--bg-surface-hover);
+  border: 1px solid var(--border-base);
+  color: var(--text-tertiary);
+}
+
+.downbeat-status-detail {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.deck-downbeat-controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.deck-downbeat-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.deck-downbeat-input-group label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.deck-downbeat-input {
+  width: 78px;
+  height: 24px;
+  padding: 2px 4px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  text-align: right;
+}
+
+.deck-downbeat-input:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+}
+
+.deck-downbeat-select {
+  height: 24px;
+  padding: 0 4px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.deck-downbeat-select:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+}
+
+.btn-downbeat-action {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-base);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.btn-downbeat-action:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.btn-downbeat-action:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 1px;
+}
+
+.btn-downbeat-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-downbeat-source {
+  position: relative;
+  gap: var(--space-1);
+}
+
+.btn-downbeat-source.selected {
+  background-color: color-mix(in srgb, var(--color-primary-500) 25%, var(--bg-surface));
+  border-color: var(--color-primary-500);
+  color: #fff;
+  font-weight: var(--font-weight-bold);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-primary-500) 40%, transparent);
+}
+
+.btn-downbeat-source.selected:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--color-primary-500) 35%, var(--bg-surface));
+  border-color: var(--color-primary-400);
+}
+
+.source-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-primary-500);
+  box-shadow: 0 0 4px var(--color-primary-500);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.btn-downbeat-confirm {
+  background-color: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+  border-color: var(--color-primary-500);
+  color: var(--color-primary-500);
+  font-weight: var(--font-weight-semibold);
+}
+
+.btn-downbeat-confirm:hover:not(:disabled) {
+  background-color: var(--color-primary-500);
+  color: #fff;
+}
+
+.btn-downbeat-clear {
+  border-color: var(--border-base);
+  color: var(--text-tertiary);
+}
+
+.btn-downbeat-clear:hover:not(:disabled) {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.downbeat-hash-warning {
+  padding: 3px 6px;
+  background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--color-warning);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.downbeat-error-msg {
+  padding: 3px 6px;
+  background-color: color-mix(in srgb, var(--color-error) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+  font-size: 10px;
+  line-height: 1.3;
+}

@@ -171,6 +171,36 @@ export const Deck: React.FC<DeckProps> = ({
     ? `-${formatDuration(Math.max(0, duration - currentTime))}` 
     : timeRemaining;
 
+  const timeStatTooltip = t('dj.bar_sync_time_tooltip', {
+    current: currentTime.toFixed(3),
+    total: duration.toFixed(3),
+  });
+
+  const barSyncBadgeTooltip = barSync && barSync.status !== 'idle'
+    ? (barSync.status as string) === 'preparing'
+      ? t('dj.bar_sync_preparing', 'PREPARANDO...')
+      : barSync.status === 'armed'
+      ? t('dj.bar_sync_armed_badge_tooltip', {
+          prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
+          prev: barSync.previousPosition?.toFixed(3) ?? '0.000',
+          disp: formatDeltaSigned(barSync.displacementSec),
+          target: barSync.targetDownbeatSec?.toFixed(3) ?? '0.000',
+          beats: barSync.beatsPerBar ?? 4,
+        })
+      : barSync.status === 'already_aligned'
+      ? t('dj.bar_sync_already_aligned_badge_tooltip', {
+          prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
+          prev: barSync.previousPosition?.toFixed(3) ?? '0.000',
+          disp: formatDeltaSigned(barSync.displacementSec),
+          beats: barSync.beatsPerBar ?? 4,
+        })
+      : barSync.status === 'completed'
+      ? t('dj.bar_sync_completed_tooltip', 'Preparación de compás finalizada al arrancar la reproducción')
+      : barSync.status === 'cancelled'
+      ? t('dj.bar_sync_cancelled_tooltip', 'Preparación de compás cancelada manualmente')
+      : (barSync.reason || 'Preparación de compás rechazada')
+    : undefined;
+
   // 4.2 Estado del análisis:
   const analysisStatus: AnalysisStatus | null = analysis?.status || (hasTrack ? 'pending' : null);
   const isAnalyzing = analysisStatus === 'analyzing' || isTriggeringAnalysis;
@@ -531,32 +561,14 @@ export const Deck: React.FC<DeckProps> = ({
                 className={clsx(
                   'status-badge',
                   'deck-barsync-badge',
+                  'deck-tooltip-trigger',
                   `barsync-badge-${barSync.status}`
                 )}
-                title={
-                  (barSync.status as string) === 'preparing'
-                    ? t('dj.bar_sync_preparing', 'PREPARANDO...')
-                    : barSync.status === 'armed'
-                    ? t('dj.bar_sync_armed_badge_tooltip', {
-                        prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
-                        prev: barSync.previousPosition?.toFixed(3) ?? '0.000',
-                        disp: formatDeltaSigned(barSync.displacementSec),
-                        target: barSync.targetDownbeatSec?.toFixed(3) ?? '0.000',
-                        beats: barSync.beatsPerBar ?? 4,
-                      })
-                    : barSync.status === 'already_aligned'
-                    ? t('dj.bar_sync_already_aligned_badge_tooltip', {
-                        prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
-                        prev: barSync.previousPosition?.toFixed(3) ?? '0.000',
-                        disp: formatDeltaSigned(barSync.displacementSec),
-                        beats: barSync.beatsPerBar ?? 4,
-                      })
-                    : barSync.status === 'completed'
-                    ? t('dj.bar_sync_completed_tooltip', 'Preparación de compás finalizada al arrancar la reproducción')
-                    : barSync.status === 'cancelled'
-                    ? t('dj.bar_sync_cancelled_tooltip', 'Preparación de compás cancelada manualmente')
-                    : (barSync.reason || 'Preparación de compás rechazada')
-                }
+                title={barSyncBadgeTooltip}
+                data-tooltip={barSyncBadgeTooltip}
+                tabIndex={0}
+                role="note"
+                aria-label={barSyncBadgeTooltip}
                 data-testid={`deck-${deckName.toLowerCase()}-barsync-badge`}
               >
                 {(barSync.status as string) === 'preparing'
@@ -602,12 +614,13 @@ export const Deck: React.FC<DeckProps> = ({
             </span>
           </div>
           <div
-            className="deck-stat-item"
+            className="deck-stat-item deck-stat-time deck-tooltip-trigger"
             data-testid={`deck-${deckName.toLowerCase()}-time`}
-            title={t('dj.bar_sync_time_tooltip', {
-              current: currentTime.toFixed(3),
-              total: duration.toFixed(3),
-            })}
+            title={timeStatTooltip}
+            data-tooltip={timeStatTooltip}
+            tabIndex={0}
+            role="note"
+            aria-label={timeStatTooltip}
           >
             <span className="deck-stat-label">{t('dj.time')}</span>
             <span className="deck-stat-value">{formattedTimeRemaining}</span>

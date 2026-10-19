@@ -589,4 +589,41 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     assert.equal(cancelled.previousPosition, null);
     assert.equal(cancelled.displacementSec, null);
   });
+
+  // =========================================================================
+  // 10. Tooltips visuales CSS en BAR SYNC badge e indicador de tiempo (Fase 23.4)
+  // =========================================================================
+  it('10. Tooltips visuales CSS en BAR SYNC badge e indicador de tiempo', async () => {
+    const deckSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
+      'utf-8'
+    );
+    const cssSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/Deck.css'),
+      'utf-8'
+    );
+
+    // 10.1 BAR SYNC Badge: preserva title y añade data-tooltip, deck-tooltip-trigger y accesibilidad
+    assert.ok(deckSource.includes("title={barSyncBadgeTooltip}"), 'Badge conserva atributo title nativo');
+    assert.ok(deckSource.includes("data-tooltip={barSyncBadgeTooltip}"), 'Badge dispone de data-tooltip para renderizado CSS');
+    assert.ok(deckSource.includes("'deck-tooltip-trigger'"), 'Badge incluye clase deck-tooltip-trigger');
+    assert.ok(deckSource.includes('role="note"'), 'Elementos con tooltip definen role="note"');
+    assert.ok(deckSource.includes('tabIndex={0}'), 'Elementos con tooltip son accesibles vía teclado (tabIndex=0)');
+
+    // 10.2 Indicador de tiempo: preserva title y añade data-tooltip, deck-stat-time y deck-tooltip-trigger
+    assert.ok(deckSource.includes("title={timeStatTooltip}"), 'Tiempo conserva atributo title nativo');
+    assert.ok(deckSource.includes("data-tooltip={timeStatTooltip}"), 'Tiempo dispone de data-tooltip para renderizado CSS');
+    assert.ok(deckSource.includes('className="deck-stat-item deck-stat-time deck-tooltip-trigger"'), 'Tiempo incluye deck-stat-time y deck-tooltip-trigger');
+
+    // 10.3 Reglas CSS para tooltips: pseudo-elementos ::after, hover, focus-visible y z-index
+    assert.ok(cssSource.includes('.deck-tooltip-trigger {'), 'Deck.css define .deck-tooltip-trigger');
+    assert.ok(cssSource.includes('.deck-tooltip-trigger[data-tooltip]:not([data-tooltip=""])::after'), 'Deck.css define pseudo-elemento ::after con data-tooltip');
+    assert.ok(cssSource.includes('content: attr(data-tooltip);'), 'Deck.css extrae contenido mediante attr(data-tooltip)');
+    assert.ok(cssSource.includes('.deck-tooltip-trigger[data-tooltip]:not([data-tooltip=""]):hover::after'), 'Deck.css activa tooltip al hover');
+    assert.ok(cssSource.includes('.deck-tooltip-trigger[data-tooltip]:not([data-tooltip=""]):focus-visible::after'), 'Deck.css activa tooltip en foco de teclado focus-visible');
+    assert.ok(cssSource.includes('.deck-stat-time[data-tooltip]::after'), 'Deck.css alinea el tooltip de tiempo a la derecha');
+    assert.ok(cssSource.includes('position: relative;'), 'Deck.css establece position: relative en contenedor');
+    assert.ok(cssSource.includes('z-index: 1000;'), 'Deck.css asigna z-index elevado a los tooltips');
+    assert.ok(cssSource.includes('z-index: 25;'), 'Deck.css asigna contexto de apilamiento a deck-header');
+  });
 });

@@ -4,7 +4,9 @@
  * Base de datos: SystemDJ_Storage | Almacén: tracks
  */
 
-import type { Track, TrackAnalysis, HotCue } from '../../types/track.ts';
+import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../../types/track.ts';
+import { computeFileHash, getVerifiedBlobHash } from '../../utils/cryptoHash.ts';
+import { isDownbeatConfirmed, createSuggestedDownbeat } from '../../utils/downbeat.ts';
 
 export interface StoredTrackRecord {
   id: string;
@@ -20,10 +22,12 @@ export interface StoredTrackRecord {
     fileSize: number;
     mimeType: string;
     lastModified: number;
+    contentHash?: string;
   };
   analysis: Track['analysis'];
   mainCue?: number | null;
   hotCues?: HotCue[];
+  downbeat?: TrackDownbeat | null;
   dateAdded: number;
 }
 
@@ -142,9 +146,132 @@ export class IndexedDBStorage {
   }
 
   /**
+   * Evalúa la identidad del contenido y combina defensivamente las confirmaciones manuales.
+   * Si la identidad anterior y la actual no coinciden o no está demostrada, no transfiere confirmaciones manuales.
+   */
+  private evaluateIdentityAndMerge(
+    existing: StoredTrackRecord,
+    record: StoredTrackRecord,
+    incomingTrack: Track
+  ): void {
+    const existingHash = existing.fileMeta.contentHash;
+    const newHash = record.fileMeta.contentHash;
+
+    const bothHaveHash =
+      typeof existingHash === 'string' &&
+      existingHash.length === 64 &&
+      /^[0-9a-f]{64}$/i.test(existingHash) &&
+      typeof newHash === 'string' &&
+      newHash.length === 64 &&
+      /^[0-9a-f]{64}$/i.test(newHash);
+
+    if (bothHaveHash && existingHash.toLowerCase() === newHash.toLowerCase()) {
+      // Identidad verificada coincidente: conservar confirmaciones manuales existentes si no se especifican en el nuevo
+      if (
+        (!incomingTrack.hotCues || incomingTrack.hotCues.length === 0) &&
+        existing.hotCues &&
+        existing.hotCues.length > 0
+      ) {
+        record.hotCues = existing.hotCues;
+      }
+      if (incomingTrack.mainCue === undefined && existing.mainCue !== undefined) {
+        record.mainCue = existing.mainCue;
+      }
+
+      // Preservar confirmación válida de downbeat si el entrante no trae una confirmación explícita para este hash
+      if (!isDownbeatConfirmed(record.downbeat, newHash)) {
+        if (isDownbeatConfirmed(existing.downbeat, newHash)) {
+          record.downbeat = existing.downbeat;
+          incomingTrack.downbeat = existing.downbeat;
+        } else if (record.downbeat == null) {
+          if (existing.downbeat?.status === 'suggested') {
+            record.downbeat = existing.downbeat;
+            incomingTrack.downbeat = existing.downbeat;
+          }
+        }
+      } else {
+        incomingTrack.downbeat = record.downbeat;
+      }
+
+      if (
+        record.analysis.status === 'pending' &&
+        existing.analysis &&
+        existing.analysis.status === 'analyzed'
+      ) {
+        record.analysis = existing.analysis;
+        incomingTrack.analysis = existing.analysis;
+      }
+    } else {
+      // Huellas distintas o falta de identidad demostrable en uno o ambos registros: invalidar datos dependientes del contenido
+      record.analysis = { status: 'pending' };
+      incomingTrack.analysis = record.analysis;
+      record.mainCue = null;
+      record.hotCues = [];
+
+      // No transferir confirmaciones antiguas.
+      // Solo conservar record.downbeat si pertenece específicamente al nuevo contenido verificado (newHash)
+      if (newHash && isDownbeatConfirmed(record.downbeat, newHash)) {
+        incomingTrack.downbeat = record.downbeat;
+      } else {
+        record.downbeat = null;
+        incomingTrack.downbeat = null;
+      }
+    }
+  }
+
+  /**
    * Guarda una pista y su blob binario en almacenamiento local persistente.
    */
   public async saveTrack(track: Track, audioBlob: Blob): Promise<SaveTrackResult> {
+    // 0. Comprobar si audioBlob ya cuenta con una huella criptográfica verificada para esta instancia exacta
+    const verifiedHash = audioBlob ? getVerifiedBlobHash(audioBlob) : undefined;
+    let contentHash: string | undefined;
+
+    if (verifiedHash && track.fileMeta?.contentHash === verifiedHash) {
+      // Reutilización segura demostrada: este Blob exacto fue procesado por computeFileHash con este hash exacto
+      contentHash = verifiedHash;
+    } else {
+      // Invalida cualquier hash heredado o no demostrado antes de iniciar el cálculo
+      contentHash = undefined;
+      if (track.fileMeta?.contentHash) {
+        delete track.fileMeta.contentHash;
+      }
+
+      if (audioBlob && typeof audioBlob.arrayBuffer === 'function') {
+        try {
+          contentHash = await computeFileHash(audioBlob as File);
+          if (track.fileMeta) {
+            track.fileMeta.contentHash = contentHash;
+          }
+        } catch (err) {
+          console.warn('[IndexedDBStorage] No se pudo calcular contentHash antes de guardar:', err);
+          contentHash = undefined;
+          if (track.fileMeta?.contentHash) {
+            delete track.fileMeta.contentHash;
+          }
+        }
+      }
+    }
+
+    // Validar la estructura del downbeat inicial frente al hash verificado del Blob
+    let initialDownbeat: TrackDownbeat | null = track.downbeat ?? null;
+    if (initialDownbeat?.status === 'confirmed') {
+      if (!contentHash || !isDownbeatConfirmed(initialDownbeat, contentHash)) {
+        // La confirmación no corresponde al contenido exacto que se guarda o es inválida: degradar o anular
+        initialDownbeat = initialDownbeat.suggestedPosition != null &&
+          typeof initialDownbeat.suggestedPosition === 'number' &&
+          Number.isFinite(initialDownbeat.suggestedPosition) &&
+          initialDownbeat.suggestedPosition >= 0
+            ? { status: 'suggested', suggestedPosition: Number(initialDownbeat.suggestedPosition.toFixed(3)), confirmation: null }
+            : null;
+      }
+    } else if (initialDownbeat?.status === 'suggested') {
+      const validSug = createSuggestedDownbeat(initialDownbeat.suggestedPosition);
+      initialDownbeat = validSug.status === 'suggested' ? validSug : null;
+    } else if (initialDownbeat) {
+      initialDownbeat = null;
+    }
+
     const record: StoredTrackRecord = {
       id: track.id,
       title: track.title,
@@ -154,40 +281,24 @@ export class IndexedDBStorage {
       durationFormatted: track.durationFormatted,
       type: track.type,
       audioBlob,
-      fileMeta: track.fileMeta || {
-        fileName: track.title,
-        fileSize: audioBlob.size,
-        mimeType: audioBlob.type || 'audio/mpeg',
-        lastModified: Date.now(),
+      fileMeta: {
+        fileName: track.fileMeta?.fileName || track.title,
+        fileSize: track.fileMeta?.fileSize ?? audioBlob.size,
+        mimeType: track.fileMeta?.mimeType || audioBlob.type || 'audio/mpeg',
+        lastModified: track.fileMeta?.lastModified || Date.now(),
+        ...(contentHash ? { contentHash } : {}),
       },
       analysis: track.analysis,
       mainCue: track.mainCue ?? null,
       hotCues: track.hotCues ?? [],
+      downbeat: initialDownbeat,
       dateAdded: track.dateAdded || Date.now(),
     };
 
-    // Si ya existía un registro previo con este mismo ID y el archivo cambió,
-    // invalidar el análisis previo para evitar asociar métricas de otra canción
+    // Si ya existía un registro previo con este mismo ID en memoria
     const existingMem = this.memoryStore.get(record.id);
     if (existingMem) {
-      if ((!track.hotCues || track.hotCues.length === 0) && existingMem.hotCues && existingMem.hotCues.length > 0) {
-        record.hotCues = existingMem.hotCues;
-      }
-      if (track.mainCue === undefined && existingMem.mainCue !== undefined) {
-        record.mainCue = existingMem.mainCue;
-      }
-
-      const fileChanged =
-        existingMem.fileMeta.fileSize !== record.fileMeta.fileSize ||
-        existingMem.fileMeta.fileName !== record.fileMeta.fileName ||
-        existingMem.fileMeta.lastModified !== record.fileMeta.lastModified;
-
-      if (fileChanged) {
-        record.analysis = { status: 'pending' };
-        track.analysis = record.analysis;
-        record.mainCue = null;
-        record.hotCues = [];
-      }
+      this.evaluateIdentityAndMerge(existingMem, record, track);
     }
 
     const keepInMemoryOnly = (reason: SaveTrackResult['reason']): SaveTrackResult => {
@@ -220,29 +331,12 @@ export class IndexedDBStorage {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
 
-        // Comprobar si ya existe en la base de datos para detectar reemplazo de archivo
+        // Comprobar si ya existe en la base de datos para detectar reemplazo de archivo o fusión defensiva
         const getReq = store.get(record.id);
         getReq.onsuccess = () => {
           const existingDb = getReq.result as StoredTrackRecord | undefined;
           if (existingDb) {
-            if ((!track.hotCues || track.hotCues.length === 0) && existingDb.hotCues && existingDb.hotCues.length > 0) {
-              record.hotCues = existingDb.hotCues;
-            }
-            if (track.mainCue === undefined && existingDb.mainCue !== undefined) {
-              record.mainCue = existingDb.mainCue;
-            }
-
-            const fileChanged =
-              existingDb.fileMeta.fileSize !== record.fileMeta.fileSize ||
-              existingDb.fileMeta.fileName !== record.fileMeta.fileName ||
-              existingDb.fileMeta.lastModified !== record.fileMeta.lastModified;
-
-            if (fileChanged) {
-              record.analysis = { status: 'pending' };
-              track.analysis = record.analysis;
-              record.mainCue = null;
-              record.hotCues = [];
-            }
+            this.evaluateIdentityAndMerge(existingDb, record, track);
           }
           store.put(record);
         };
@@ -405,9 +499,22 @@ export class IndexedDBStorage {
    * sin reescribir ni clonar el archivo binario de audio (audioBlob).
    * Devuelve false si la pista ya no existe (evita escrituras obsoletas de pistas eliminadas).
    */
-  public async updateTrackAnalysis(id: string, analysis: TrackAnalysis): Promise<boolean> {
+  public async updateTrackAnalysis(
+    id: string,
+    analysis: TrackAnalysis,
+    expectedContentHash?: string
+  ): Promise<boolean> {
     // 1. Actualizar almacén de memoria si la pista existe allí
     const memRecord = this.memoryStore.get(id);
+    if (
+      expectedContentHash &&
+      memRecord?.fileMeta.contentHash &&
+      memRecord.fileMeta.contentHash !== expectedContentHash
+    ) {
+      // El contenido en memoria cambió durante el análisis: descartar resultado obsoleto
+      return false;
+    }
+
     if (memRecord) {
       memRecord.analysis = analysis;
     }
@@ -433,6 +540,16 @@ export class IndexedDBStorage {
           const record = getRequest.result as StoredTrackRecord | undefined;
           if (!record) {
             // La pista fue eliminada durante el análisis: evitar resurrección o escritura obsoleta
+            resolve(false);
+            return;
+          }
+
+          if (
+            expectedContentHash &&
+            record.fileMeta.contentHash &&
+            record.fileMeta.contentHash !== expectedContentHash
+          ) {
+            // El contenido persistido cambió durante el análisis: descartar resultado obsoleto
             resolve(false);
             return;
           }
@@ -600,6 +717,158 @@ export class IndexedDBStorage {
   }
 
   /**
+   * Actualiza atómicamente la información de downbeat y métrica de compás de una pista.
+   * Valida que la confirmación coincida con la identidad del contenido persistido (contentHash).
+   * Devuelve false si la pista no existe, si el hash esperado difiere, o si la confirmación no pertenece al contenido.
+   */
+  public async updateTrackDownbeat(
+    id: string,
+    downbeat: TrackDownbeat,
+    expectedContentHash?: string
+  ): Promise<boolean> {
+    // 1. Validar la estructura y coherencia del downbeat entrante
+    if (downbeat.status === 'confirmed') {
+      if (!isDownbeatConfirmed(downbeat, expectedContentHash)) {
+        return false;
+      }
+    } else if (downbeat.status === 'suggested') {
+      if (
+        downbeat.suggestedPosition == null ||
+        typeof downbeat.suggestedPosition !== 'number' ||
+        !Number.isFinite(downbeat.suggestedPosition) ||
+        downbeat.suggestedPosition < 0
+      ) {
+        return false;
+      }
+    } else if (downbeat.status !== 'none') {
+      return false;
+    }
+
+    const wasMemoryOnly = this.memoryOnlyIds.has(id);
+    let db: IDBDatabase | null = null;
+    try {
+      db = await this.init();
+    } catch {
+      db = null;
+    }
+
+    // Caso: Pista retenida exclusivamente en memoria o IndexedDB no disponible
+    if (wasMemoryOnly || !db) {
+      const memRecord = this.memoryStore.get(id);
+      if (!memRecord) return false;
+
+      // Si se especificó expectedContentHash, verificar coincidencia
+      if (
+        expectedContentHash &&
+        (!memRecord.fileMeta.contentHash || memRecord.fileMeta.contentHash !== expectedContentHash)
+      ) {
+        return false;
+      }
+
+      // Si es confirmación manual, exigir que la pista en memoria tenga un contentHash verificado coincidente
+      if (downbeat.status === 'confirmed') {
+        if (!memRecord.fileMeta.contentHash || !isDownbeatConfirmed(downbeat, memRecord.fileMeta.contentHash)) {
+          return false;
+        }
+      }
+
+      memRecord.downbeat = downbeat;
+      return true;
+    }
+
+    // Caso: IndexedDB disponible
+    // IMPORTANTE: No modificar this.memoryStore hasta que la transacción en IndexedDB termine exitosamente
+    return new Promise<boolean>((resolve) => {
+      try {
+        const tx = db!.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const getRequest = store.get(id);
+
+        getRequest.onsuccess = () => {
+          const record = getRequest.result as StoredTrackRecord | undefined;
+          if (!record) {
+            resolve(false);
+            return;
+          }
+
+          if (
+            expectedContentHash &&
+            (!record.fileMeta.contentHash || record.fileMeta.contentHash !== expectedContentHash)
+          ) {
+            resolve(false);
+            return;
+          }
+
+          if (downbeat.status === 'confirmed') {
+            if (!record.fileMeta.contentHash || !isDownbeatConfirmed(downbeat, record.fileMeta.contentHash)) {
+              resolve(false);
+              return;
+            }
+          }
+
+          record.downbeat = downbeat;
+          store.put(record);
+        };
+
+        getRequest.onerror = () => resolve(false);
+
+        tx.oncomplete = () => {
+          // Solo al completarse exitosamente la transacción se sincroniza el almacén en memoria
+          const memRecord = this.memoryStore.get(id);
+          if (memRecord) {
+            memRecord.downbeat = downbeat;
+          }
+          resolve(true);
+        };
+
+        tx.onerror = (event) => {
+          console.warn('[IndexedDBStorage] Error al persistir downbeat de pista:', event);
+          resolve(false);
+        };
+
+        tx.onabort = () => resolve(false);
+      } catch (err) {
+        console.warn('[IndexedDBStorage] Excepción al actualizar downbeat de pista:', err);
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Obtiene exclusivamente la información de downbeat de una pista almacenada.
+   */
+  public async getTrackDownbeat(id: string): Promise<TrackDownbeat | null> {
+    const memRecord = this.memoryStore.get(id);
+    if (memRecord) {
+      return memRecord.downbeat ?? null;
+    }
+
+    const db = await this.init();
+    if (!db) return null;
+
+    return new Promise<TrackDownbeat | null>((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(id);
+
+        request.onsuccess = () => {
+          const record = request.result as StoredTrackRecord | undefined;
+          if (record) {
+            this.memoryStore.set(id, record);
+            resolve(record.downbeat ?? null);
+          } else {
+            resolve(null);
+          }
+        };
+        request.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /**
    * Obtiene una pista completa por su identificador único desde memoria o IndexedDB.
    */
   public async getTrack(id: string): Promise<Track | null> {
@@ -680,6 +949,7 @@ export class IndexedDBStorage {
       analysis: record.analysis || { status: 'pending' },
       mainCue: record.mainCue ?? null,
       hotCues: record.hotCues ? [...record.hotCues] : [],
+      downbeat: record.downbeat ?? null,
       dateAdded: record.dateAdded,
     };
   }

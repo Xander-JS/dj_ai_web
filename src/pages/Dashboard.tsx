@@ -4,8 +4,8 @@ import { Play } from 'lucide-react';
 import { Card, CardBody } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
-import { Badge } from '../components/ui/Badge';
-import { MOCK_RECENT_TRACKS, MOCK_RECOMMENDATIONS, MOCK_STATS } from '../mock/dashboard';
+import { MOCK_RECENT_TRACKS, MOCK_STATS } from '../mock/dashboard';
+import { SmartRecommendationCard } from '../components/dashboard/SmartRecommendationCard';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
@@ -66,7 +66,7 @@ export const Dashboard: React.FC = () => {
           </CardBody>
         </Card>
 
-        {/* Stats & Recommendations */}
+        {/* Stats & Smart Recommendations */}
         <div className="dashboard-stats-col">
           
           <Card>
@@ -82,27 +82,7 @@ export const Dashboard: React.FC = () => {
             </CardBody>
           </Card>
 
-          <Card elevated>
-            <CardBody>
-              <h3 className="dashboard-rec-title">{t('dashboard.recommendations')}</h3>
-              <div className="dashboard-rec-list">
-                {MOCK_RECOMMENDATIONS.map(rec => (
-                  <div key={rec.id} className="dashboard-rec-item">
-                    <div className="dashboard-rec-info">
-                      <div className="dashboard-rec-cover"></div>
-                      <div>
-                        <div className="dashboard-rec-name">{rec.title}</div>
-                        <div className="dashboard-rec-meta">
-                          {rec.tracks} {t('common.tracks')}
-                        </div>
-                      </div>
-                    </div>
-                    <Badge variant="outline">{rec.type}</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardBody>
-          </Card>
+          <SmartRecommendationCard />
 
         </div>
       </div>

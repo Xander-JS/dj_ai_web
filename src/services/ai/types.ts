@@ -47,6 +47,8 @@ export interface TempoEvaluation {
   tempoScore: number | null;
 }
 
+export type RecommendationEvidenceStatus = 'complete' | 'partial';
+
 export interface TrackRecommendation {
   trackId: string;
   title: string;
@@ -56,10 +58,11 @@ export interface TrackRecommendation {
   camelot?: MusicalKeyCamelot;
   energy?: number;
   compatibilityScore: number | null; // null cuando no hay datos para calcular compatibilidad
+  evidenceStatus: RecommendationEvidenceStatus;
   justification: string;       // Razón musical verificada (armonía, tempo, energía)
   transitionSuggestion: string; // Sugerencia práctica de técnica de transición
   isMock: boolean;             // Indica explícitamente si procede de simulación o de llamada real a Gemini
-  isAnalysisVerified?: boolean; // Indica explícitamente si BPM, Key y Energía provienen de análisis local verificado
+  isAnalysisVerified?: boolean; // Indica si BPM y tonalidad proceden del análisis local; la energía se incluye solo si es válida
   harmonicEvaluation?: HarmonicEvaluation;
   tempoEvaluation?: TempoEvaluation;
 }
@@ -82,6 +85,8 @@ export type AIRecommendationErrorCode =
 export interface AIRecommendationResponse {
   success: boolean;
   recommendations: TrackRecommendation[];
+  /** Candidates omitted because neither local BPM nor local key could be evaluated. */
+  insufficientCandidateCount?: number;
   isMock: boolean;
   model?: string;
   warning?: string;

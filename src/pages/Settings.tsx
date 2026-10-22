@@ -12,8 +12,7 @@ export const Settings: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>('appearance');
   const [isDarkTheme, setIsDarkTheme] = useState(
-    document.documentElement.getAttribute('data-theme') === 'dark' || 
-    !document.documentElement.hasAttribute('data-theme')
+    document.documentElement.getAttribute('data-theme') === 'dark'
   );
 
   const toggleTheme = () => {

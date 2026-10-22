@@ -15,7 +15,7 @@ import { validateAudioFile, createTrackFromFile } from '../utils/audioValidation
 import { computeFileHash } from '../utils/cryptoHash';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { audioEngine } from '../audio';
-import { useDJStore, djStore } from '../store/useDJStore';
+import { useDJStore } from '../store/useDJStore';
 import { analysisSyncManager } from '../services/analysis';
 import { keyToCamelot } from '../audio/analysis/camelotMapper';
 import type { Track, AnalysisStatus, MusicalKeyCamelot } from '../types/track';
@@ -393,11 +393,9 @@ export const Library: React.FC = () => {
           text: t('library.load_success', { title: trackToLoad.title, deck: deckLabel }),
         });
       } else {
-        const snapshot = djStore.getSnapshot();
-        const errMessage = deckId === 'A' ? snapshot.deckA.errorMessage : snapshot.deckB.errorMessage;
         setFeedback({
           type: 'error',
-          text: errMessage || t('library.load_error', { title: trackToLoad.title, deck: deckLabel }),
+          text: t('library.load_error', { title: trackToLoad.title, deck: deckLabel }),
         });
       }
     } catch (err) {

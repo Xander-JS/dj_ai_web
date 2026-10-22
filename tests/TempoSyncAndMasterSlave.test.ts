@@ -167,6 +167,28 @@ describe('Fase 1.1: Evidencia de compatibilidad de tempo', () => {
     const ambiguous = { ...analysis(120), isAmbiguous: true };
     assert.equal(assessTempoCompatibility(ambiguous, analysis(120)).status, 'insufficient_data');
   });
+
+  it('rechaza BPM y candidatos alternativos ausentes, no finitos, no positivos o vacíos', () => {
+    const valid = analysis(120, [60, 240]);
+    const invalidAnalyses: Track['analysis'][] = [
+      { ...valid, bpm: NaN },
+      { ...valid, bpm: 0 },
+      { ...valid, alternateBpm: [60, Infinity] },
+      { ...valid, alternateBpm: [60, 0] },
+      { ...valid, alternateBpm: [] },
+    ];
+    for (const invalid of invalidAnalyses) {
+      assert.equal(assessTempoCompatibility(invalid, valid).status, 'insufficient_data');
+    }
+  });
+
+  it('devuelve el mismo resultado para entradas idénticas y no confunde candidatos 1:1 con 2:1', () => {
+    const master = analysis(124, [62, 125]);
+    const slave = analysis(125, [62.5, 124]);
+    const first = assessTempoCompatibility(master, slave);
+    assert.deepEqual(first, { status: 'no_harmonic_conflict', reason: null });
+    assert.deepEqual(assessTempoCompatibility(master, slave), first);
+  });
 });
 
 function assertSyncRoleInvariant(snapshot: ReturnType<typeof djStore.getSnapshot>): void {
@@ -521,6 +543,42 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(stateB.isSyncActive, false);
       assert.equal(stateB.playbackRate, 1.0);
       assert.equal(stateB.errorCode, 'sync_failed');
+    });
+
+    it('3.4a Rechaza ratios apenas fuera de ±8% aunque el redondeo a cuatro decimales caiga en el límite', async () => {
+      for (const [masterBpm, label] of [[108.004, 'upper'], [91.996, 'lower']] as const) {
+        const { track: trackA, file: fileA } = createAnalyzedTrack(`near_limit_master_${label}.mp3`, masterBpm);
+        const { track: trackB, file: fileB } = createAnalyzedTrack(`near_limit_slave_${label}.mp3`, 100.0);
+        await indexedDBStorage.saveTrack(trackA, fileA);
+        await indexedDBStorage.saveTrack(trackB, fileB);
+        await djStore.loadTrackToDeckA(trackA);
+        await djStore.loadTrackToDeckB(trackB);
+
+        assert.equal(djStore.syncDeck('B'), false, `${label} raw rate is outside the range`);
+        const stateB = djStore.getSnapshot().deckB;
+        assert.equal(stateB.isSyncActive, false);
+        assert.equal(stateB.playbackRate, 1.0);
+        assert.equal(audioEngine.getDeckPlaybackRate('B'), 1.0);
+      }
+    });
+
+    it('3.4b Desacopla el Slave si el pitch del Master deja su ratio exacto apenas fuera del límite', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('near_limit_master_pitch.mp3', 100.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('near_limit_slave_pitch.mp3', 99.996);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+
+      assert.equal(djStore.syncDeck('B'), true);
+      assert.equal(djStore.getSnapshot().deckB.playbackRate, 1.0);
+      djStore.setPitchDeckA(100);
+
+      const state = djStore.getSnapshot();
+      assert.equal(state.deckB.isSyncActive, false);
+      assert.equal(state.deckB.playbackRate, 1.0);
+      assert.equal(audioEngine.getDeckPlaybackRate('B'), 1.0);
+      assert.match(state.deckB.errorMessage ?? '', /excedió el rango de pitch/i);
     });
 
     it('3.5 No aplica relaciones automáticas de medio tiempo o doble tiempo', async () => {

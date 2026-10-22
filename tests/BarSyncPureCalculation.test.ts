@@ -22,6 +22,7 @@ function createValidMasterInput(overrides: Partial<BarSyncDeckInput> = {}): BarS
     currentTime: 10.500,
     duration: 300.0,
     bpm: 120.0,
+    analysis: createBarSyncAnalysis(overrides.bpm ?? 120.0),
     playbackRate: 1.0,
     downbeat: createManualDownbeatConfirmation({
       position: 1.000,
@@ -39,6 +40,7 @@ function createValidSlaveInput(overrides: Partial<BarSyncDeckInput> = {}): BarSy
     currentTime: 8.200,
     duration: 250.0,
     bpm: 120.0,
+    analysis: createBarSyncAnalysis(overrides.bpm ?? 120.0),
     playbackRate: 1.0,
     downbeat: createManualDownbeatConfirmation({
       position: 0.500,
@@ -47,6 +49,17 @@ function createValidSlaveInput(overrides: Partial<BarSyncDeckInput> = {}): BarSy
     }),
     contentHash: HASH_SLAVE,
     ...overrides,
+  };
+}
+
+function createBarSyncAnalysis(bpm: number) {
+  return {
+    status: 'analyzed' as const,
+    bpm,
+    bpmConfidence: 0.95,
+    isAmbiguous: false,
+    alternateBpm: [bpm * 0.5, bpm * 2],
+    beatUnit: { value: 4 as const, status: 'confirmed' as const, source: 'manual' as const },
   };
 }
 
@@ -210,7 +223,7 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
 
     assert.equal(resMetricMismatch.status, 'rejected_metric_mismatch');
     assert.equal(resMetricMismatch.targetPosition, null);
-    assert.match(resMetricMismatch.reason!, /Discrepancia métrica musical: Master es 4\/X pero Slave es 3\/X/i);
+    assert.match(resMetricMismatch.reason!, /Discrepancia métrica musical: Master es 4\/4 pero Slave es 3\/4/i);
   });
 
   // 9. BPM efectivo inválido, cero, negativo, NaN o infinito
@@ -469,6 +482,94 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
   it('18. Rechaza velocidades fuera del límite de pitch ±8% sin proponer posición', () => {
     const result = calculateBarSyncPlan({
       master: createValidMasterInput({ playbackRate: 1.0801 }),
+      slave: createValidSlaveInput(),
+    });
+    assert.equal(result.status, 'rejected_limits');
+    assert.equal(result.targetPosition, null);
+  });
+
+  it('19. Requiere beatUnit confirmado manualmente en ambas pistas', () => {
+    for (const beatUnit of [undefined, { value: 4, status: 'provisional', source: 'analysis' }, { value: 7, status: 'confirmed', source: 'manual' }]) {
+      const result = calculateBarSyncPlan({
+        master: createValidMasterInput(),
+        slave: createValidSlaveInput({ analysis: { ...createBarSyncAnalysis(120), beatUnit: beatUnit as never } }),
+      });
+      assert.equal(result.status, 'rejected_unconfirmed');
+      assert.equal(result.targetPosition, null);
+    }
+  });
+
+  it('20. Acepta unidades manuales coincidentes y rechaza unidades métricas diferentes', () => {
+    const matching = calculateBarSyncPlan({ master: createValidMasterInput(), slave: createValidSlaveInput() });
+    assert.equal(matching.status, 'armed');
+
+    const differentUnit = calculateBarSyncPlan({
+      master: createValidMasterInput(),
+      slave: createValidSlaveInput({
+        analysis: { ...createBarSyncAnalysis(120), beatUnit: { value: 8, status: 'confirmed', source: 'manual' } },
+      }),
+    });
+    assert.equal(differentUnit.status, 'rejected_metric_mismatch');
+    assert.equal(differentUnit.targetPosition, null);
+  });
+
+  it('21. Rechaza BPM ausente, inconsistente, no analizado o con confianza insuficiente', () => {
+    const invalidAnalyses = [
+      { ...createBarSyncAnalysis(120), bpm: undefined },
+      { ...createBarSyncAnalysis(120), status: 'pending' as const },
+      { ...createBarSyncAnalysis(120), bpmConfidence: 0.49 },
+    ];
+    for (const analysis of invalidAnalyses) {
+      const result = calculateBarSyncPlan({
+        master: createValidMasterInput({ analysis }),
+        slave: createValidSlaveInput(),
+      });
+      assert.equal(result.status, 'rejected_confidence');
+      assert.equal(result.targetPosition, null);
+    }
+    const inconsistent = calculateBarSyncPlan({
+      master: createValidMasterInput({ bpm: 121, analysis: createBarSyncAnalysis(120) }),
+      slave: createValidSlaveInput(),
+    });
+    assert.equal(inconsistent.status, 'rejected_confidence');
+  });
+
+  it('22. Rechaza análisis ambiguo y una hipótesis cruzada 0.5x/2x sin resolver', () => {
+    const ambiguous = calculateBarSyncPlan({
+      master: createValidMasterInput({ analysis: { ...createBarSyncAnalysis(120), isAmbiguous: true } }),
+      slave: createValidSlaveInput(),
+    });
+    assert.equal(ambiguous.status, 'rejected_confidence');
+
+    const halfTime = calculateBarSyncPlan({
+      master: createValidMasterInput(),
+      slave: createValidSlaveInput({
+        bpm: 60,
+        analysis: { ...createBarSyncAnalysis(60), alternateBpm: [30, 120] },
+      }),
+    });
+    assert.equal(halfTime.status, 'rejected_confidence');
+    assert.equal(halfTime.targetPosition, null);
+  });
+
+  it('23. Rechaza una confirmación con beatsPerBar inválido antes de calcular un seek', () => {
+    const invalidDownbeat = createManualDownbeatConfirmation({
+      position: 0.5,
+      beatsPerBar: 4,
+      contentHash: HASH_SLAVE,
+    });
+    (invalidDownbeat.confirmation as { beatsPerBar: number }).beatsPerBar = 0;
+    const result = calculateBarSyncPlan({
+      master: createValidMasterInput(),
+      slave: createValidSlaveInput({ downbeat: invalidDownbeat }),
+    });
+    assert.equal(result.status, 'rejected_unconfirmed');
+    assert.equal(result.targetPosition, null);
+  });
+
+  it('24. Rechaza BPM efectivo explícito inconsistente con BPM analizado y playbackRate', () => {
+    const result = calculateBarSyncPlan({
+      master: createValidMasterInput({ effectiveBpm: 121 }),
       slave: createValidSlaveInput(),
     });
     assert.equal(result.status, 'rejected_limits');

@@ -326,6 +326,28 @@ class DJStore {
     }
   }
 
+  /** Publishes the Master/Slave relationship and both role flags as one store snapshot. */
+  private setSyncRoles(
+    masterDeckId: DeckId | null,
+    deckUpdates: Partial<Record<DeckId, Partial<DeckStoreState>>> = {}
+  ): void {
+    this.setState({
+      syncMasterDeck: masterDeckId,
+      deckA: {
+        ...this.state.deckA,
+        ...deckUpdates.A,
+        isMaster: masterDeckId === 'A',
+        isSyncActive: masterDeckId === 'B',
+      },
+      deckB: {
+        ...this.state.deckB,
+        ...deckUpdates.B,
+        isMaster: masterDeckId === 'B',
+        isSyncActive: masterDeckId === 'A',
+      },
+    });
+  }
+
   private applyHotCuesToMatchingDecks(trackId: string, hotCues: HotCue[]): void {
     for (const deckId of ['A', 'B'] as const) {
       const deck = this.getDeckState(deckId);
@@ -335,7 +357,7 @@ class DJStore {
     }
   }
 
-  /** Remove the SYNC link involving a deck whose track is being replaced or failed. */
+  /** Remove the SYNC link involving a deck whose track is being replaced. */
   private decoupleSyncForDeck(deckId: DeckId): void {
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     if (this.state.syncMasterDeck !== deckId && this.state.syncMasterDeck !== otherDeckId) return;
@@ -496,13 +518,8 @@ class DJStore {
    * Devuelve `true` si la pista quedó cargada y lista para reproducirse.
    */
   public async loadTrackToDeck(deckId: DeckId, track: Track): Promise<boolean> {
-    this.cancelCup(deckId);
+    const oppositeDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     const token = ++this.loadTokens[deckId];
-    const initialPitch = this.getDeckState(deckId).playbackRate;
-
-    // Detener y liberar el audio anterior en este deck ANTES de decodificar
-    audioEngine.unloadDeck(deckId);
-    this.checkStopTimeLoop();
 
     // Recuperar análisis existente de IndexedDB si la pista recibida en memoria aún no lo tenía actualizado
     let effectiveTrack = track;
@@ -552,19 +569,6 @@ class DJStore {
 
     if (token !== this.loadTokens[deckId]) return false;
 
-    this.setDeck(deckId, {
-      track: effectiveTrack,
-      playbackState: 'loading',
-      currentTime: 0,
-      duration: 0,
-      calculatedBpm: computeEffectiveBpm(effectiveTrack, initialPitch),
-      keyStr: getAnalyzedKey(effectiveTrack),
-      mainCue: effectiveTrack.mainCue ?? null,
-      hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
-      errorCode: null,
-      errorMessage: null,
-    });
-
     // 1. Obtener el blob de audio binario real
     let audioBlob: Blob | null = effectiveTrack.source.blob || effectiveTrack.source.file || null;
     try {
@@ -582,12 +586,6 @@ class DJStore {
     if (token !== this.loadTokens[deckId]) return false; // Carga descartada por una más reciente en este deck
 
     if (!audioBlob) {
-      this.decoupleSyncForDeck(deckId);
-      this.setDeck(deckId, {
-        playbackState: 'error',
-        errorCode: 'file_missing',
-        errorMessage: `El archivo de audio no se encuentra disponible para "${track.title}".`,
-      });
       return false;
     }
 
@@ -602,23 +600,32 @@ class DJStore {
 
       if (token !== this.loadTokens[deckId]) return false;
 
-      // 4. Cargar en el motor y sincronizar velocidad y volumen
+      // Commit only after the replacement is decoded. Until here, the current
+      // track, transport, pitch and SYNC relationship remain untouched.
+      this.cancelCup(deckId);
+      this.cancelPhaseAlignment(deckId);
+      this.cancelPhaseAlignment(oppositeDeckId);
+      this.decoupleSyncForDeck(deckId);
+
+      // 4. Replace the audio and synchronize the current pitch and volume.
       audioEngine.loadBufferToDeck(deckId, audioBuffer);
+      audioEngine.setDeckPitchBend(deckId, 0);
       audioEngine.setDeckPlaybackRate(deckId, this.getDeckState(deckId).playbackRate);
       audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : this.state.masterVolume);
 
-      const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
-      // Si este deck era Master o Esclavo, desacoplar vínculos.
-      this.decoupleSyncForDeck(deckId);
-
       this.setDeck(deckId, {
+        track: effectiveTrack,
         duration: audioBuffer.duration,
         currentTime: 0,
         playbackState: 'stopped',
+        calculatedBpm: computeEffectiveBpm(effectiveTrack, this.getDeckState(deckId).playbackRate),
+        keyStr: getAnalyzedKey(effectiveTrack),
         mainCue: effectiveTrack.mainCue ?? null,
         hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
+        pitchBend: 0,
         isSyncActive: false,
         isMaster: false,
+        phaseAlignment: { status: 'idle', progressPercent: 0 },
         barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
         errorCode: null,
         errorMessage: null,
@@ -626,9 +633,9 @@ class DJStore {
 
       // Si el otro deck tenía una preparación de BAR SYNC armada o alineada,
       // invalidarla porque su contexto métrico / Master ha cambiado.
-      const otherDeck = this.getDeckState(otherDeckId);
+      const otherDeck = this.getDeckState(oppositeDeckId);
       if (otherDeck.barSync?.status === 'armed' || otherDeck.barSync?.status === 'already_aligned') {
-        this.setDeck(otherDeckId, {
+        this.setDeck(oppositeDeckId, {
           barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
         });
       }
@@ -638,19 +645,12 @@ class DJStore {
         selectionToken: token,
         contentHash: effectiveTrack.fileMeta?.contentHash,
       };
+      this.checkStopTimeLoop();
 
       return true;
     } catch (err) {
       if (token !== this.loadTokens[deckId]) return false;
       console.error(`[useDJStore] Error decodificando la pista en Deck ${deckId}:`, err);
-      audioEngine.unloadDeck(deckId);
-      this.decoupleSyncForDeck(deckId);
-      this.setDeck(deckId, {
-        playbackState: 'error',
-        duration: 0,
-        errorCode: 'decode_failed',
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
       return false;
     }
   }
@@ -1115,18 +1115,19 @@ class DJStore {
     let isSyncActive = deckState.isSyncActive;
     if (isSyncActive) {
       isSyncActive = false;
-      if (this.state.syncMasterDeck === otherDeckId) {
-        this.setDeck(otherDeckId, { isMaster: false });
-        this.setState({ syncMasterDeck: null });
-      }
     }
 
-    this.setDeck(deckId, {
+    const pitchUpdate: Partial<DeckStoreState> = {
       pitch: clampedPitch,
       playbackRate: rate,
       calculatedBpm: computeEffectiveBpm(deckState.track, rate),
       isSyncActive,
-    });
+    };
+    if (deckState.isSyncActive && this.state.syncMasterDeck === otherDeckId) {
+      this.setSyncRoles(null, { [deckId]: pitchUpdate });
+    } else {
+      this.setDeck(deckId, pitchUpdate);
+    }
 
     // 2. Si este deck es el Master y el otro deck es Esclavo (isSyncActive), propagar nuevo tempo
     if (this.state.syncMasterDeck === deckId && otherDeck.isSyncActive && otherDeck.track) {
@@ -1147,12 +1148,11 @@ class DJStore {
           });
         } else {
           // Desacoplar esclavo de forma segura si el Master excede el rango de pitch alcanzable (±8%)
-          this.setDeck(otherDeckId, {
-            isSyncActive: false,
-            errorMessage: 'SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±8%).',
+          this.setSyncRoles(null, {
+            [otherDeckId]: {
+              errorMessage: 'SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±8%).',
+            },
           });
-          this.setDeck(deckId, { isMaster: false });
-          this.setState({ syncMasterDeck: null });
         }
       }
     }
@@ -1240,14 +1240,11 @@ class DJStore {
 
     // 1. Si SYNC ya está activo en este deck: DESACTIVAR conservando la velocidad actual
     if (slaveDeckId === deckId && slaveDeck.isSyncActive) {
-      this.setDeck(slaveDeckId, {
-        isSyncActive: false,
-      });
-
       // Si el otro deck era el Master y ya no tiene esclavos, liberar rol de Master
       if (this.state.syncMasterDeck === masterDeckId) {
-        this.setDeck(masterDeckId, { isMaster: false });
-        this.setState({ syncMasterDeck: null });
+        this.setSyncRoles(null);
+      } else {
+        this.setDeck(slaveDeckId, { isSyncActive: false });
       }
       return false;
     }
@@ -1318,23 +1315,14 @@ class DJStore {
     audioEngine.setDeckPlaybackRate(slaveDeckId, requiredRate);
 
     // 9. Actualizar estado garantizando asimetría Maestro/Esclavo
-    this.setState({ syncMasterDeck: masterDeckId });
-
-    // Deck Maestro
-    this.setDeck(masterDeckId, {
-      isMaster: true,
-      isSyncActive: false,
-    });
-
-    // Deck Esclavo
-    this.setDeck(slaveDeckId, {
-      isMaster: false,
-      isSyncActive: true,
-      pitch: targetPitch,
-      playbackRate: requiredRate,
-      calculatedBpm: Number((slaveBaseBpm * requiredRate).toFixed(1)),
-      errorCode: null,
-      errorMessage: null,
+    this.setSyncRoles(masterDeckId, {
+      [slaveDeckId]: {
+        pitch: targetPitch,
+        playbackRate: requiredRate,
+        calculatedBpm: Number((slaveBaseBpm * requiredRate).toFixed(1)),
+        errorCode: null,
+        errorMessage: null,
+      },
     });
 
     return true;
@@ -2128,28 +2116,10 @@ class DJStore {
     audioEngine.setDeckPitchBend(deckId, 0);
     audioEngine.unloadDeck(deckId);
     this.deckSelections[deckId] = null;
-    this.checkStopTimeLoop();
-
-    if (this.state.syncMasterDeck === deckId) {
-      // El Maestro fue descargado: desacoplar el Esclavo conservando su tempo actual
-      this.setState({ syncMasterDeck: null });
-      this.setDeck(otherDeckId, { isSyncActive: false, isMaster: false });
-    } else if (this.state.syncMasterDeck === otherDeckId) {
-      // El Esclavo fue descargado: desvincular el Maestro
-      this.setState({ syncMasterDeck: null });
-      this.setDeck(otherDeckId, { isMaster: false });
-    }
-
-    const otherDeck = this.getDeckState(otherDeckId);
-    if (otherDeck.barSync?.status === 'armed' || otherDeck.barSync?.status === 'already_aligned') {
-      this.setDeck(otherDeckId, {
-        barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
-      });
-    }
 
     const initialDeck = deckId === 'A' ? INITIAL_DECK_A : INITIAL_DECK_B;
     const currentDeck = this.getDeckState(deckId);
-    this.setDeck(deckId, {
+    const unloadedDeck: DeckStoreState = {
       ...initialDeck,
       pitch: currentDeck.pitch,
       playbackRate: currentDeck.playbackRate,
@@ -2157,7 +2127,23 @@ class DJStore {
       isMaster: false,
       phaseAlignment: { status: 'idle', progressPercent: 0 },
       barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+    };
+    const currentOtherDeck = this.getDeckState(otherDeckId);
+    const otherBarSync = currentOtherDeck.barSync?.status === 'armed' || currentOtherDeck.barSync?.status === 'already_aligned'
+      ? { status: 'idle' as const, preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null }
+      : currentOtherDeck.barSync;
+    const otherDeck = {
+      ...currentOtherDeck,
+      isSyncActive: false,
+      isMaster: false,
+      barSync: otherBarSync,
+    };
+    this.setState({
+      syncMasterDeck: null,
+      [deckId === 'A' ? 'deckA' : 'deckB']: unloadedDeck,
+      [otherDeckId === 'A' ? 'deckA' : 'deckB']: otherDeck,
     });
+    this.checkStopTimeLoop();
   }
 
   public unloadDeckA(): void {

@@ -360,7 +360,7 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       assert.equal(score, 0);
     });
 
-    test('Conserva justificaciones válidas de Gemini cuando no contradicen los datos comprobados', () => {
+    test('Sustituye texto libre del proveedor por la explicación técnica local aunque parezca compatible', () => {
       const harmonic = evaluateHarmonicCompatibility('12A', '12B'); // relativa mayor legítima
       const tempo = evaluateTempoCompatibility(124, 126); // en rango de pitch
 
@@ -368,7 +368,25 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
         'Transición armónica suave modulando hacia la relativa mayor con un intercambio progresivo de bajos.';
 
       const sanitized = sanitizeJustification(validGeminiText, harmonic, tempo);
-      assert.equal(sanitized, validGeminiText);
+      assert.ok(sanitized.includes('Validación técnica SYSTEM DJ'));
+      assert.ok(sanitized.includes(harmonic.description));
+      assert.ok(sanitized.includes(tempo.description));
+      assert.notEqual(sanitized, validGeminiText);
+    });
+
+    test('Reemplaza afirmaciones remotas cuando BPM o tonalidad no están disponibles localmente', () => {
+      const harmonic = evaluateHarmonicCompatibility(undefined, '8A');
+      const tempo = evaluateTempoCompatibility(124, 126);
+      const sanitized = sanitizeJustification(
+        'La armonía es perfecta y el tempo coincide exactamente.',
+        harmonic,
+        tempo
+      );
+
+      assert.ok(sanitized.includes('Validación técnica SYSTEM DJ'));
+      assert.ok(sanitized.includes('Tonalidad no disponible'));
+      assert.ok(!sanitized.includes('armonía es perfecta'));
+      assert.ok(!sanitized.includes('coincide exactamente'));
     });
 
     test('validateRecommendations aplica validación técnica y descarta IDs alucinados', () => {
@@ -390,12 +408,7 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       ];
 
       const validated = validateRecommendations(rawAiResponse, [candidate], false, ref);
-      assert.equal(validated.length, 1);
-      assert.equal(validated[0].trackId, 'c1');
-      assert.ok(validated[0].compatibilityScore <= 40);
-      assert.ok(validated[0].justification.includes('Validación técnica SYSTEM DJ'));
-      assert.equal(validated[0].harmonicEvaluation?.relation, 'incompatible');
-      assert.equal(validated[0].tempoEvaluation?.relation, 'out_of_range');
+      assert.deepEqual(validated, [], 'El modo remoto debe omitir el score 0 igual que el motor local');
     });
   });
 
@@ -479,10 +492,34 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       const result = await getTrackRecommendations(ref, [ref, cand], { forceMock: true });
       assert.equal(result.success, true);
       assert.equal(result.isMock, true);
-      assert.equal(result.model, 'local-heuristic-simulator');
+      assert.equal(result.model, 'local-deterministic-engine');
       assert.equal(result.recommendations.length, 1);
       assert.equal(result.recommendations[0].trackId, 'cand1');
       assert.ok(result.recommendations[0].compatibilityScore >= 70);
+    });
+
+    test('El modo local predeterminado es determinista y no intenta acceder a la red', async () => {
+      const ref = createStubTrack('ref', 'Ref Track', 'Artist', 124, '8A');
+      const cand = createStubTrack('cand1', 'Candidate Track', 'Artist', 126, '8B');
+      const originalFetch = globalThis.fetch;
+      let fetchCalls = 0;
+      globalThis.fetch = (async () => {
+        fetchCalls += 1;
+        throw new Error('El modo local no debe llamar fetch');
+      }) as typeof fetch;
+
+      try {
+        const first = await getTrackRecommendations(ref, [ref, cand]);
+        const second = await getTrackRecommendations(ref, [ref, cand]);
+
+        assert.equal(first.success, true);
+        assert.equal(first.isMock, true);
+        assert.equal(first.model, 'local-deterministic-engine');
+        assert.deepEqual(first.recommendations, second.recommendations);
+        assert.equal(fetchCalls, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     test('Recomendación real vía endpoint valida localmente contra la referencia sin aceptar alucinaciones', async () => {
@@ -511,19 +548,12 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       try {
         const result = await getTrackRecommendations(ref, [ref, cand], {
           endpointUrl: mockServer.url,
+          mode: 'remote',
         });
 
         assert.equal(result.success, true);
         assert.equal(result.isMock, false);
-        assert.equal(result.recommendations.length, 1);
-
-        const rec = result.recommendations[0];
-        // Comprobación de que la validación local corrigió la alucinación
-        assert.equal(rec.trackId, 'cand-bad');
-        assert.ok(rec.compatibilityScore <= 40, `El score debe ser <= 40 pero fue ${rec.compatibilityScore}`);
-        assert.equal(rec.harmonicEvaluation?.relation, 'incompatible');
-        assert.equal(rec.tempoEvaluation?.relation, 'out_of_range');
-        assert.ok(rec.justification.includes('Validación técnica SYSTEM DJ'));
+        assert.deepEqual(result.recommendations, [], 'El modo remoto omite candidatos cuyo score local es 0');
       } finally {
         await mockServer.close();
       }
@@ -548,6 +578,7 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       try {
         const result = await getTrackRecommendations(ref, [ref, cand], {
           endpointUrl: mockServer.url,
+          mode: 'remote',
         });
 
         assert.equal(result.success, false);
@@ -569,6 +600,7 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
         const result = await getTrackRecommendations(ref, [ref, cand], {
           endpointUrl: mockServer.url,
           timeoutMs: 40,
+          mode: 'remote',
         });
 
         assert.equal(result.success, false);
@@ -774,6 +806,154 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       assert.equal(validated[0].energy, 8);
       assert.equal(validated[0].isAnalysisVerified, true);
       assert.equal(validated[0].isMock, false);
+      assert.equal(validated[0].compatibilityScore, 93);
+      assert.equal(validated[0].evidenceStatus, 'complete');
+      assert.ok(validated[0].justification.includes('Validación técnica SYSTEM DJ'));
+      assert.equal(validated[0].transitionSuggestion, 'Alinea tiempos de compás y modula el crossfader suavemente; la recomendación no activa controles automáticamente.');
+    });
+
+    test('No muestra afirmaciones ni técnicas remotas como verificadas cuando falta BPM o tonalidad', () => {
+      const ref = extractCandidateMetadata(createStubTrack('ref', 'Ref Track', 'Artist', 124, '8A'));
+      const candidate = extractCandidateMetadata(createStubTrack('c1', 'Candidate', 'Artist', 126, undefined));
+      const validated = validateRecommendations([{
+        trackId: 'c1',
+        compatibilityScore: 99,
+        justification: 'Tonalidad perfectamente compatible y tempo exacto.',
+        transitionSuggestion: 'Ajusta el pitch a +12% para un beatmatch perfecto.',
+      }], [candidate], false, ref);
+
+      assert.equal(validated.length, 1);
+      assert.equal(validated[0].compatibilityScore, 47);
+      assert.ok(validated[0].justification.includes('Tonalidad no disponible'));
+      assert.ok(!validated[0].justification.includes('perfectamente compatible'));
+      assert.ok(validated[0].transitionSuggestion.includes('Falta validar tonalidad'));
+      assert.ok(!validated[0].transitionSuggestion.includes('+12%'));
+      assert.equal(validated[0].camelot, undefined);
+    });
+
+    test('Reemplaza una indicación remota de pitch que contradice el cálculo local', () => {
+      const ref = extractCandidateMetadata(createStubTrack('ref', 'Ref Track', 'Artist', 124, '8A'));
+      const candidate = extractCandidateMetadata(createStubTrack('c1', 'Candidate', 'Artist', 126, '8B'));
+      const validated = validateRecommendations([{
+        trackId: 'c1',
+        compatibilityScore: 90,
+        justification: 'Relación armónica relativa válida.',
+        transitionSuggestion: 'Aplica pitch de +12% para empatar el tempo.',
+      }], [candidate], false, ref);
+
+      assert.equal(validated.length, 1);
+      assert.ok(validated[0].tempoEvaluation?.pitchShiftPercent !== undefined);
+      assert.ok(!validated[0].transitionSuggestion.includes('+12%'));
+      assert.notEqual(validated[0].transitionSuggestion, 'Aplica pitch de +12% para empatar el tempo.');
+    });
+
+    test('No exporta energía local no finita o fuera de su escala válida 0–10', () => {
+      const nonFiniteTrack = createStubTrack('energy-nan', 'Track', 'Artist', 126, '9A', Number.NaN);
+      const outOfRangeTrack = createStubTrack('energy-high', 'Track', 'Artist', 126, '9A', 11);
+
+      assert.equal(extractCandidateMetadata(nonFiniteTrack).energy, undefined);
+      assert.equal(extractCandidateMetadata(outOfRangeTrack).energy, undefined);
+      assert.equal(extractCandidateMetadata(nonFiniteTrack).isAnalysisVerified, true);
+    });
+
+    test('Expone evidencia completa, parcial por tempo o armonía, y cuenta candidatos con evidencia insuficiente', async () => {
+      const refTrack = createStubTrack('ref', 'Reference', 'Artist', 124, '8A');
+      const ref = extractCandidateMetadata(refTrack);
+      const complete = extractCandidateMetadata(createStubTrack('complete', 'Complete', 'Artist', 126, '8B'));
+      const tempoOnly = extractCandidateMetadata(createStubTrack('tempo-only', 'Tempo only', 'Artist', 126, undefined));
+      const harmonyOnly = extractCandidateMetadata({
+        ...createStubTrack('harmony-only', 'Harmony only', 'Artist'),
+        analysis: { status: 'analyzed', key: 'Am', camelot: '8B' },
+      });
+      const insufficientTrack: Track = {
+        ...createStubTrack('insufficient', 'Insufficient', 'Artist'),
+        analysis: { status: 'pending' },
+      };
+      const insufficient = extractCandidateMetadata(insufficientTrack);
+
+      assert.equal(generateMockRecommendations(ref, [complete])[0].evidenceStatus, 'complete');
+      assert.equal(generateMockRecommendations(ref, [tempoOnly])[0].evidenceStatus, 'partial');
+      assert.equal(generateMockRecommendations(ref, [tempoOnly])[0].compatibilityScore, 47);
+      assert.equal(generateMockRecommendations(ref, [harmonyOnly])[0].evidenceStatus, 'partial');
+      assert.equal(generateMockRecommendations(ref, [harmonyOnly])[0].compatibilityScore, 48);
+      assert.deepEqual(generateMockRecommendations(ref, [insufficient]), []);
+
+      const result = await getTrackRecommendations(refTrack, [refTrack, insufficientTrack]);
+      assert.deepEqual(result.recommendations, []);
+      assert.equal(result.insufficientCandidateCount, 1);
+
+      const mockServer = await startMockServer((_req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, isMock: false, recommendations: [{ trackId: 'insufficient', compatibilityScore: 99 }] }));
+      });
+      try {
+        const remoteResult = await getTrackRecommendations(refTrack, [refTrack, insufficientTrack], {
+          mode: 'remote',
+          endpointUrl: mockServer.url,
+        });
+        assert.deepEqual(remoteResult.recommendations, []);
+        assert.equal(remoteResult.insufficientCandidateCount, 1);
+      } finally {
+        await mockServer.close();
+      }
+    });
+
+    test('Las validaciones esenciales son iguales en modo local y remoto y degradan valores remotos inválidos', () => {
+      const ref = extractCandidateMetadata(createStubTrack('ref', 'Reference', 'Artist', 124, '8A'));
+      const cand = extractCandidateMetadata(createStubTrack('candidate', 'Candidate', 'Artist', 126, '8B', 8));
+      const local = generateMockRecommendations(ref, [cand])[0];
+      const remote = validateRecommendations([{
+        trackId: 'candidate',
+        bpm: 999,
+        key: '1A',
+        camelot: '1A',
+        energy: Number.POSITIVE_INFINITY,
+        pitchShiftPercent: 99,
+        compatibilityScore: 1000,
+        justification: 'Compatibilidad perfecta; candidato a 999 BPM; pitch +99%.',
+        transitionSuggestion: 'Ajusta BPM a 999 y pitch a +99%.',
+      }], [cand], false, ref)[0];
+
+      assert.equal(remote.trackId, local.trackId);
+      assert.equal(remote.bpm, 126);
+      assert.equal(remote.camelot, '8B');
+      assert.equal(remote.energy, 8);
+      assert.equal(remote.compatibilityScore, local.compatibilityScore);
+      assert.equal(remote.evidenceStatus, local.evidenceStatus);
+      assert.deepEqual(remote.harmonicEvaluation, local.harmonicEvaluation);
+      assert.deepEqual(remote.tempoEvaluation, local.tempoEvaluation);
+      assert.ok(!remote.justification.includes('999'));
+      assert.ok(!remote.transitionSuggestion.includes('999'));
+      assert.ok(!remote.transitionSuggestion.includes('+99%'));
+
+      const invalidScore = validateRecommendations([{
+        trackId: 'candidate',
+        compatibilityScore: Number.NaN,
+      }], [cand], false, ref)[0];
+      assert.equal(invalidScore.compatibilityScore, local.compatibilityScore);
+    });
+
+    test('Remote validation omits the zero-score candidates omitted by local mode', () => {
+      const ref = extractCandidateMetadata(createStubTrack('ref', 'Reference', 'Artist', 84.8, '12A'));
+      const candidate = extractCandidateMetadata(createStubTrack('zero', 'Zero', 'Artist', 105, '8A'));
+
+      assert.deepEqual(generateMockRecommendations(ref, [candidate]), []);
+      assert.deepEqual(validateRecommendations([{ trackId: 'zero', compatibilityScore: 99 }], [candidate], false, ref), []);
+    });
+
+    test('validateRecommendations incluye una sola vez cada trackId y conserva su primera entrada válida', () => {
+      const ref = extractCandidateMetadata(createStubTrack('ref', 'Ref Track', 'Artist', 124, '8A'));
+      const candidate = extractCandidateMetadata(createStubTrack('c1', 'Candidate', 'Artist', 126, '8B'));
+
+      const validated = validateRecommendations([
+        { trackId: 'c1', compatibilityScore: 90, justification: 'Primera entrada.' },
+        { trackId: 'c1', compatibilityScore: 65, justification: 'Entrada repetida.' },
+      ], [candidate], false, ref);
+
+      assert.equal(validated.length, 1);
+      assert.equal(validated[0].trackId, 'c1');
+      assert.ok(validated[0].justification.includes('Validación técnica SYSTEM DJ'));
+      assert.ok(!validated[0].justification.includes('Primera entrada.'));
     });
 
     test('El mock del endpoint puede devolver todos los IDs sin score; el cliente recalcula y ordena con la misma fórmula', () => {
@@ -864,6 +1044,10 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
         'key_na',
         'not_analyzed',
         'different_harmony',
+        'full_evidence',
+        'partial_evidence',
+        'insufficient_evidence',
+        'bpm_label',
         'pitch_out_of_range',
         'local_verified',
         'ai_generated',
@@ -884,6 +1068,12 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
           `Falta la clave "${key}" en translation.json (EN)`
         );
       }
+
+      const cardPath = path.resolve(process.cwd(), 'src/components/dashboard/SmartRecommendationCard.tsx');
+      const cardSource = fs.readFileSync(cardPath, 'utf8');
+      assert.ok(cardSource.includes("rec.evidenceStatus === 'partial'"));
+      assert.ok(cardSource.includes("dashboard.partial_evidence"));
+      assert.ok(cardSource.includes('insufficientCandidateCount'));
     });
 
     test('current_track_info interpola correctamente los parámetros en ES y EN sin etiquetas rotas', () => {
@@ -898,6 +1088,20 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
 
       assert.ok(esTemplate.includes('{{title}}') && esTemplate.includes('{{bpm}}') && esTemplate.includes('{{key}}'));
       assert.ok(enTemplate.includes('{{title}}') && enTemplate.includes('{{bpm}}') && enTemplate.includes('{{key}}'));
+    });
+
+    test('Las etiquetas de evidencia parcial y los avisos de datos insuficientes interpolan correctamente', () => {
+      const esPath = path.resolve(process.cwd(), 'src/i18n/locales/es/translation.json');
+      const enPath = path.resolve(process.cwd(), 'src/i18n/locales/en/translation.json');
+      const esData = JSON.parse(fs.readFileSync(esPath, 'utf8'));
+      const enData = JSON.parse(fs.readFileSync(enPath, 'utf8'));
+
+      for (const data of [esData, enData]) {
+        const partial = data.dashboard.partial_evidence.replace('{{missing}}', 'BPM');
+        const insufficient = data.dashboard.insufficient_evidence.replace('{{count}}', '2');
+        assert.ok(!partial.includes('{{'));
+        assert.ok(!insufficient.includes('{{'));
+      }
     });
   });
 });

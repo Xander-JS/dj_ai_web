@@ -277,32 +277,33 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
 
     // 3.2 Representación de armed
     assert.ok(deckSource.includes("barSync.status === 'armed'"), 'Debe comprobar status armed');
-    assert.ok(deckSource.includes("BAR ARMED ("), 'Texto de badge armed');
-    assert.ok(deckSource.includes("Δ ${formatDeltaSeconds(barSync.displacementSec)}"), 'Badge armed incluye desplazamiento');
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_armed'"), 'Badge armed usa i18n');
+    assert.ok(deckSource.includes("disp: formatDeltaSeconds(barSync.displacementSec)"), 'Badge armed incluye desplazamiento');
     assert.ok(deckSource.includes("t('dj.bar_sync_armed_badge_tooltip'"), 'Badge armed usa tooltip i18n con posiciones');
     assert.ok(deckSource.includes("t('dj.bar_sync_armed_btn_tooltip'"), 'Botón armed usa tooltip i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_armed', 'ARMED')"), 'Etiqueta de botón armed');
+    assert.ok(deckSource.includes("t('dj.bar_sync_armed')"), 'Etiqueta de botón armed usa i18n');
 
     // 3.3 Representación de already_aligned
     assert.ok(deckSource.includes("barSync.status === 'already_aligned'"), 'Debe comprobar status already_aligned');
-    assert.ok(deckSource.includes("BAR ALIGNED ("), 'Texto de badge already_aligned');
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_aligned'"), 'Badge already_aligned usa i18n');
     assert.ok(deckSource.includes("t('dj.bar_sync_already_aligned_badge_tooltip'"), 'Badge already_aligned usa tooltip i18n');
     assert.ok(deckSource.includes("t('dj.bar_sync_aligned_btn_tooltip'"), 'Botón already_aligned usa tooltip i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_already_aligned', 'ALIGNED')"), 'Etiqueta de botón already_aligned');
+    assert.ok(deckSource.includes("t('dj.bar_sync_already_aligned')"), 'Etiqueta de botón already_aligned usa i18n');
 
     // 3.4 Representación de completed
     assert.ok(deckSource.includes("barSync.status === 'completed'"), 'Debe comprobar status completed');
-    assert.ok(deckSource.includes("'BAR COMPLETED'"), 'Texto de badge completed');
-    assert.ok(deckSource.includes("t('dj.bar_sync_completed', 'DONE')"), 'Etiqueta de botón completed');
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_completed')"), 'Badge completed usa i18n');
+    assert.ok(deckSource.includes("t('dj.bar_sync_completed')"), 'Etiqueta de botón completed usa i18n');
 
     // 3.5 Representación de cancelled
     assert.ok(deckSource.includes("barSync.status === 'cancelled'"), 'Debe comprobar status cancelled');
-    assert.ok(deckSource.includes("'BAR CANCELLED'"), 'Texto de badge cancelled');
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_cancelled')"), 'Badge cancelled usa i18n');
 
     // 3.6 Representación de rejected_*
     assert.ok(deckSource.includes("barSyncStatus?.startsWith('rejected_')"), 'Debe detectar prefijo rejected_');
-    assert.ok(deckSource.includes("`BAR REJECTED: ${barSync.reason || barSync.status}`"), 'Texto de badge rejected');
-    assert.ok(deckSource.includes("t('dj.bar_sync_rejected', 'REJECT')"), 'Etiqueta de botón rejected');
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_rejected')"), 'Badge rejected usa i18n');
+    assert.ok(deckSource.includes("t('dj.bar_sync_rejected')"), 'Etiqueta de botón rejected usa i18n');
+    assert.ok(deckSource.includes('t(barSyncReasonKey)'), 'El motivo de rechazo usa traducción según el estado');
   });
 
   // =========================================================================
@@ -503,8 +504,8 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     assert.equal(snap.deckB.barSync.reason, plan.reason);
 
     // 8.4 En Deck.tsx, la razón no queda oculta y se muestra en el badge y en el tooltip
-    assert.ok(deckSource.includes('`BAR REJECTED: ${barSync.reason || barSync.status}`'));
-    assert.ok(deckSource.includes('barSync.reason || \'Preparación de compás rechazada\''));
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_rejected')"));
+    assert.ok(deckSource.includes('t(barSyncReasonKey)'));
   });
 
   // =========================================================================
@@ -523,14 +524,8 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     );
 
     // 9.1 Verificar que el badge formatea el desplazamiento con el símbolo Δ
-    assert.ok(
-      deckSource.includes('`BAR ARMED (${barSync.preparedPosition?.toFixed(2)}s, Δ ${formatDeltaSeconds(barSync.displacementSec)})`'),
-      'Badge ARMED debe incluir posición y desplazamiento con Δ'
-    );
-    assert.ok(
-      deckSource.includes('`BAR ALIGNED (${barSync.preparedPosition?.toFixed(2)}s, Δ ${formatDeltaSeconds(barSync.displacementSec)})`'),
-      'Badge ALIGNED debe incluir posición y desplazamiento con Δ'
-    );
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_armed', { prepared:"), 'Badge ARMED localiza posición y desplazamiento');
+    assert.ok(deckSource.includes("t('dj.bar_sync_badge_aligned', { prepared:"), 'Badge ALIGNED localiza posición y desplazamiento');
 
     // 9.2 Verificar que el item de tiempo dispone de data-testid y tooltip con precisión de milisegundos
     assert.ok(
@@ -553,6 +548,19 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
       'bar_sync_armed_btn_tooltip',
       'bar_sync_aligned_btn_tooltip',
       'bar_sync_time_tooltip',
+      'bar_sync_badge_preparing',
+      'bar_sync_badge_armed',
+      'bar_sync_badge_aligned',
+      'bar_sync_badge_completed',
+      'bar_sync_badge_cancelled',
+      'bar_sync_badge_rejected',
+      'bar_sync_reason_rejected_state',
+      'bar_sync_reason_rejected_unconfirmed',
+      'bar_sync_reason_rejected_no_downbeat',
+      'bar_sync_reason_rejected_metric_mismatch',
+      'bar_sync_reason_rejected_limits',
+      'bar_sync_reason_rejected_confidence',
+      'bar_sync_reason_generic',
     ];
     for (const key of tooltipKeys) {
       assert.ok(esJson.dj[key], `Clave es.dj.${key} debe existir`);
@@ -566,6 +574,12 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     assert.ok(enJson.dj.bar_sync_armed_badge_tooltip.includes('{{prepared}}'));
     assert.ok(enJson.dj.bar_sync_armed_badge_tooltip.includes('{{prev}}'));
     assert.ok(enJson.dj.bar_sync_armed_badge_tooltip.includes('{{disp}}'));
+    assert.equal(esJson.dj.bar_sync_armed, 'ARMADO');
+    assert.equal(esJson.dj.bar_sync_already_aligned, 'ALINEADO');
+    assert.equal(esJson.dj.bar_sync_completed, 'LISTO');
+    assert.equal(esJson.dj.bar_sync_rejected, 'RECHAZADO');
+    assert.ok(esJson.dj.bar_sync_badge_armed.includes('{{prepared}}'));
+    assert.ok(enJson.dj.bar_sync_badge_armed.includes('{{prepared}}'));
 
     // 9.4 Cancelación interactiva: pulsar BAR SYNC cuando está armed o aligned cancela el estado
     const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4, 300);

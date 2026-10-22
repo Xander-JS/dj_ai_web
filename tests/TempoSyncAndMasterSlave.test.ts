@@ -11,6 +11,7 @@ import { djStore } from '../src/store/useDJStore.ts';
 import { audioEngine } from '../src/audio/index.ts';
 import { indexedDBStorage } from '../src/services/storage/IndexedDBStorage.ts';
 import { createTrackFromFile } from '../src/utils/audioValidation.ts';
+import { assessTempoCompatibility } from '../src/audio/analysis/tempoCompatibility.ts';
 import type { Track } from '../src/types/track.ts';
 
 // Mock minimal de Web Audio API para simulación determinista en Node.js
@@ -110,6 +111,11 @@ function createAnalyzedTrack(name: string, bpm: number, duration = 180.0): { tra
     status: 'analyzed',
     bpm,
     bpmConfidence: 0.85,
+    isAmbiguous: false,
+    alternateBpm: [
+      ...(bpm * 0.5 >= 50 ? [Number((bpm * 0.5).toFixed(1))] : []),
+      ...(bpm * 2 <= 220 ? [Number((bpm * 2).toFixed(1))] : []),
+    ],
     key: '8B',
     camelot: '8B',
     energy: 6.5,
@@ -117,6 +123,51 @@ function createAnalyzedTrack(name: string, bpm: number, duration = 180.0): { tra
   };
   return { track, file };
 }
+
+describe('Fase 1.1: Evidencia de compatibilidad de tempo', () => {
+  const analysis = (bpm: number, alternateBpm: number[] = [bpm / 2]): Track['analysis'] => ({
+    status: 'analyzed',
+    bpm,
+    bpmConfidence: 0.85,
+    isAmbiguous: false,
+    alternateBpm,
+  });
+
+  it('no encuentra conflicto armónico en BPM cercanos aunque haya candidatos cercanos entre sí', () => {
+    assert.deepEqual(
+      assessTempoCompatibility(analysis(124, [62, 125]), analysis(125, [62.5, 124])),
+      { status: 'no_harmonic_conflict', reason: null }
+    );
+  });
+
+  it('identifica una hipótesis de medio tiempo con apoyo del candidato alternativo', () => {
+    const result = assessTempoCompatibility(analysis(140, [70]), analysis(70, [140]));
+    assert.equal(result.status, 'half_time_hypothesis');
+    assert.match(result.reason ?? '', /candidato alternativo del Slave/i);
+  });
+
+  it('identifica una hipótesis de doble tiempo con apoyo del candidato alternativo', () => {
+    const result = assessTempoCompatibility(analysis(70, [140]), analysis(140, [70]));
+    assert.equal(result.status, 'double_time_hypothesis');
+    assert.match(result.reason ?? '', /candidato alternativo del Master/i);
+  });
+
+  it('rechaza como insuficientes datos BPM iguales sin candidatos alternativos', () => {
+    const result = assessTempoCompatibility(analysis(120, []), analysis(120, []));
+    assert.equal(result.status, 'insufficient_data');
+    assert.match(result.reason ?? '', /confianza suficiente/i);
+  });
+
+  it('rechaza como insuficiente una confianza baja aun cuando ambos BPM coinciden', () => {
+    const lowConfidence = { ...analysis(120), bpmConfidence: 0.49 };
+    assert.equal(assessTempoCompatibility(lowConfidence, analysis(120)).status, 'insufficient_data');
+  });
+
+  it('rechaza un análisis marcado como ambiguo aunque tenga candidatos y confianza numérica', () => {
+    const ambiguous = { ...analysis(120), isAmbiguous: true };
+    assert.equal(assessTempoCompatibility(ambiguous, analysis(120)).status, 'insufficient_data');
+  });
+});
 
 function assertSyncRoleInvariant(snapshot: ReturnType<typeof djStore.getSnapshot>): void {
   if (snapshot.syncMasterDeck === null) {
@@ -225,6 +276,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(state.syncMasterDeck, 'B', 'Deck B debe ser el Master');
       assert.equal(state.deckB.isMaster, true);
       assert.equal(state.deckA.isSyncActive, true);
+      assert.equal(state.deckA.syncFeedback, null);
     });
 
     it('1.2a Solo Deck A reproduciendo: A sigue siendo Master al pulsar SYNC en A', async () => {
@@ -283,6 +335,14 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(state.syncMasterDeck, 'A');
       assert.equal(state.deckA.isMaster, true);
       assert.equal(state.deckB.isSyncActive, true);
+      assert.equal(state.deckA.playbackState, 'stopped', 'SYNC no debe arrancar el Master');
+      assert.equal(state.deckB.playbackState, 'stopped', 'SYNC no debe arrancar el Slave');
+      assert.equal(state.deckA.currentTime, 0);
+      assert.equal(state.deckB.currentTime, 0);
+      assert.equal(state.deckA.playbackRate, 1);
+      assert.equal(state.deckB.playbackRate, Number((124 / 126).toFixed(4)));
+      assert.equal(audioEngine.getDeckPlaybackRate('B'), Number((124 / 126).toFixed(4)));
+      assertSyncRoleInvariant(state);
     });
 
     it('1.4 Ambos decks reproduciendo: el opuesto al pulsado se define como Master', async () => {
@@ -320,6 +380,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(result, false, 'Debe rechazar sincronización');
       assert.equal(djStore.getSnapshot().deckA.isSyncActive, false);
       assert.equal(djStore.getSnapshot().deckA.errorCode, 'sync_failed');
+      assert.equal(djStore.getSnapshot().deckA.syncFeedback?.key, 'dj.sync_reject_slave_track');
     });
 
     it('2.2 Rechaza si el deck de referencia (Master) no tiene pista cargada', async () => {
@@ -440,6 +501,8 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(stateB.pitch, 50, 'El fader no debe alterarse');
       assert.equal(stateB.errorCode, 'sync_failed');
       assert.ok(stateB.errorMessage?.includes('excede el rango de pitch'));
+      assert.equal(stateB.syncFeedback?.key, 'dj.sync_reject_pitch_limit');
+      assert.deepEqual(stateB.syncFeedback?.values, { targetBpm: '110.0', trackBpm: '100.0' });
     });
 
     it('3.4 Rechaza sin recortar si requiredRate cae por debajo del límite inferior (< 0.92)', async () => {
@@ -472,8 +535,56 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
 
       const result = djStore.syncDeck('B');
       assert.equal(result, false, 'No debe aceptar medio o doble tempo automáticamente');
-      assert.equal(djStore.getSnapshot().deckB.isSyncActive, false);
+      const state = djStore.getSnapshot();
+      assert.equal(state.deckB.isSyncActive, false);
+      assert.match(state.deckB.errorMessage ?? '', /candidato alternativo del Slave/i);
+      assert.doesNotMatch(state.deckB.errorMessage ?? '', /excede el rango de pitch/i);
     });
+
+    it('3.6 Rechaza la relación inversa de doble tiempo antes de evaluar el límite de pitch', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA_70.mp3', 70.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB_140.mp3', 140.0);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+
+      assert.equal(djStore.syncDeck('B'), false);
+      const error = djStore.getSnapshot().deckB.errorMessage ?? '';
+      assert.match(error, /candidato alternativo del Master/i);
+      assert.doesNotMatch(error, /excede el rango de pitch/i);
+    });
+
+    it('3.7 Rechaza SYNC si falta evidencia de análisis aunque los BPM almacenados sean iguales', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA_equal_no_evidence.mp3', 120.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB_equal_no_evidence.mp3', 120.0);
+      delete trackA.analysis.alternateBpm;
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+
+      assert.equal(djStore.syncDeck('B'), false);
+      assert.match(djStore.getSnapshot().deckB.errorMessage ?? '', /requiere BPM, confianza suficiente/i);
+    });
+  });
+
+  it('clears SYNC feedback after the deck pitch context changes and a later synchronization succeeds', async () => {
+    const { track: trackA, file: fileA } = createAnalyzedTrack('sync_feedback_master.mp3', 110.0);
+    const { track: trackB, file: fileB } = createAnalyzedTrack('sync_feedback_slave.mp3', 100.0);
+    await indexedDBStorage.saveTrack(trackA, fileA);
+    await indexedDBStorage.saveTrack(trackB, fileB);
+    await djStore.loadTrackToDeckA(trackA);
+    await djStore.loadTrackToDeckB(trackB);
+
+    assert.equal(djStore.syncDeck('B'), false);
+    assert.equal(djStore.getSnapshot().deckB.syncFeedback?.key, 'dj.sync_reject_pitch_limit');
+
+    djStore.setPitchDeck('A', 30);
+    assert.equal(djStore.getSnapshot().deckB.syncFeedback, null);
+    assert.equal(djStore.syncDeck('B'), true);
+    assert.equal(djStore.getSnapshot().deckB.syncFeedback, null);
+    assert.equal(djStore.getSnapshot().deckB.errorMessage, null);
   });
 
   // ========================================================
@@ -782,7 +893,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
   describe('7. Descarga del Maestro y desacoplamiento seguro', () => {
     it('7.1 Si el Maestro se descarga, el Esclavo se desacopla sin saltos y sin Master huérfano', async () => {
       const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
-      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 126.0);
       await indexedDBStorage.saveTrack(trackA, fileA);
       await indexedDBStorage.saveTrack(trackB, fileB);
       await djStore.loadTrackToDeckA(trackA);
@@ -793,6 +904,8 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       djStore.syncDeck('B');
       assert.equal(djStore.getSnapshot().syncMasterDeck, 'A');
       assert.equal(djStore.getSnapshot().deckB.isSyncActive, true);
+      const slaveRateBeforeUnload = djStore.getSnapshot().deckB.playbackRate;
+      assert.notEqual(slaveRateBeforeUnload, 1, 'La prueba debe observar una velocidad sincronizada no unitaria');
 
       // Descargar el Master A
       const observedSnapshots: ReturnType<typeof djStore.getSnapshot>[] = [];
@@ -807,7 +920,9 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(state.deckA.playbackState, 'stopped');
       assert.equal(state.deckB.playbackState, 'playing', 'Descargar el Master no debe detener la reproducción del Slave');
       assert.equal(state.deckB.isSyncActive, false, 'El Esclavo se desacopla');
-      assert.equal(state.deckB.playbackRate, 1.0, 'Mantiene su velocidad sin saltos');
+      assert.equal(state.deckB.playbackRate, slaveRateBeforeUnload, 'Mantiene su velocidad al desacoplarse');
+      assert.equal(audioEngine.getDeckPlaybackRate('B'), slaveRateBeforeUnload, 'El motor conserva la velocidad');
+      assert.equal(state.deckB.isMaster, false);
     });
 
     it('7.1a Si falla el blob de una nueva pista, conserva el Master y el SYNC actuales', async () => {
@@ -876,7 +991,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
 
     it('7.3 Pausar o detener el Master NO detiene al Esclavo ni altera su velocidad', async () => {
       const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
-      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 126.0);
       await indexedDBStorage.saveTrack(trackA, fileA);
       await indexedDBStorage.saveTrack(trackB, fileB);
       await djStore.loadTrackToDeckA(trackA);
@@ -893,14 +1008,27 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       djStore.pauseDeckA();
       assert.equal(djStore.getSnapshot().deckA.playbackState, 'paused');
       assert.equal(djStore.getSnapshot().deckB.playbackState, 'playing', 'Esclavo B continúa reproduciendo');
-      assert.equal(djStore.getSnapshot().deckB.playbackRate, 1.0, 'Velocidad de B intacta');
+      const slaveRate = djStore.getSnapshot().deckB.playbackRate;
+      assert.equal(slaveRate, Number((124 / 126).toFixed(4)), 'Velocidad de B intacta');
+      assert.equal(audioEngine.getDeckPlaybackRate('B'), slaveRate);
+      assert.equal(djStore.getSnapshot().syncMasterDeck, 'A');
       assertSyncRoleInvariant(djStore.getSnapshot());
+
+      djStore.pitchBend('A', 'up');
+      assert.equal(djStore.getSnapshot().deckA.pitchBend, 3.5);
+      assert.equal(audioEngine.getDeckPitchBend('A'), 0.035);
 
       // Detener el Master A
       djStore.stopDeckA();
-      assert.equal(djStore.getSnapshot().deckA.playbackState, 'stopped');
-      assertSyncRoleInvariant(djStore.getSnapshot());
-      assert.equal(djStore.getSnapshot().deckB.playbackState, 'playing', 'Esclavo B sigue reproduciendo ininterrumpidamente');
+      const stoppedState = djStore.getSnapshot();
+      assert.equal(stoppedState.deckA.playbackState, 'stopped');
+      assert.equal(stoppedState.deckA.pitchBend, 0, 'El estado del store debe reflejar el reset del motor');
+      assert.equal(audioEngine.getDeckPitchBend('A'), 0, 'Stop resetea el bend del motor');
+      assert.equal(stoppedState.syncMasterDeck, 'A', 'Stop conserva la relación SYNC en esta arquitectura');
+      assert.equal(stoppedState.deckB.playbackRate, slaveRate);
+      assert.equal(audioEngine.getDeckPlaybackRate('B'), slaveRate);
+      assert.equal(stoppedState.deckB.playbackState, 'playing', 'Esclavo B sigue reproduciendo ininterrumpidamente');
+      assertSyncRoleInvariant(stoppedState);
     });
 
     it('7.4 Alternar repetidamente SYNC (toggle múltiple) no deja estados huérfanos ni inconsistencias', async () => {

@@ -3,6 +3,9 @@ import { describe, test } from 'node:test';
 import {
   DEFAULT_MAX_WAV_BYTES,
   encodeAudioBufferToWavPcm16,
+  encodePcmChannelsToWavPcm16,
+  encodePcmChannelsToWavPcm16Async,
+  getWavPcm16FileBytes,
   WavPcmEncodingError,
 } from '../src/session/WavPcmEncoder.ts';
 
@@ -150,5 +153,91 @@ describe('WavPcmEncoder — PCM S16LE RIFF/WAVE', () => {
     assert.equal(view.getUint32(24, true), renderedBuffer.sampleRate);
     assert.equal(view.getUint32(40, true), renderedBuffer.length * renderedBuffer.numberOfChannels * 2);
     assert.deepEqual([44, 46, 48, 50].map((offset) => readInt16(view, offset)), [4_096, 24_575, -4_096, -24_576]);
+  });
+});
+
+describe('WavPcmEncoder — shared PCM path used by the Worker', () => {
+  test('produces byte-identical output to the AudioBuffer wrapper', async () => {
+    const left = new Float32Array([-1, -0.5, 0, 0.5, 1]);
+    const right = new Float32Array([1, 0.5, 0, -0.5, -1]);
+    const direct = encodePcmChannelsToWavPcm16({ sampleRate: 44_100, length: 5, channels: [left, right] });
+    const viaBuffer = new Uint8Array(await encodeAudioBufferToWavPcm16(audioBuffer([left, right], 44_100)).arrayBuffer());
+    assert.deepEqual(direct, viaBuffer);
+  });
+
+  test('reports the exact RIFF size before allocating and enforces the limit', () => {
+    const fileBytes = getWavPcm16FileBytes(48_000, 100, 2);
+    assert.equal(fileBytes, 44 + 100 * 4);
+    assert.throws(
+      () => getWavPcm16FileBytes(48_000, 100, 2, fileBytes - 1),
+      { code: 'MEMORY_LIMIT' },
+    );
+    assert.throws(
+      () => getWavPcm16FileBytes(0, 100, 2),
+      { code: 'INVALID_AUDIO_BUFFER' },
+    );
+    assert.throws(
+      () => getWavPcm16FileBytes(48_000, 1, 1, DEFAULT_MAX_WAV_BYTES + 1),
+      { code: 'INVALID_AUDIO_BUFFER' },
+    );
+  });
+
+  test('validates raw channel dimensions and finite samples without mutating the source', async () => {
+    const left = new Float32Array([0.25, -0.25]);
+    const right = new Float32Array([0.5, -0.5]);
+    const before = [left.slice(), right.slice()];
+    const bytes = encodePcmChannelsToWavPcm16({ sampleRate: 48_000, length: 2, channels: [left, right] });
+    assert.deepEqual(left, before[0]);
+    assert.deepEqual(right, before[1]);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    assert.deepEqual([44, 46, 48, 50].map((offset) => view.getInt16(offset, true)), [8_192, 16_384, -8_192, -16_384]);
+
+    assert.throws(
+      () => encodePcmChannelsToWavPcm16({ sampleRate: 48_000, length: 2, channels: [new Float32Array(1)] }),
+      { code: 'INVALID_AUDIO_BUFFER' },
+    );
+    const invalid = new Float32Array([0, Number.NaN]);
+    assert.throws(
+      () => encodePcmChannelsToWavPcm16({ sampleRate: 48_000, length: 2, channels: [invalid] }),
+      { code: 'NON_FINITE_SAMPLE' },
+    );
+    assert.ok(Number.isNaN(invalid[1]));
+  });
+
+  test('reports measured monotonic progress and cancels between blocks', async () => {
+    const length = 100_000;
+    const left = new Float32Array(length).fill(0.1);
+    const progress: number[] = [];
+    const bytes = await encodePcmChannelsToWavPcm16Async(
+      { sampleRate: 48_000, length, channels: [left] },
+      {
+        blockFrames: 10_000,
+        onProgress: (value) => progress.push(value),
+        yieldFn: async () => { await Promise.resolve(); },
+      },
+    );
+    assert.equal(bytes.length, 44 + length * 2);
+    assert.equal(progress.length, 10);
+    assert.equal(progress.at(-1), 1);
+    for (let index = 1; index < progress.length; index += 1) {
+      assert.ok(progress[index] >= progress[index - 1]);
+    }
+
+    let blocks = 0;
+    await assert.rejects(
+      encodePcmChannelsToWavPcm16Async(
+        { sampleRate: 48_000, length, channels: [left] },
+        {
+          blockFrames: 10_000,
+          shouldCancel: () => blocks >= 2,
+          yieldFn: async () => { blocks += 1; },
+        },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof WavPcmEncodingError);
+        assert.equal(error.code, 'CANCELLED');
+        return true;
+      },
+    );
   });
 });

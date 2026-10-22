@@ -165,9 +165,9 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   }
 
   // Cálculo y validación de BPM efectivo del Master
-  const masterEffectiveBpm = isValidNumber(master.effectiveBpm) && master.effectiveBpm > 0
-    ? master.effectiveBpm
-    : master.bpm * master.playbackRate;
+  const masterEffectiveBpm = master.effectiveBpm === undefined
+    ? master.bpm * master.playbackRate
+    : master.effectiveBpm;
 
   if (
     !isValidNumber(masterEffectiveBpm) ||
@@ -181,9 +181,9 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   }
 
   // Cálculo y validación de BPM efectivo del Slave
-  const slaveEffectiveBpm = isValidNumber(slave.effectiveBpm) && slave.effectiveBpm > 0
-    ? slave.effectiveBpm
-    : slave.bpm * slave.playbackRate;
+  const slaveEffectiveBpm = slave.effectiveBpm === undefined
+    ? slave.bpm * slave.playbackRate
+    : slave.effectiveBpm;
 
   if (
     !isValidNumber(slaveEffectiveBpm) ||

@@ -3,7 +3,7 @@
  * Integra Gemini AI con el estado de decks y la biblioteca de audio.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Sparkles,
@@ -13,7 +13,6 @@ import {
   Lightbulb,
   CheckCircle2,
   AlertTriangle,
-  Play,
   Layers,
 } from 'lucide-react';
 import { Card, CardBody } from '../ui/Card';
@@ -22,8 +21,7 @@ import { Badge } from '../ui/Badge';
 import { StateView } from '../ui/StateView';
 import { useDJStore } from '../../store/useDJStore';
 import { indexedDBStorage } from '../../services/storage/IndexedDBStorage';
-import { MOCK_LIBRARY } from '../../mock/library';
-import { keyToCamelot } from '../../audio/analysis/camelotMapper';
+import { LatestRequest } from '../../services/ai/LatestRequest';
 import {
   getTrackRecommendations,
   type TrackRecommendation,
@@ -31,42 +29,27 @@ import {
 import type { Track } from '../../types/track';
 import './SmartRecommendationCard.css';
 
-/**
- * Convierte una pista estática de la librería de prueba en una entidad Track completa con análisis.
- */
-function createTrackFromMockItem(mockItem: (typeof MOCK_LIBRARY)[number]): Track {
-  return {
-    id: `demo-${mockItem.id}`,
-    title: mockItem.title,
-    artist: mockItem.artist,
-    album: mockItem.album,
-    duration: 180,
-    durationFormatted: mockItem.duration || '3:00',
-    type: mockItem.type,
-    source: { type: 'blob' },
-    analysis: {
-      status: 'analyzed',
-      bpm: mockItem.bpm,
-      key: mockItem.key,
-      camelot: keyToCamelot(mockItem.key),
-      energy: mockItem.energy,
-    },
-    dateAdded: Date.now(),
-  };
-}
-
 export const SmartRecommendationCard: React.FC = () => {
   const { t } = useTranslation();
   const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB } = useDJStore();
 
   const [selectedDeck, setSelectedDeck] = useState<'A' | 'B' | null>(null);
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
-  const [recommendations, setRecommendations] = useState<TrackRecommendation[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [recommendationResult, setRecommendationResult] = useState<{
+    referenceTrack: Track;
+    availableTracks: Track[];
+    recommendations: TrackRecommendation[];
+  } | null>(null);
+  const [activeRequest, setActiveRequest] = useState<{ id: number; referenceTrack: Track; availableTracks: Track[] } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isMockResult, setIsMockResult] = useState<boolean>(false);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const recommendationRequest = useRef(new LatestRequest());
+
+  const invalidateRecommendationRequest = useCallback(() => {
+    recommendationRequest.current.invalidate();
+  }, []);
 
   // Carga de pistas locales desde IndexedDB
   useEffect(() => {
@@ -85,18 +68,19 @@ export const SmartRecommendationCard: React.FC = () => {
     };
   }, []);
 
-  // Construir catálogo de pistas disponibles (locales + demo convertidas)
-  // Tratamiento tolerante: no se descartan canciones por falta de BPM, tonalidad o fallos de análisis.
-  // Únicamente se excluyen elementos sin identificador válido según el contrato del sistema.
+  // Solo las pistas locales tienen un recurso de audio que el deck puede cargar.
   const availableTracks = useMemo<Track[]>(() => {
-    const demoTracks = MOCK_LIBRARY.map(createTrackFromMockItem);
     const validLocalTracks = localTracks.filter((t) => Boolean(t && typeof t.id === 'string' && t.id.trim()));
-    return [...validLocalTracks, ...demoTracks];
+    return validLocalTracks;
   }, [localTracks]);
 
   // Selección derivada de deck activo: preferencia explícita o deck con pista cargada
   const activeDeck: 'A' | 'B' = selectedDeck ?? (deckA.track ? 'A' : (deckB.track ? 'B' : 'A'));
-  const setActiveDeck = (deck: 'A' | 'B') => setSelectedDeck(deck);
+  const setActiveDeck = (deck: 'A' | 'B') => {
+    recommendationRequest.current.invalidate();
+    setActiveRequest(null);
+    setSelectedDeck(deck);
+  };
 
   // Pista de referencia activa según el deck seleccionado
   const referenceTrack = useMemo<Track | null>(() => {
@@ -106,22 +90,49 @@ export const SmartRecommendationCard: React.FC = () => {
     return deckB.track || null;
   }, [activeDeck, deckA.track, deckB.track]);
 
+  const recommendations = recommendationResult?.referenceTrack === referenceTrack &&
+    recommendationResult.availableTracks === availableTracks
+    ? recommendationResult.recommendations
+    : [];
+  const isLoading = activeRequest?.referenceTrack === referenceTrack &&
+    activeRequest.availableTracks === availableTracks;
+
+  useLayoutEffect(() => {
+    invalidateRecommendationRequest();
+    const requestGate = recommendationRequest.current;
+    return () => requestGate.invalidate();
+  }, [referenceTrack, availableTracks, invalidateRecommendationRequest]);
+
   // Función para solicitar recomendaciones a Gemini
   const handleFetchRecommendations = useCallback(
     async (forceMock = false) => {
       if (!referenceTrack) return;
+      if (
+        referenceTrack.analysis?.status !== 'analyzed' ||
+        typeof referenceTrack.analysis.bpm !== 'number' ||
+        !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)
+      ) {
+        setRecommendationResult(null);
+        setErrorMsg(t('dashboard.reference_analysis_required'));
+        return;
+      }
 
-      setIsLoading(true);
+      const request = recommendationRequest.current.begin();
+      const isCurrentRequest = () => recommendationRequest.current.isCurrent(request.id);
+      setActiveRequest({ id: request.id, referenceTrack, availableTracks });
       setErrorMsg(null);
       setFeedback(null);
 
       try {
         const response = await getTrackRecommendations(referenceTrack, availableTracks, {
           forceMock,
+          signal: request.signal,
         });
 
+        if (!isCurrentRequest()) return;
+
         if (response.success) {
-          setRecommendations(response.recommendations);
+          setRecommendationResult({ referenceTrack, availableTracks, recommendations: response.recommendations });
           setIsMockResult(response.isMock);
           setModelUsed(response.model || null);
           if (response.warning && response.recommendations.length === 0) {
@@ -143,10 +154,14 @@ export const SmartRecommendationCard: React.FC = () => {
           setIsMockResult(false);
         }
       } catch (err: unknown) {
-        const error = err as { message?: string };
-        setErrorMsg(error?.message || t('dashboard.error_title'));
+        if (!isCurrentRequest()) return;
+        const error = err as { name?: string };
+        setErrorMsg(t(error?.name === 'AbortError' ? 'dashboard.error_timeout' : 'dashboard.error_server'));
       } finally {
-        setIsLoading(false);
+        if (isCurrentRequest()) {
+          setActiveRequest(null);
+          recommendationRequest.current.finish(request.id);
+        }
       }
     },
     [referenceTrack, availableTracks, t]
@@ -167,19 +182,12 @@ export const SmartRecommendationCard: React.FC = () => {
           })
         );
         setTimeout(() => setFeedback(null), 3500);
+      } else {
+        setErrorMsg(t('dashboard.track_load_failed'));
       }
     } catch (err) {
       console.error('[SmartRecommendationCard] Error al cargar pista:', err);
-    }
-  };
-
-  // Cargar demo inicial predecible con análisis completo garantizado
-  const handleLoadInitialDemo = async () => {
-    const demoTracks = MOCK_LIBRARY.map(createTrackFromMockItem);
-    const targetTrack = demoTracks[0] || availableTracks.find((t) => t.analysis?.status === 'analyzed') || availableTracks[0];
-    if (targetTrack) {
-      await loadTrackToDeckA(targetTrack);
-      setActiveDeck('A');
+      setErrorMsg(t('dashboard.track_load_failed'));
     }
   };
 
@@ -244,7 +252,7 @@ export const SmartRecommendationCard: React.FC = () => {
                 variant="primary"
                 size="sm"
                 onClick={() => handleFetchRecommendations(false)}
-                disabled={isLoading}
+                disabled={isLoading || referenceTrack.analysis?.status !== 'analyzed' || typeof referenceTrack.analysis.bpm !== 'number' || !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)}
               >
                 {isLoading ? (
                   <Loader2 size={14} className="smart-rec-spin" />
@@ -256,10 +264,7 @@ export const SmartRecommendationCard: React.FC = () => {
                   : t('dashboard.get_recommendations')}
               </Button>
             ) : (
-              <Button variant="outline" size="sm" onClick={handleLoadInitialDemo}>
-                <Play size={13} />
-                {t('dashboard.load_demo_deck_a')}
-              </Button>
+              <span className="smart-rec-empty-hint">{t('dashboard.load_local_track_first')}</span>
             )}
 
             {referenceTrack && !isLoading && (
@@ -275,6 +280,14 @@ export const SmartRecommendationCard: React.FC = () => {
             )}
           </div>
         </div>
+
+        {referenceTrack && (
+          referenceTrack.analysis?.status !== 'analyzed' ||
+          typeof referenceTrack.analysis.bpm !== 'number' ||
+          !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)
+        ) && (
+          <p className="smart-rec-empty-hint" role="status">{t('dashboard.reference_analysis_required')}</p>
+        )}
 
         {/* Feedback temporal de carga a Deck */}
         {feedback && (
@@ -331,11 +344,12 @@ export const SmartRecommendationCard: React.FC = () => {
             <div className="smart-rec-empty-box">
               <Sparkles size={28} />
               <p>
-                Pista actual: <strong>{referenceTrack.title}</strong> (
-                {referenceTrack.analysis?.bpm || 124} BPM,{' '}
-                {referenceTrack.analysis?.camelot || 'Camelot N/A'}). Presiona{' '}
-                <strong>{t('dashboard.get_recommendations')}</strong> para consultar al
-                asistente de IA.
+                {t('dashboard.current_track_info', {
+                  title: referenceTrack.title,
+                  bpm: referenceTrack.analysis?.bpm ? `${referenceTrack.analysis.bpm} BPM` : t('dashboard.bpm_na', 'BPM N/A'),
+                  key: referenceTrack.analysis?.camelot || referenceTrack.analysis?.key || t('dashboard.key_na', 'Camelot N/A'),
+                  action: t('dashboard.get_recommendations', 'Obtener con Gemini'),
+                })}
               </p>
             </div>
           )}
@@ -345,9 +359,13 @@ export const SmartRecommendationCard: React.FC = () => {
           <div className="smart-rec-list">
             {recommendations.map((rec, index) => {
               const scoreClass =
-                rec.compatibilityScore >= 85
+                rec.compatibilityScore === null
+                  ? ''
+                  : rec.compatibilityScore >= 80
                   ? 'smart-rec-score-high'
-                  : 'smart-rec-score-medium';
+                  : rec.compatibilityScore >= 50
+                  ? 'smart-rec-score-medium'
+                  : 'smart-rec-score-low';
 
               return (
                 <div key={rec.trackId} className="smart-rec-item">
@@ -355,36 +373,84 @@ export const SmartRecommendationCard: React.FC = () => {
                   <div className="smart-rec-item-header">
                     <div className="smart-rec-item-title-col">
                       <span className="smart-rec-item-title">
-                        #{index + 1} {rec.title}
+                        #{index + 1} {rec.title || t('dashboard.untitled_track', 'Pista sin título')}
                       </span>
-                      <span className="smart-rec-item-artist">{rec.artist}</span>
+                      {rec.artist ? (
+                        <span className="smart-rec-item-artist">{rec.artist}</span>
+                      ) : null}
                     </div>
 
                     <div className="smart-rec-item-badges">
-                      <span className={`smart-rec-score-badge ${scoreClass}`}>
-                        {rec.compatibilityScore}%
-                      </span>
-                      {rec.isMock && (
+                      {rec.compatibilityScore !== null && (
+                        <span className={`smart-rec-score-badge ${scoreClass}`}>
+                          {rec.compatibilityScore}%
+                        </span>
+                      )}
+                      {rec.isMock ? (
                         <span className="smart-rec-mock-tag">
                           {t('dashboard.badge_mock')}
+                        </span>
+                      ) : (
+                        <span className="smart-rec-gemini-tag">
+                          {t('dashboard.ai_generated', 'Sugerencia IA')}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Metadatos musicales */}
+                  {/* Metadatos musicales verificados */}
                   <div className="smart-rec-meta-tags">
-                    {rec.bpm && (
-                      <span className="smart-rec-tag">{rec.bpm} BPM</span>
+                    {rec.bpm ? (
+                      <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
+                        {rec.bpm} BPM
+                      </span>
+                    ) : (
+                      <span className="smart-rec-tag smart-rec-tag-na">
+                        {t('dashboard.bpm_na', 'BPM N/A')}
+                      </span>
                     )}
-                    {(rec.camelot || rec.key) && (
+                    {rec.tempoEvaluation?.pitchShiftPercent !== undefined && rec.tempoEvaluation.relation === 'in_range' && (
                       <span className="smart-rec-tag">
-                        Key: {rec.camelot || rec.key}
+                        {t('dashboard.pitch_label')}: {rec.tempoEvaluation.pitchShiftPercent > 0 ? '+' : ''}{rec.tempoEvaluation.pitchShiftPercent}%
+                      </span>
+                    )}
+                    {rec.tempoEvaluation?.relation === 'out_of_range' && (
+                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-error-500, #ef4444)', color: 'var(--color-error-500, #ef4444)' }}>
+                        {t('dashboard.pitch_out_of_range', 'Pitch > ±8%')}
+                      </span>
+                    )}
+                    {rec.tempoEvaluation?.relation === 'half_time' && (
+                      <span className="smart-rec-tag">
+                        {t('dashboard.half_tempo', '½ Tempo')} (~{rec.tempoEvaluation.effectiveBpm} BPM)
+                      </span>
+                    )}
+                    {rec.tempoEvaluation?.relation === 'double_time' && (
+                      <span className="smart-rec-tag">
+                        {t('dashboard.double_tempo', '2x Tempo')} (~{rec.tempoEvaluation.effectiveBpm} BPM)
+                      </span>
+                    )}
+                    {(rec.camelot || rec.key) ? (
+                      <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
+                        {t('dashboard.key_label', 'Key')}: {rec.camelot || rec.key}
+                      </span>
+                    ) : (
+                      <span className="smart-rec-tag smart-rec-tag-na">
+                        {t('dashboard.key_na', 'Camelot N/A')}
+                      </span>
+                    )}
+                    {rec.harmonicEvaluation?.relation === 'incompatible' && (
+                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-warning-500, #f59e0b)', color: 'var(--color-warning-500, #f59e0b)' }}>
+                        {t('dashboard.different_harmony', 'Armonía diferente')}
                       </span>
                     )}
                     {rec.energy !== undefined && (
-                      <span className="smart-rec-tag">
+                      <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
                         ⚡ {rec.energy}/10
+                      </span>
+                    )}
+                    {rec.isAnalysisVerified && (
+                      <span className="smart-rec-verified-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
+                        ✓ {t('dashboard.local_verified', 'Datos verificados')}
                       </span>
                     )}
                   </div>

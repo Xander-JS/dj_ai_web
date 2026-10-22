@@ -192,6 +192,12 @@
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
+.smart-rec-score-low {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
 .smart-rec-meta-tags {
   display: flex;
   gap: var(--space-2);
@@ -245,6 +251,36 @@
   background-color: rgba(245, 158, 11, 0.1);
   color: #d97706;
   border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.smart-rec-gemini-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary-500);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.smart-rec-verified-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.smart-rec-tag-na {
+  opacity: 0.6;
+  font-style: italic;
 }
 
 .smart-rec-empty-box,

@@ -15,6 +15,17 @@
   transform-origin: left;
 }
 
+.progress-indeterminate .progress-indicator {
+  width: 35%;
+  transform: translateX(-100%);
+  animation: progress-indeterminate-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(290%); }
+}
+
 .progress-sm {
   height: 4px;
 }

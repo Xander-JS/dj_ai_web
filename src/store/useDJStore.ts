@@ -18,6 +18,14 @@ import { audioEngine } from '../audio/index.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
 import { analysisSyncManager } from '../services/analysis/index.ts';
 import {
+  sessionRecorder,
+  type RecordedSession,
+  type SessionEventPayload,
+  type SessionInitialState,
+  type SessionMetadata,
+  type SessionTrackReference,
+} from '../session/SessionRecorder.ts';
+import {
   calculatePhaseAlignmentPlan,
 } from '../audio/analysis/phaseAlignment.ts';
 import {
@@ -258,6 +266,21 @@ function computeEffectiveBpm(track: Track | null, rate: number): number | null {
   return bpm === null ? null : Number((bpm * rate).toFixed(1));
 }
 
+function toSessionTrackReference(track: Track): SessionTrackReference {
+  return {
+    trackId: track.id,
+    title: track.title,
+    artist: track.artist,
+    durationSeconds: track.duration,
+    ...(track.fileMeta?.contentHash ? { contentHash: track.fileMeta.contentHash } : {}),
+    ...(track.fileMeta?.fileName ? { fileName: track.fileMeta.fileName } : {}),
+  };
+}
+
+function sliderEqToDb(value: number): number {
+  return Number((((value - 50) / 50) * 12).toFixed(2));
+}
+
 class DJStore {
   private static instance: DJStore | null = null;
   private state: DJStoreState = INITIAL_STATE;
@@ -300,6 +323,93 @@ class DJStore {
   public getSnapshot = (): DJStoreState => {
     return this.state;
   };
+
+  /** Starts in-memory capture and anchors it with the current audible deck/mixer state. */
+  public startSessionCapture(metadata: SessionMetadata = {}): RecordedSession {
+    sessionRecorder.start(metadata);
+    sessionRecorder.record({
+      type: 'session.initial-state',
+      state: this.captureInitialSessionState(),
+    });
+    for (const deckId of ['A', 'B'] as const) {
+      const alignment = this.getDeckState(deckId).phaseAlignment;
+      if (alignment.status === 'active') {
+        this.recordSessionEvent({ type: 'deck.micro-slew', deckId });
+      }
+    }
+    return sessionRecorder.getSession()!;
+  }
+
+  /** Stops capture and returns a detached snapshot of the recorded session. */
+  public finalizeSessionCapture(): RecordedSession | null {
+    return sessionRecorder.finalize();
+  }
+
+  /** Returns a detached snapshot of the active or most recently finalized session. */
+  public getSessionCapture(): RecordedSession | null {
+    return sessionRecorder.getSession();
+  }
+
+  private recordSessionEvent(event: SessionEventPayload): void {
+    sessionRecorder.record(event);
+  }
+
+  private captureInitialSessionState(): SessionInitialState {
+    const captureDeck = (deckId: DeckId): SessionInitialState['decks'][DeckId] => {
+      const deck = this.getDeckState(deckId);
+      let trackPositionSeconds = deck.currentTime;
+      if (deck.playbackState === 'playing') {
+        try {
+          trackPositionSeconds = audioEngine.getDeckCurrentTime(deckId);
+        } catch {
+          // Retain the last store snapshot if engine telemetry is unavailable.
+        }
+      }
+      let effectivePlaybackRate = deck.playbackRate;
+      try {
+        if (deck.track) effectivePlaybackRate = audioEngine.getDeckPlaybackRate(deckId);
+      } catch {
+        // Retain the store rate if engine telemetry is unavailable.
+      }
+      return {
+        track: deck.track ? toSessionTrackReference(deck.track) : null,
+        playbackState: deck.playbackState === 'playing' || deck.playbackState === 'paused'
+          ? deck.playbackState
+          : 'stopped',
+        trackPositionSeconds: Math.max(0, trackPositionSeconds),
+        effectivePlaybackRate,
+      };
+    };
+
+    const captureChannel = (channel: ChannelStripState): SessionInitialState['mixer']['channels'][DeckId] => ({
+      gainLinear: Number((channel.gain / 50).toFixed(4)),
+      volumeLinear: Number((channel.volume / 100).toFixed(4)),
+      eqDb: {
+        high: sliderEqToDb(channel.eq.high),
+        mid: sliderEqToDb(channel.eq.mid),
+        low: sliderEqToDb(channel.eq.low),
+      },
+      filter: Number((((channel.eq.filter - 50) / 50) * 100).toFixed(2)),
+    });
+
+    return {
+      decks: {
+        A: captureDeck('A'),
+        B: captureDeck('B'),
+      },
+      mixer: {
+        channels: {
+          A: captureChannel(this.state.mixer.channelA),
+          B: captureChannel(this.state.mixer.channelB),
+        },
+        crossfaderPosition: Number((this.state.mixer.crossfader / 100).toFixed(4)),
+        crossfaderCurve: this.state.mixer.crossfaderCurve,
+        masterGainLinear: this.state.isMasterMuted
+          ? 0
+          : Number((this.state.masterVolume / 100).toFixed(4)),
+      },
+    };
+  }
 
   public subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -630,6 +740,15 @@ class DJStore {
         errorCode: null,
         errorMessage: null,
       });
+      this.recordSessionEvent({
+        type: 'deck.track-loaded',
+        deckId,
+        track: {
+          ...toSessionTrackReference(effectiveTrack),
+          durationSeconds: audioBuffer.duration,
+        },
+        effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
+      });
 
       // Si el otro deck tenía una preparación de BAR SYNC armada o alineada,
       // invalidarla porque su contexto métrico / Master ha cambiado.
@@ -695,6 +814,12 @@ class DJStore {
       }
       this.setDeck(deckId, updates);
       this.ensureTimeLoop();
+      this.recordSessionEvent({
+        type: 'transport.play',
+        deckId,
+        trackPositionSeconds: deckState.currentTime,
+        effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
+      });
     } catch (err) {
       console.error(`[useDJStore] Error al reproducir Deck ${deckId}:`, err);
       this.checkStopTimeLoop();
@@ -729,11 +854,13 @@ class DJStore {
     }
 
     audioEngine.pauseDeck(deckId);
+    const trackPositionSeconds = audioEngine.getDeckCurrentTime(deckId);
     this.setDeck(deckId, {
       playbackState: 'paused',
-      currentTime: audioEngine.getDeckCurrentTime(deckId),
+      currentTime: trackPositionSeconds,
       isCupPlaying: false,
     });
+    this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds });
     this.checkStopTimeLoop();
   }
 
@@ -791,6 +918,7 @@ class DJStore {
       };
     }
     this.setDeck(deckId, updates);
+    this.recordSessionEvent({ type: 'transport.stop', deckId, trackPositionSeconds: 0 });
     this.checkStopTimeLoop();
   }
 
@@ -832,6 +960,14 @@ class DJStore {
       };
     }
     this.setDeck(deckId, updates);
+    this.recordSessionEvent({
+      type: 'transport.seek',
+      deckId,
+      trackPositionSeconds: clamped,
+      playbackState: deckState.playbackState === 'playing' || deckState.playbackState === 'paused'
+        ? deckState.playbackState
+        : 'stopped',
+    });
   }
 
   public seekDeckA(positionSeconds: number): void {
@@ -905,12 +1041,20 @@ class DJStore {
 
     if (deck.playbackState === 'playing') {
       audioEngine.pauseDeck(deckId);
+      const pausedAtPosition = audioEngine.getDeckCurrentTime(deckId);
       audioEngine.seekDeck(deckId, targetPos);
       this.setDeck(deckId, {
         playbackState: 'paused',
         currentTime: targetPos,
         isCupPlaying: false,
         ...(barSyncReset ? { barSync: barSyncReset } : {}),
+      });
+      this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds: pausedAtPosition });
+      this.recordSessionEvent({
+        type: 'transport.seek',
+        deckId,
+        trackPositionSeconds: targetPos,
+        playbackState: 'paused',
       });
       this.checkStopTimeLoop();
     } else {
@@ -919,6 +1063,12 @@ class DJStore {
         currentTime: targetPos,
         isCupPlaying: false,
         ...(barSyncReset ? { barSync: barSyncReset } : {}),
+      });
+      this.recordSessionEvent({
+        type: 'transport.seek',
+        deckId,
+        trackPositionSeconds: targetPos,
+        playbackState: deck.playbackState === 'paused' ? 'paused' : 'stopped',
       });
     }
   }
@@ -974,6 +1124,12 @@ class DJStore {
       }
       this.setDeck(deckId, updates);
       this.ensureTimeLoop();
+      this.recordSessionEvent({
+        type: 'transport.play',
+        deckId,
+        trackPositionSeconds: cueToPlay,
+        effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
+      });
     } catch (err) {
       this.isCupPlaying[deckId] = false;
       this.setDeck(deckId, { isCupPlaying: false });
@@ -994,8 +1150,16 @@ class DJStore {
     const targetPos = deck.mainCue ?? 0;
 
     audioEngine.pauseDeck(deckId);
+    const pausedAtPosition = audioEngine.getDeckCurrentTime(deckId);
     audioEngine.seekDeck(deckId, targetPos);
     this.setDeck(deckId, { playbackState: 'paused', currentTime: targetPos, isCupPlaying: false });
+    this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds: pausedAtPosition });
+    this.recordSessionEvent({
+      type: 'transport.seek',
+      deckId,
+      trackPositionSeconds: targetPos,
+      playbackState: 'paused',
+    });
     this.checkStopTimeLoop();
   }
 
@@ -1156,6 +1320,31 @@ class DJStore {
         }
       }
     }
+
+    if (deckState.track && deckState.duration > 0) {
+      this.recordSessionEvent({
+        type: 'deck.playback-rate',
+        deckId,
+        effectiveRate: audioEngine.getDeckPlaybackRate(deckId),
+        rampDurationMs: 0,
+        cause: 'pitch',
+      });
+    }
+    const updatedOtherDeck = this.getDeckState(otherDeckId);
+    if (
+      this.state.syncMasterDeck === deckId &&
+      otherDeck.isSyncActive &&
+      updatedOtherDeck.track &&
+      updatedOtherDeck.playbackRate !== otherDeck.playbackRate
+    ) {
+      this.recordSessionEvent({
+        type: 'deck.playback-rate',
+        deckId: otherDeckId,
+        effectiveRate: audioEngine.getDeckPlaybackRate(otherDeckId),
+        rampDurationMs: 0,
+        cause: 'sync',
+      });
+    }
   }
 
   public setPitchDeckA(pitchValue: number): void {
@@ -1198,6 +1387,15 @@ class DJStore {
     this.setDeck(deckId, {
       pitchBend: effectiveBendPercent,
     });
+    if (deckState.track && deckState.duration > 0) {
+      this.recordSessionEvent({
+        type: 'deck.playback-rate',
+        deckId,
+        effectiveRate: audioEngine.getDeckPlaybackRate(deckId),
+        rampDurationMs: direction === 'release' && deckState.playbackState === 'playing' ? 40 : 0,
+        cause: 'pitch-bend',
+      });
+    }
   }
 
   public pitchBendDeckA(direction: 'up' | 'down' | 'release'): void {
@@ -1323,6 +1521,13 @@ class DJStore {
         errorCode: null,
         errorMessage: null,
       },
+    });
+    this.recordSessionEvent({
+      type: 'deck.playback-rate',
+      deckId: slaveDeckId,
+      effectiveRate: audioEngine.getDeckPlaybackRate(slaveDeckId),
+      rampDurationMs: 0,
+      cause: 'sync',
     });
 
     return true;
@@ -1507,7 +1712,6 @@ class DJStore {
         reason: null,
       },
     });
-
     // 6. Aplicar la automatización al motor Web Audio
     const applied = audioEngine.applyDeckSlew(slaveDeckId, plan, () => {
       // Callback de finalización al expirar el tiempo del micro-slew
@@ -1537,6 +1741,16 @@ class DJStore {
       });
       return false;
     }
+
+    this.recordSessionEvent({
+      type: 'deck.micro-slew',
+      deckId: slaveDeckId,
+      baseRate: plan.baseRate,
+      peakRate: plan.peakRate,
+      rampDurationSeconds: plan.tRamp,
+      plateauDurationSeconds: plan.tPlateau,
+      targetDisplacementSeconds: plan.targetDisplacement,
+    });
 
     return true;
   }
@@ -1788,6 +2002,12 @@ class DJStore {
         beatsPerBar: plan.beatsPerBar,
         reason: null,
       },
+    });
+    this.recordSessionEvent({
+      type: 'transport.seek',
+      deckId: slaveDeckId,
+      trackPositionSeconds: verifiedPos,
+      playbackState: slaveState.playbackState === 'paused' ? 'paused' : 'stopped',
     });
 
     return plan;
@@ -2108,6 +2328,7 @@ class DJStore {
    * Descarga la pista del deck indicado y libera sus recursos en memoria.
    */
   public unloadDeck(deckId: DeckId): void {
+    const loadedTrack = this.getDeckState(deckId).track;
     this.cancelCup(deckId);
     this.cancelPhaseAlignment(deckId);
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
@@ -2143,6 +2364,9 @@ class DJStore {
       [deckId === 'A' ? 'deckA' : 'deckB']: unloadedDeck,
       [otherDeckId === 'A' ? 'deckA' : 'deckB']: otherDeck,
     });
+    if (loadedTrack) {
+      this.recordSessionEvent({ type: 'deck.track-unloaded', deckId, trackId: loadedTrack.id });
+    }
     this.checkStopTimeLoop();
   }
 
@@ -2174,6 +2398,10 @@ class DJStore {
         masterVolume: clamped,
       },
     });
+    this.recordSessionEvent({
+      type: 'mixer.master-gain',
+      gainLinear: this.state.isMasterMuted ? 0 : Number((clamped / 100).toFixed(4)),
+    });
   }
 
   /**
@@ -2187,6 +2415,10 @@ class DJStore {
       // Ignorar si el motor aún no está disponible
     }
     this.setState({ isMasterMuted });
+    this.recordSessionEvent({
+      type: 'mixer.master-gain',
+      gainLinear: isMasterMuted ? 0 : Number((this.state.masterVolume / 100).toFixed(4)),
+    });
   }
 
   /**
@@ -2209,6 +2441,11 @@ class DJStore {
           gain: clamped,
         },
       },
+    });
+    this.recordSessionEvent({
+      type: 'mixer.channel-gain',
+      deckId,
+      gainLinear: Number((clamped / 50).toFixed(4)),
     });
   }
 
@@ -2247,6 +2484,7 @@ class DJStore {
         },
       },
     });
+    this.recordSessionEvent({ type: 'mixer.eq', deckId, band, gainDb: dbValue });
   }
 
   /**
@@ -2284,6 +2522,7 @@ class DJStore {
         },
       },
     });
+    this.recordSessionEvent({ type: 'mixer.filter', deckId, value: bipolarValue });
   }
 
   /**
@@ -2307,6 +2546,11 @@ class DJStore {
         },
       },
     });
+    this.recordSessionEvent({
+      type: 'mixer.channel-volume',
+      deckId,
+      volumeLinear: Number((clamped / 100).toFixed(4)),
+    });
   }
 
   /**
@@ -2326,6 +2570,11 @@ class DJStore {
         crossfader: clamped,
       },
     });
+    this.recordSessionEvent({
+      type: 'mixer.crossfader',
+      position: Number((clamped / 100).toFixed(4)),
+      curve: this.state.mixer.crossfaderCurve,
+    });
   }
 
   /**
@@ -2343,6 +2592,11 @@ class DJStore {
         ...this.state.mixer,
         crossfaderCurve: curve,
       },
+    });
+    this.recordSessionEvent({
+      type: 'mixer.crossfader',
+      position: Number((this.state.mixer.crossfader / 100).toFixed(4)),
+      curve,
     });
   }
 
@@ -2459,6 +2713,7 @@ class DJStore {
       currentTime: 0,
       barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
     });
+    this.recordSessionEvent({ type: 'transport.ended', deckId, trackPositionSeconds: 0 });
     this.checkStopTimeLoop();
   }
 }
@@ -2474,6 +2729,9 @@ export function useDJStore(): {
   masterVolume: number;
   isMasterMuted: boolean;
   mixer: MixerState;
+  startSessionCapture: (metadata?: SessionMetadata) => RecordedSession;
+  finalizeSessionCapture: () => RecordedSession | null;
+  getSessionCapture: () => RecordedSession | null;
   loadTrackToDeckA: (track: Track) => Promise<boolean>;
   playDeckA: () => Promise<void>;
   pauseDeckA: () => void;
@@ -2574,6 +2832,9 @@ export function useDJStore(): {
     masterVolume: state.masterVolume,
     isMasterMuted: state.isMasterMuted,
     mixer: state.mixer,
+    startSessionCapture: djStore.startSessionCapture.bind(djStore),
+    finalizeSessionCapture: djStore.finalizeSessionCapture.bind(djStore),
+    getSessionCapture: djStore.getSessionCapture.bind(djStore),
 
     // Deck A
     loadTrackToDeckA: djStore.loadTrackToDeckA.bind(djStore),

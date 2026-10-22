@@ -7,13 +7,14 @@
  *    APIs de AudioContext, IndexedDB, DOM ni emite comandos al motor de audio.
  * 2. PREPARACIÓN ESTÁTICA: BAR SYNC V1 opera exclusivamente sobre decks detenidos o pausados
  *    (Slave). No ejecuta micro-slew de compás en caliente durante la reproducción.
- * 3. NO INICIA REPRODUCCIÓN: Calcula y valida la posición objetivo de frontera de compás (Downbeat),
- *    pero nunca arranca la reproducción de forma automática.
- * 4. IDENTIDAD CRIPTOGRÁFICA: Exige confirmación manual explícita (source: 'manual') vinculada
+ * 3. FASE DE COMPÁS: prepara el Slave en la misma fase normalizada de compás que tiene el Master
+ *    en la instantánea de cálculo. Una fase 0 equivale a un downbeat confirmado.
+ * 4. NO INICIA REPRODUCCIÓN: nunca arranca la reproducción automáticamente ni cuantiza un lanzamiento.
+ * 5. IDENTIDAD CRIPTOGRÁFICA: Exige confirmación manual explícita (source: 'manual') vinculada
  *    al contentHash verificado tanto en el Master como en el Slave.
- * 5. COMPATIBILIDAD MÉTRICA: Exige coincidencia estricta de métrica musical (beatsPerBar).
+ * 6. COMPATIBILIDAD MÉTRICA: Exige coincidencia estricta de métrica confirmada (beatsPerBar).
  *    Rechaza métricas incompatibles (ej. 4/4 vs 3/4) con 'rejected_metric_mismatch'.
- * 6. LÍMITES FÍSICOS: La posición objetivo calculada debe pertenecer rigurosamente al rango [0, duration].
+ * 7. LÍMITES FÍSICOS: La posición objetivo calculada debe pertenecer rigurosamente al rango [0, duration].
  */
 
 import type { PlaybackState, BarSyncStatus } from '../../types/deck.ts';
@@ -71,7 +72,7 @@ export interface BarSyncPlanResult {
   readonly status: BarSyncStatus;
   /**
    * Posición temporal calculada en segundos de buffer a la que debe desplazarse el Slave.
-   * Corresponde a una frontera de compás (Downbeat / Tiempo 1) válida dentro de [0, duration].
+   * Corresponde a la misma fase normalizada de compás del Master, dentro de [0, duration].
    * Es null si el cálculo fue rechazado.
    */
   readonly targetPosition: number | null;
@@ -100,8 +101,9 @@ export interface BarSyncPlanResult {
 }
 
 /**
- * Calcula de manera pura y determinista la posición objetivo de frontera de compás
- * para preparar un deck Slave detenido o pausado en sincronía métrica con el deck Master.
+ * Calcula de manera pura y determinista la posición objetivo del Slave que iguala la fase
+ * normalizada del compás confirmado del Master en la instantánea de cálculo. Esto prepara
+ * equivalencia de fase; no garantiza alineación audible posterior ni sincronía de frase.
  *
  * @param input Datos estructurados de Master, Slave y tolerancias.
  * @returns BarSyncPlanResult con el estado ('armed', 'already_aligned' o código de rechazo) y métricas.
@@ -149,6 +151,10 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   const isValidNumber = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
   if (
+    !isValidNumber(master.bpm) || master.bpm <= 0 ||
+    !isValidNumber(slave.bpm) || slave.bpm <= 0 ||
+    !isValidNumber(master.playbackRate) || master.playbackRate < 0.92 || master.playbackRate > 1.08 ||
+    !isValidNumber(slave.playbackRate) || slave.playbackRate < 0.92 || slave.playbackRate > 1.08 ||
     !isValidNumber(master.duration) || master.duration <= 0 ||
     !isValidNumber(slave.duration) || slave.duration <= 0 ||
     !isValidNumber(master.currentTime) || master.currentTime < 0 || master.currentTime > master.duration ||
@@ -240,6 +246,10 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   // Desplazamiento temporal respecto al tiempo 1 confirmado del Master: Δt_M = currentTime - D_M
   const deltaMasterSec = master.currentTime - masterConfirmation.position;
 
+  if (masterConfirmation.position > master.duration || slaveConfirmation.position > slave.duration) {
+    return reject('rejected_limits', 'El downbeat confirmado queda fuera de la duración de su pista');
+  }
+
   // Offset en segundos dentro del compás actual mediante módulo euclídeo continuo:
   // τ_M = ((Δt_M % T_bar,M) + T_bar,M) % T_bar,M ∈ [0, T_bar,M)
   const masterBarOffsetSec = ((deltaMasterSec % masterBarPeriodSec) + masterBarPeriodSec) % masterBarPeriodSec;
@@ -267,11 +277,9 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   const slaveAnchorDownbeat = slaveConfirmation.position;
 
   // Rango de índices enteros de compás válidos dentro de la duración del archivo Slave [0, duration]:
-  // 0 <= D_S + k * T_bar,S <= duration_S
-  // k_min = ceil(-D_S / T_bar,S)
-  // k_max = floor((duration_S - D_S) / T_bar,S)
-  const minBarIndex = Math.ceil(-slaveAnchorDownbeat / slaveBarPeriodSec);
-  const maxBarIndex = Math.floor((slave.duration - slaveAnchorDownbeat) / slaveBarPeriodSec);
+  // 0 <= D_S + (k + φ_M) * T_bar,S <= duration_S
+  const minBarIndex = Math.ceil(-slaveAnchorDownbeat / slaveBarPeriodSec - masterBarPhase);
+  const maxBarIndex = Math.floor((slave.duration - slaveAnchorDownbeat) / slaveBarPeriodSec - masterBarPhase);
 
   if (minBarIndex > maxBarIndex) {
     return reject(
@@ -280,15 +288,13 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
     );
   }
 
-  // Se selecciona el compás k más próximo a la posición actual del Slave (currentTime):
-  // k_nearest = round((currentTime - D_S) / T_bar,S)
-  const rawTargetIndex = Math.round((slave.currentTime - slaveAnchorDownbeat) / slaveBarPeriodSec);
-
-  // Clampear k a los límites válidos del archivo de audio para garantizar que nunca sea negativo ni supere la duración
+  // La posición equivalente en Slave preserva la fase normalizada del Master:
+  // t_S = D_S + (k + φ_M) * T_bar,S. Elegimos el k más próximo al cabezal actual.
+  const rawTargetIndex = Math.round(
+    (slave.currentTime - slaveAnchorDownbeat) / slaveBarPeriodSec - masterBarPhase
+  );
   const targetBarIndex = Math.max(minBarIndex, Math.min(maxBarIndex, rawTargetIndex));
-
-  // Posición temporal exacta en segundos del compás objetivo: t_target = D_S + targetBarIndex * T_bar,S
-  const exactTargetPosition = slaveAnchorDownbeat + targetBarIndex * slaveBarPeriodSec;
+  const exactTargetPosition = slaveAnchorDownbeat + (targetBarIndex + masterBarPhase) * slaveBarPeriodSec;
   const targetPosition = Number(exactTargetPosition.toFixed(3));
 
   if (!isValidNumber(targetPosition) || targetPosition < 0 || targetPosition > slave.duration) {

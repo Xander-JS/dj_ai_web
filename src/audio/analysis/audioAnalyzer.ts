@@ -113,6 +113,7 @@ export function analyzeAudioPcm(
         energy: energyResult.energy,
         waveformPeaks,
         bpmConfidence: bpmResult.confidence,
+        isAmbiguous: bpmResult.isAmbiguous,
         keyConfidence: keyResult.confidence,
         firstBeatTime: null,
         analysisError: 'Audio no musical o sin estructura rítmica y armónica suficiente para análisis determinista',
@@ -127,6 +128,7 @@ export function analyzeAudioPcm(
       energy: energyResult.energy,
       waveformPeaks,
       bpmConfidence: bpmResult.confidence,
+      isAmbiguous: bpmResult.isAmbiguous,
       keyConfidence: keyResult.confidence,
       firstBeatTime: hasBpm ? firstBeatTime : null,
     };

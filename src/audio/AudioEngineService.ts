@@ -7,6 +7,7 @@
 
 import type { DeckId } from '../types/deck';
 import type { ChannelEq, CrossfaderCurve } from '../types/mixer';
+import { calculateCrossfaderGains, getBipolarFilterSettings } from './djAudioMath.ts';
 import type { AudioEngineStatus, DeckAudioGraph, MasterAudioGraph, IAudioEngineService, ActiveDeckSlew } from '../types/audio';
 import {
   type SlewProfilePlan,
@@ -504,26 +505,11 @@ export class AudioEngineService implements IAudioEngineService {
     const graph = this.getDeckGraph(deckId);
     if (!this.audioContext) return;
 
-    const val = Math.max(-100, Math.min(100, filterNormalized));
     const filter = graph.filterNode;
     const now = this.audioContext.currentTime;
-
-    if (val === 0) {
-      // Centro = Bypass (allpass)
-      filter.type = 'allpass';
-    } else if (val < 0) {
-      // Filtro Lowpass (corte de agudos progresivo de 20 kHz a 200 Hz)
-      filter.type = 'lowpass';
-      const factor = (val + 100) / 100; // 0.0 a 1.0
-      const freq = 200 * Math.pow(20000 / 200, factor);
-      filter.frequency.setValueAtTime(Number(freq.toFixed(2)), now);
-    } else {
-      // Filtro Highpass (corte de graves progresivo de 20 Hz a 8 kHz)
-      filter.type = 'highpass';
-      const factor = val / 100; // 0.0 a 1.0
-      const freq = 20 * Math.pow(8000 / 20, factor);
-      filter.frequency.setValueAtTime(Number(freq.toFixed(2)), now);
-    }
+    const settings = getBipolarFilterSettings(filterNormalized);
+    filter.type = settings.type;
+    if (settings.frequency !== undefined) filter.frequency.setValueAtTime(settings.frequency, now);
   }
 
   /**
@@ -549,7 +535,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     if (!this.audioContext) return;
 
-    const { gainA, gainB } = this.calculateCrossfaderGains(positionNormalized, curve);
+    const { gainA, gainB } = calculateCrossfaderGains(positionNormalized, curve);
     const now = this.audioContext.currentTime;
 
     const graphA = this.deckGraphs.get('A');
@@ -1167,7 +1153,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     // 6. Atenuador del crossfader
     const crossfaderGainNode = ctx.createGain();
-    const gains = this.calculateCrossfaderGains(this.crossfaderPosition, this.crossfaderCurve);
+    const gains = calculateCrossfaderGains(this.crossfaderPosition, this.crossfaderCurve);
     const initialCrossGain = deckId === 'A' ? gains.gainA : gains.gainB;
     crossfaderGainNode.gain.setValueAtTime(initialCrossGain, now);
 
@@ -1197,38 +1183,6 @@ export class AudioEngineService implements IAudioEngineService {
       volumeNode,
       crossfaderGainNode,
       analyserNode,
-    };
-  }
-
-  private calculateCrossfaderGains(pos: number, curve: CrossfaderCurve): { gainA: number; gainB: number } {
-    // Normalizar a rango [0.0, 1.0]
-    const p = Math.max(0, Math.min(1, pos > 1 ? pos / 100 : pos));
-    let gainA = 1.0;
-    let gainB = 1.0;
-
-    switch (curve) {
-      case 'linear':
-        gainA = 1.0 - p;
-        gainB = p;
-        break;
-
-      case 'constant-power':
-        gainA = Math.cos(p * 0.5 * Math.PI);
-        gainB = Math.sin(p * 0.5 * Math.PI);
-        break;
-
-      case 'cut':
-        // Curva scratch/cut:
-        // En los extremos [0.0 .. 0.05] y [0.95 .. 1.0] transición rápida
-        // En el rango central [0.05 .. 0.95] ambos canales al 100% (1.0)
-        gainA = p >= 0.95 ? Math.max(0, (1.0 - p) * 20) : 1.0;
-        gainB = p <= 0.05 ? Math.max(0, p * 20) : 1.0;
-        break;
-    }
-
-    return {
-      gainA: Math.max(0, Math.min(1, Number(gainA.toFixed(4)))),
-      gainB: Math.max(0, Math.min(1, Number(gainB.toFixed(4)))),
     };
   }
 

@@ -413,6 +413,8 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4, 300);
     const slaveTrack = createConfiguredTrack('slave.mp3', 120, HASH_SLAVE, 0.5, 4, 300);
 
+    await indexedDBStorage.saveTrack(masterTrack, createTestAudioFile('master.mp3'));
+    await indexedDBStorage.saveTrack(slaveTrack, createTestAudioFile('slave.mp3'));
     await djStore.loadTrackToDeckA(masterTrack);
     await djStore.loadTrackToDeckB(slaveTrack);
 

@@ -58,7 +58,8 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     // 9.5 % 2.0 = 1.5s (τ_M = 1.5s, fase = 0.75, está en el 4º pulso del compás).
     // Slave: 120 BPM, 4/4 => T_bar = 2.0s, Downbeat = 0.5s.
     // Slave currentTime = 8.2s => (8.2 - 0.5) / 2.0 = 7.7 / 2.0 = 3.85 compases => k_nearest = 4.
-    // targetPosition = 0.5 + 4 * 2.0 = 8.5s.
+    // Fase Master = 0.75; posiciones Slave equivalentes: 0.5 + (k + 0.75) * 2.0.
+    // La más cercana a 8.2s es 8.0s.
     const input: BarSyncPlanInput = {
       master: createValidMasterInput({ currentTime: 10.500 }),
       slave: createValidSlaveInput({ currentTime: 8.200, playbackState: 'stopped' }),
@@ -67,14 +68,14 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     const result = calculateBarSyncPlan(input);
 
     assert.equal(result.status, 'armed');
-    assert.equal(result.targetPosition, 8.500);
+    assert.equal(result.targetPosition, 8.000);
     assert.equal(result.targetDownbeatSec, 0.500);
     assert.equal(result.beatsPerBar, 4);
     assert.equal(result.masterBarPeriodSec, 2.000);
     assert.equal(result.masterBarPhase, 0.7500);
     assert.equal(result.timeToNextMasterDownbeatSec, 0.500); // 2.0 - 1.5 = 0.5s
     assert.equal(result.slaveBarPeriodSec, 2.000);
-    assert.equal(result.targetBarIndex, 4);
+    assert.equal(result.targetBarIndex, 3);
     assert.equal(result.reason, null);
   });
 
@@ -90,7 +91,7 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     assert.equal(result.status, 'armed');
     assert.ok(result.targetPosition !== null);
     // (16.4 - 0.5) / 2.0 = 15.9 / 2.0 = 7.95 => k = 8 => target = 0.5 + 16.0 = 16.500s
-    assert.equal(result.targetPosition, 16.500);
+    assert.equal(result.targetPosition, 16.000);
     assert.equal(result.reason, null);
   });
 
@@ -308,7 +309,7 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
 
     assert.equal(resLow.status, 'armed');
     assert.ok(resLow.targetPosition! >= 0);
-    assert.equal(resLow.targetPosition, 1.000);
+    assert.equal(resLow.targetPosition, 0.500);
 
     // Posición cerca del final: duración 20s, currentTime 19.8s
     const resHigh = calculateBarSyncPlan({
@@ -327,7 +328,7 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     assert.equal(resHigh.status, 'armed');
     assert.ok(resHigh.targetPosition! <= 20.0);
     // (19.8 - 1.0) / 2.0 = 9.4 => k = 9 => target = 1.0 + 18.0 = 19.000s
-    assert.equal(resHigh.targetPosition, 19.000);
+    assert.equal(resHigh.targetPosition, 18.500);
   });
 
   // 12. Fronteras de compás y posiciones cercanas al inicio y final del archivo
@@ -335,7 +336,7 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     // Si la pista dura solo 5 segundos y el downbeat está en 4.5s con T_bar = 2.0s
     // 4.5 - 2.0 = 2.5, 2.5 - 2.0 = 0.5. Compases válidos: 0.5s, 2.5s, 4.5s
     const input: BarSyncPlanInput = {
-      master: createValidMasterInput(),
+      master: createValidMasterInput({ currentTime: 9.000 }), // fase 0: equivalente a una frontera de compás
       slave: createValidSlaveInput({
         duration: 5.0,
         currentTime: 0.0,
@@ -401,19 +402,56 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
 
   // 16. Detección de already_aligned
   it('16. Devuelve status already_aligned si el Slave ya se encuentra en la posición objetivo del compás', () => {
-    // Slave Downbeat = 0.5s, T_bar = 2.0s => Frontera de compás = 8.5s
-    // Si currentTime del Slave es exactamente 8.5s (o dentro de 5ms)
+    // Master phase = 0.75; la posición Slave equivalente más cercana es 8.0s.
     const input: BarSyncPlanInput = {
       master: createValidMasterInput(),
       slave: createValidSlaveInput({
-        currentTime: 8.502, // A solo 2 ms de la frontera 8.500s (tolerancia es 5 ms)
+        currentTime: 8.002, // A solo 2 ms de la posición equivalente (tolerancia 5 ms)
       }),
     };
 
     const res = calculateBarSyncPlan(input);
 
     assert.equal(res.status, 'already_aligned');
-    assert.equal(res.targetPosition, 8.500);
+    assert.equal(res.targetPosition, 8.000);
     assert.equal(res.reason, null);
+  });
+
+  it('17. Iguala fase de compás usando BPM efectivo, offsets de downbeat y pitch dentro de ±8%', () => {
+    const master = createValidMasterInput({
+      bpm: 128,
+      playbackRate: 1.08,
+      currentTime: 1 + (0.25 * (4 * 60 / (128 * 1.08))),
+    });
+    const slave = createValidSlaveInput({
+      bpm: 120,
+      playbackRate: 0.92,
+      currentTime: 18.4,
+      downbeat: createManualDownbeatConfirmation({
+        position: 0.75,
+        beatsPerBar: 4,
+        contentHash: HASH_SLAVE,
+      }),
+    });
+    const result = calculateBarSyncPlan({ master, slave });
+
+    assert.equal(result.status, 'armed');
+    assert.ok(result.targetPosition !== null);
+    const slaveBarPeriod = 4 * 60 / (120 * 0.92);
+    const resultingSlavePhase = (((result.targetPosition! - 0.75) % slaveBarPeriod) + slaveBarPeriod) % slaveBarPeriod / slaveBarPeriod;
+    assert.ok(Math.abs(resultingSlavePhase - result.masterBarPhase!) < 0.001);
+    assert.equal(result.masterBarPeriodSec, Number((4 * 60 / (128 * 1.08)).toFixed(3)));
+    assert.equal(result.slaveBarPeriodSec, Number(slaveBarPeriod.toFixed(3)));
+    assert.equal(master.playbackRate, 1.08);
+    assert.equal(slave.playbackRate, 0.92);
+  });
+
+  it('18. Rechaza velocidades fuera del límite de pitch ±8% sin proponer posición', () => {
+    const result = calculateBarSyncPlan({
+      master: createValidMasterInput({ playbackRate: 1.0801 }),
+      slave: createValidSlaveInput(),
+    });
+    assert.equal(result.status, 'rejected_limits');
+    assert.equal(result.targetPosition, null);
   });
 });

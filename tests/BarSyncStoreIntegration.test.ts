@@ -217,22 +217,21 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     // Verificar estado detenido antes de preparar
     assert.equal(djStore.getSnapshot().deckB.playbackState, 'stopped');
 
-    // Master: 120 BPM, 4/4 => T_bar = 2.0s, downbeat = 1.0s.
-    // Slave: 120 BPM, 4/4 => T_bar = 2.0s, downbeat = 0.5s.
-    // Slave currentTime = 8.2s => (8.2 - 0.5) / 2.0 = 3.85 => k = 4 => t_target = 0.5 + 4*2 = 8.5s.
+    // BAR SYNC conserva la fase de compás del Master en esta instantánea y elige
+    // la posición equivalente más cercana en el Slave.
     const plan = djStore.prepareBarSync('B');
 
     assert.equal(plan.status, 'armed');
-    assert.equal(plan.targetPosition, 8.5);
+    assert.equal(plan.targetPosition, 7.5);
     assert.equal(plan.beatsPerBar, 4);
 
     const deckB = djStore.getSnapshot().deckB;
-    assert.equal(deckB.currentTime, 8.5);
+    assert.equal(deckB.currentTime, 7.5);
     assert.equal(deckB.playbackState, 'stopped', 'El Slave debe conservar estrictamente su estado detenido');
     assert.equal(deckB.barSync.status, 'armed');
-    assert.equal(deckB.barSync.preparedPosition, 8.5);
+    assert.equal(deckB.barSync.preparedPosition, 7.5);
     assert.equal(deckB.barSync.previousPosition, 8.2);
-    assert.equal(deckB.barSync.displacementSec, 0.3);
+    assert.equal(deckB.barSync.displacementSec, -0.7);
     assert.equal(deckB.barSync.targetDownbeatSec, 0.5);
     assert.equal(deckB.barSync.beatsPerBar, 4);
     assert.equal(deckB.barSync.reason, null);
@@ -256,13 +255,13 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     const plan = djStore.prepareBarSync('B');
 
     assert.equal(plan.status, 'armed');
-    assert.equal(plan.targetPosition, 8.5);
+    assert.equal(plan.targetPosition, 7.5);
 
     const deckB = djStore.getSnapshot().deckB;
-    assert.equal(deckB.currentTime, 8.5);
+    assert.equal(deckB.currentTime, 7.5);
     assert.equal(deckB.playbackState, 'paused', 'El Slave debe conservar estrictamente su estado pausado');
     assert.equal(deckB.barSync.status, 'armed');
-    assert.equal(deckB.barSync.preparedPosition, 8.5);
+    assert.equal(deckB.barSync.preparedPosition, 7.5);
   });
 
   // 3. Master detenido o pausado: rechazo sin movimiento
@@ -410,8 +409,8 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     await djStore.loadTrackToDeck('B', slaveTrack);
     await djStore.playDeck('A');
 
-    // Posicionar al Slave exactamente en 8.5 (downbeat 0.5 + 4 * 2.0 = 8.5)
-    audioEngine.seekDeck('B', 8.5);
+    // Posicionar al Slave en la fase equivalente calculada por BAR SYNC.
+    audioEngine.seekDeck('B', 7.5);
 
     let seekCalled = false;
     const originalSeek = audioEngine.seekDeck.bind(audioEngine);
@@ -423,12 +422,12 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     try {
       const plan = djStore.prepareBarSync('B');
       assert.equal(plan.status, 'already_aligned');
-      assert.equal(plan.targetPosition, 8.5);
+      assert.equal(plan.targetPosition, 7.5);
       assert.equal(seekCalled, false, 'No se debe llamar a seekDeck si ya estaba alineado');
       const bSync = djStore.getSnapshot().deckB.barSync;
       assert.equal(bSync.status, 'already_aligned');
-      assert.equal(bSync.preparedPosition, 8.5);
-      assert.equal(bSync.previousPosition, 8.5);
+      assert.equal(bSync.preparedPosition, 7.5);
+      assert.equal(bSync.previousPosition, 7.5);
       assert.equal(bSync.displacementSec, 0);
     } finally {
       audioEngine.seekDeck = originalSeek;
@@ -606,8 +605,8 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     await djStore.loadTrackToDeck('B', slaveTrack);
     await djStore.playDeck('A');
 
-    // Posicionar al Slave en 8.503 (target es 8.5, tolerancia por defecto 0.005s)
-    audioEngine.seekDeck('B', 8.503);
+    // Posicionar al Slave en 7.503 (target es 7.5, tolerancia por defecto 0.005s)
+    audioEngine.seekDeck('B', 7.503);
 
     let seekCalled = false;
     const originalSeek = audioEngine.seekDeck.bind(audioEngine);
@@ -619,13 +618,13 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     try {
       const plan = djStore.prepareBarSync('B');
       assert.equal(plan.status, 'already_aligned');
-      assert.equal(plan.targetPosition, 8.5);
+      assert.equal(plan.targetPosition, 7.5);
       assert.equal(seekCalled, false, 'No debe ejecutar seekDeck en already_aligned');
 
       const bSync = djStore.getSnapshot().deckB.barSync;
       assert.equal(bSync.status, 'already_aligned');
-      assert.equal(bSync.preparedPosition, 8.503, 'preparedPosition debe ser la posición real del cabezal');
-      assert.equal(bSync.previousPosition, 8.503, 'previousPosition debe registrar la posición previa real');
+      assert.equal(bSync.preparedPosition, 7.503, 'preparedPosition debe ser la posición real del cabezal');
+      assert.equal(bSync.previousPosition, 7.503, 'previousPosition debe registrar la posición previa real');
       assert.equal(bSync.displacementSec, 0.003, 'displacementSec no debe forzarse a 0 si hay desviación real');
     } finally {
       audioEngine.seekDeck = originalSeek;
@@ -646,9 +645,9 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     assert.equal(plan.status, 'armed');
 
     const armedSync = djStore.getSnapshot().deckB.barSync;
-    assert.equal(armedSync.preparedPosition, 8.5);
+    assert.equal(armedSync.preparedPosition, 7.5);
     assert.equal(armedSync.previousPosition, 8.2);
-    assert.equal(armedSync.displacementSec, 0.3);
+    assert.equal(armedSync.displacementSec, -0.7);
 
     // Cancelar BAR SYNC
     djStore.cancelBarSync('B');

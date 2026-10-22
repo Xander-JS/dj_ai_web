@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { defineConfig, loadEnv, type Plugin, type ViteDevServer, type PreviewServer } from 'vite';
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from 'vite';
 import { createUnscoredMockRecommendations } from './src/services/ai/geminiRecommendationService.ts';
 
 interface DevApiCandidateTrack {
@@ -51,7 +51,7 @@ interface GeminiApiResponse {
  *
  * NOTA DE ARQUITECTURA:
  * Este endpoint local en el servidor de desarrollo de Vite es exclusivo para desarrollo
- * local seguro. Lee GEMINI_API_KEY del entorno del servidor y nunca expone la clave al
+ * local. Lee GEMINI_API_KEY del entorno del servidor y nunca expone la clave al
  * cliente web ni a los bundles de producción. No constituye una solución de backend
  * de producción (en producción se debe emplear un API Gateway, Cloudflare Worker o Edge Function).
  */
@@ -364,9 +364,6 @@ Only return candidates from the provided list. Do not invent tracks or track IDs
   return {
     name: 'system-dj-gemini-dev-api',
     configureServer(server: ViteDevServer) {
-      server.middlewares.use(handler);
-    },
-    configurePreviewServer(server: PreviewServer) {
       server.middlewares.use(handler);
     },
   };

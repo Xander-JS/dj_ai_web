@@ -13,7 +13,6 @@ import {
   Lightbulb,
   CheckCircle2,
   AlertTriangle,
-  Layers,
 } from 'lucide-react';
 import { Card, CardBody } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -39,6 +38,7 @@ export const SmartRecommendationCard: React.FC = () => {
     referenceTrack: Track;
     availableTracks: Track[];
     recommendations: TrackRecommendation[];
+    insufficientCandidateCount: number;
   } | null>(null);
   const [activeRequest, setActiveRequest] = useState<{ id: number; referenceTrack: Track; availableTracks: Track[] } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -96,6 +96,10 @@ export const SmartRecommendationCard: React.FC = () => {
     : [];
   const isLoading = activeRequest?.referenceTrack === referenceTrack &&
     activeRequest.availableTracks === availableTracks;
+  const insufficientCandidateCount = recommendationResult?.referenceTrack === referenceTrack &&
+    recommendationResult.availableTracks === availableTracks
+    ? recommendationResult.insufficientCandidateCount
+    : 0;
 
   useLayoutEffect(() => {
     invalidateRecommendationRequest();
@@ -105,7 +109,7 @@ export const SmartRecommendationCard: React.FC = () => {
 
   // Función para solicitar recomendaciones a Gemini
   const handleFetchRecommendations = useCallback(
-    async (forceMock = false) => {
+    async () => {
       if (!referenceTrack) return;
       if (
         referenceTrack.analysis?.status !== 'analyzed' ||
@@ -125,14 +129,18 @@ export const SmartRecommendationCard: React.FC = () => {
 
       try {
         const response = await getTrackRecommendations(referenceTrack, availableTracks, {
-          forceMock,
           signal: request.signal,
         });
 
         if (!isCurrentRequest()) return;
 
         if (response.success) {
-          setRecommendationResult({ referenceTrack, availableTracks, recommendations: response.recommendations });
+          setRecommendationResult({
+            referenceTrack,
+            availableTracks,
+            recommendations: response.recommendations,
+            insufficientCandidateCount: response.insufficientCandidateCount ?? 0,
+          });
           setIsMockResult(response.isMock);
           setModelUsed(response.model || null);
           if (response.warning && response.recommendations.length === 0) {
@@ -251,7 +259,7 @@ export const SmartRecommendationCard: React.FC = () => {
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => handleFetchRecommendations(false)}
+                onClick={() => handleFetchRecommendations()}
                 disabled={isLoading || referenceTrack.analysis?.status !== 'analyzed' || typeof referenceTrack.analysis.bpm !== 'number' || !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)}
               >
                 {isLoading ? (
@@ -267,17 +275,6 @@ export const SmartRecommendationCard: React.FC = () => {
               <span className="smart-rec-empty-hint">{t('dashboard.load_local_track_first')}</span>
             )}
 
-            {referenceTrack && !isLoading && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleFetchRecommendations(true)}
-                title={t('dashboard.force_mock_mode')}
-              >
-                <Layers size={13} />
-                {t('dashboard.try_mock')}
-              </Button>
-            )}
           </div>
         </div>
 
@@ -314,17 +311,10 @@ export const SmartRecommendationCard: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleFetchRecommendations(false)}
+                onClick={() => handleFetchRecommendations()}
               >
                 <RotateCcw size={12} />
                 {t('dashboard.retry')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleFetchRecommendations(true)}
-              >
-                {t('dashboard.try_mock')}
               </Button>
             </div>
           </div>
@@ -340,7 +330,7 @@ export const SmartRecommendationCard: React.FC = () => {
         {!isLoading &&
           !errorMsg &&
           referenceTrack &&
-          recommendations.length === 0 && (
+          recommendations.length === 0 && insufficientCandidateCount === 0 && (
             <div className="smart-rec-empty-box">
               <Sparkles size={28} />
               <p>
@@ -348,11 +338,17 @@ export const SmartRecommendationCard: React.FC = () => {
                   title: referenceTrack.title,
                   bpm: referenceTrack.analysis?.bpm ? `${referenceTrack.analysis.bpm} BPM` : t('dashboard.bpm_na', 'BPM N/A'),
                   key: referenceTrack.analysis?.camelot || referenceTrack.analysis?.key || t('dashboard.key_na', 'Camelot N/A'),
-                  action: t('dashboard.get_recommendations', 'Obtener con Gemini'),
+                  action: t('dashboard.get_recommendations'),
                 })}
               </p>
             </div>
           )}
+
+        {!isLoading && !errorMsg && insufficientCandidateCount > 0 && (
+          <p className="smart-rec-evidence-note" role="status">
+            {t('dashboard.insufficient_evidence', { count: insufficientCandidateCount })}
+          </p>
+        )}
 
         {/* Lista de Recomendaciones Obtenidas */}
         {!isLoading && !errorMsg && recommendations.length > 0 && (
@@ -366,6 +362,10 @@ export const SmartRecommendationCard: React.FC = () => {
                   : rec.compatibilityScore >= 50
                   ? 'smart-rec-score-medium'
                   : 'smart-rec-score-low';
+              const missingEvidence = [
+                rec.tempoEvaluation?.relation === 'unknown' ? t('dashboard.bpm_label', 'BPM') : null,
+                rec.harmonicEvaluation?.relation === 'unknown' ? t('dashboard.key_label', 'Key') : null,
+              ].filter((value): value is string => value !== null).join(', ');
 
               return (
                 <div key={rec.trackId} className="smart-rec-item">
@@ -386,6 +386,11 @@ export const SmartRecommendationCard: React.FC = () => {
                           {rec.compatibilityScore}%
                         </span>
                       )}
+                      <span className="smart-rec-evidence-tag">
+                        {rec.evidenceStatus === 'partial'
+                          ? t('dashboard.partial_evidence', { missing: missingEvidence })
+                          : t('dashboard.full_evidence')}
+                      </span>
                       {rec.isMock ? (
                         <span className="smart-rec-mock-tag">
                           {t('dashboard.badge_mock')}

@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Library } from './pages/Library';
 import { Playlists } from './pages/Playlists';
 import { Mixer } from './pages/Mixer';
+import { Sessions } from './pages/Sessions';
 import { Settings } from './pages/Settings';
 import { Profile } from './pages/Profile';
 
@@ -17,6 +18,7 @@ function App() {
         <Route path="/library" element={<Library />} />
         <Route path="/playlists" element={<Playlists />} />
         <Route path="/mixer" element={<Mixer />} />
+        <Route path="/sessions" element={<Sessions />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/profile" element={<Profile />} />
       </Routes>

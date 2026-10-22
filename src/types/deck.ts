@@ -29,6 +29,29 @@ export interface PhaseAlignmentState {
   reason?: string | null;
 }
 
+export type BarSyncStatus =
+  | 'idle'
+  | 'armed'
+  | 'completed'
+  | 'cancelled'
+  | 'already_aligned'
+  | 'rejected_state'
+  | 'rejected_unconfirmed'
+  | 'rejected_no_downbeat'
+  | 'rejected_metric_mismatch'
+  | 'rejected_limits'
+  | 'rejected_confidence';
+
+export interface BarSyncState {
+  status: BarSyncStatus;
+  preparedPosition?: number | null;
+  previousPosition?: number | null;
+  displacementSec?: number | null;
+  targetDownbeatSec?: number | null;
+  beatsPerBar?: number | null;
+  reason?: string | null;
+}
+
 export interface DeckState {
   deckId: DeckId;
   track: Track | null;
@@ -44,6 +67,7 @@ export interface DeckState {
   isSyncActive: boolean;        // Sincronización automática de BPM activada
   isMaster: boolean;            // Indica si el deck actúa como referencia Master de tempo
   phaseAlignment?: PhaseAlignmentState; // Estado de alineación de pulsos mediante micro-slew
+  barSync?: BarSyncState;               // Estado de preparación de compás (BAR SYNC)
   volume: number;               // Nivel de fader asignado al deck (0 a 100)
   errorMessage?: string | null; // Mensajes de fallo al decodificar o reproducir
 }

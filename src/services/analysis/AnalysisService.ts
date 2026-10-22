@@ -289,13 +289,38 @@ export class AnalysisService {
       const msg = event.data;
       if (!msg) return;
 
-      // Protección contra resultados obsoletos o cancelados
-      if (
-        msg.requestId !== item.requestId ||
-        this.cancelledRequestIds.has(msg.requestId) ||
-        this.trackToLatestRequestId.get(item.trackId) !== item.requestId
-      ) {
+      // 1. Si la tarea ya no está activa (fue cancelada, expiró por timeout o ya finalizó),
+      // descartar cualquier mensaje residual tardío sin alterar tareas posteriores.
+      if (!this.activeTasks.has(item.requestId)) {
+        return;
+      }
+
+      // 2. Si el mensaje corresponde a una solicitud que fue cancelada previamente,
+      // descartarlo como mensaje tardío obsoleto sin afectar la tarea activa actual.
+      if (this.cancelledRequestIds.has(msg.requestId)) {
+        return;
+      }
+
+      // 3. Rechazo explícito si el resultado del Worker pertenece a otra pista (Requisito 7.6)
+      if (msg.trackId !== item.trackId) {
         this.cleanupActiveTask(item.requestId, worker);
+        this.handleTaskFailure(item, `Resultado de Worker rechazado: trackId "${msg.trackId}" no coincide con "${item.trackId}"`);
+        this.processQueue();
+        return;
+      }
+
+      // 4. Si el mensaje trae un requestId que no coincide con la tarea activa actual
+      if (msg.requestId !== item.requestId) {
+        this.cleanupActiveTask(item.requestId, worker);
+        this.handleTaskFailure(item, `Resultado de Worker rechazado: requestId "${msg.requestId}" no coincide con la tarea activa "${item.requestId}"`);
+        this.processQueue();
+        return;
+      }
+
+      // 5. Si la tarea fue superada por una solicitud más reciente del mismo trackId
+      if (this.trackToLatestRequestId.get(item.trackId) !== item.requestId) {
+        this.cleanupActiveTask(item.requestId, worker);
+        this.handleTaskFailure(item, 'Solicitud obsoleta reemplazada por un análisis más reciente');
         this.processQueue();
         return;
       }

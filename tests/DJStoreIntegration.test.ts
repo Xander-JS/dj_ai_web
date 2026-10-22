@@ -239,12 +239,11 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
       dateAdded: Date.now(),
     };
 
-    await djStore.loadTrackToDeckA(ghostTrack);
+    assert.equal(await djStore.loadTrackToDeckA(ghostTrack), false);
     const snap = djStore.getSnapshot();
-    assert.equal(snap.deckA.playbackState, 'error');
-    assert.equal(snap.deckA.errorCode, 'file_missing');
-    assert.ok(snap.deckA.errorMessage);
-    assert.match(snap.deckA.errorMessage, /no se encuentra/i);
+    assert.equal(snap.deckA.track, null);
+    assert.equal(snap.deckA.playbackState, 'stopped');
+    assert.equal(snap.deckA.duration, 0);
   });
 
   test('Manejo de errores cuando decodeAudioData falla (archivo dañado o corrupto)', async () => {
@@ -262,10 +261,8 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
       assert.equal(loadResult, false);
 
       const snap = djStore.getSnapshot();
-      assert.equal(snap.deckA.playbackState, 'error');
-      assert.equal(snap.deckA.errorCode, 'decode_failed');
-      assert.ok(snap.deckA.errorMessage);
-      assert.match(snap.deckA.errorMessage, /dañado/i);
+      assert.equal(snap.deckA.track, null);
+      assert.equal(snap.deckA.playbackState, 'stopped');
       assert.equal(snap.deckA.duration, 0);
       assert.equal(audioEngine.getDeckDuration('A'), 0);
     } finally {
@@ -587,10 +584,9 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
     assert.equal(loadResult, false);
 
     const snap = djStore.getSnapshot();
-    assert.equal(snap.deckB.playbackState, 'error');
-    assert.equal(snap.deckB.errorCode, 'file_missing');
-    assert.ok(snap.deckB.errorMessage);
-    assert.match(snap.deckB.errorMessage, /no se encuentra/i);
+    assert.equal(snap.deckB.track, null);
+    assert.equal(snap.deckB.playbackState, 'stopped');
+    assert.equal(snap.deckB.duration, 0);
   });
 });
 
@@ -881,6 +877,143 @@ describe('useDJStore — Centralización del Estado del Mixer y Sincronización 
     // Deck A y Deck B no deben ser mutados por acciones del mixer
     assert.equal(snapBefore.deckA, snapAfter.deckA);
     assert.equal(snapBefore.deckB, snapAfter.deckB);
+  });
+});
+
+describe('DJStore — Captura determinista de sesión', () => {
+  const originalWindow = globalThis.window;
+  const originalPerformanceDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'performance');
+  let monotonicNow = 10_000;
+
+  beforeEach(async () => {
+    monotonicNow = 10_000;
+    (globalThis as unknown as { window: unknown }).window = { AudioContext: MockAudioContext };
+    Object.defineProperty(globalThis, 'performance', {
+      configurable: true,
+      value: { now: () => monotonicNow },
+    });
+    await audioEngine.initialize();
+    djStore.finalizeSessionCapture();
+    djStore.unloadDeckA();
+    djStore.unloadDeckB();
+    djStore.setMasterVolume(80);
+    if (djStore.getSnapshot().isMasterMuted) djStore.toggleMasterMute();
+    djStore.setChannelGain('A', 50);
+    djStore.setChannelVolume('A', 80);
+    djStore.setChannelEq('A', 'high', 50);
+    djStore.setChannelFilter('A', 50);
+    djStore.setPitchDeckA(50);
+    djStore.setPitchDeckB(50);
+    djStore.setCrossfader(50);
+    djStore.setCrossfaderCurve('constant-power');
+    await indexedDBStorage.clearAll();
+  });
+
+  afterEach(async () => {
+    djStore.finalizeSessionCapture();
+    djStore.unloadDeckA();
+    djStore.unloadDeckB();
+    await audioEngine.dispose();
+    (globalThis as unknown as { window: unknown }).window = originalWindow;
+    if (originalPerformanceDescriptor) {
+      Object.defineProperty(globalThis, 'performance', originalPerformanceDescriptor);
+    }
+  });
+
+  test('captures confirmed load, transport and mixer actions once in their recorded order', async () => {
+    const started = djStore.startSessionCapture({ title: 'Capture integration' });
+    const file = new File([new Uint8Array(32)], 'capture.wav', { type: 'audio/wav' });
+    const track = createTrackFromFile(file, 195);
+    await indexedDBStorage.saveTrack(track, file);
+    assert.equal(await djStore.loadTrackToDeckA(track), true);
+    djStore.setPitchDeckA(75);
+    await djStore.playDeckA();
+    djStore.pitchBend('A', 'up');
+    djStore.pitchBend('A', 'release');
+    djStore.seekDeckA(35);
+    djStore.pauseDeckA();
+    djStore.setChannelGain('A', 75);
+    djStore.setChannelEq('A', 'high', 75);
+    djStore.setChannelFilter('A', 25);
+    djStore.setChannelVolume('A', 60);
+    djStore.setCrossfader(65);
+    djStore.setCrossfaderCurve('linear');
+    djStore.setMasterVolume(40);
+
+    const active = djStore.getSessionCapture()!;
+    const events = active.events;
+    assert.equal(started.formatVersion, 2);
+    assert.equal(events[0].type, 'session.initial-state');
+    assert.deepEqual(events.slice(1, 8).map((event) => event.type), [
+      'deck.track-loaded',
+      'deck.playback-rate',
+      'transport.play',
+      'deck.playback-rate',
+      'deck.playback-rate',
+      'transport.seek',
+      'transport.pause',
+    ]);
+
+    const trackLoaded = events.find((event) => event.type === 'deck.track-loaded');
+    assert.equal(trackLoaded?.track.trackId, track.id);
+    const play = events.find((event) => event.type === 'transport.play');
+    assert.equal(play?.effectivePlaybackRate, 1.04);
+    const rateEvents = events.filter((event) => event.type === 'deck.playback-rate');
+    assert.deepEqual(rateEvents.map((event) => event.effectiveRate), [1.04, 1.0764, 1.04]);
+    assert.equal(rateEvents[2].rampDurationMs, 40);
+    const seek = events.find((event) => event.type === 'transport.seek');
+    assert.equal(seek?.trackPositionSeconds, 35);
+    const gain = events.find((event) => event.type === 'mixer.channel-gain');
+    assert.equal(gain?.gainLinear, 1.5);
+    assert.equal(events.filter((event) => event.type === 'mixer.channel-gain').length, 1);
+    const eq = events.find((event) => event.type === 'mixer.eq');
+    assert.equal(eq?.gainDb, 6);
+    assert.equal(events.filter((event) => event.type === 'mixer.eq').length, 1);
+    const filter = events.find((event) => event.type === 'mixer.filter');
+    assert.equal(filter?.value, -50);
+    assert.equal(events.filter((event) => event.type === 'mixer.filter').length, 1);
+    const volume = events.find((event) => event.type === 'mixer.channel-volume');
+    assert.equal(volume?.volumeLinear, 0.6);
+    assert.equal(events.filter((event) => event.type === 'mixer.channel-volume').length, 1);
+    const crossfaderEvents = events.filter((event) => event.type === 'mixer.crossfader');
+    assert.deepEqual(crossfaderEvents.map((event) => [event.position, event.curve]), [
+      [0.65, 'constant-power'],
+      [0.65, 'linear'],
+    ]);
+    const master = events.find((event) => event.type === 'mixer.master-gain');
+    assert.equal(master?.gainLinear, 0.4);
+    assert.equal(events.filter((event) => event.type === 'mixer.master-gain').length, 1);
+
+    assert.equal(new Set(events.map((event) => event.sequence)).size, events.length);
+    assert.ok(events.every((event, index) => event.sequence === index));
+    assert.ok(events.every((event) => event.sessionTimeMs === 0));
+
+    const finalized = djStore.finalizeSessionCapture()!;
+    djStore.setChannelGain('A', 25);
+    assert.equal(djStore.getSessionCapture()?.events.length, finalized.events.length);
+    assert.equal(djStore.getSessionCapture()?.durationMs, 0);
+  });
+
+  test('records only a successful SYNC rate change with the engine-effective rate', async () => {
+    djStore.startSessionCapture();
+    const fileA = new File([new Uint8Array(40)], 'sync-a.wav', { type: 'audio/wav' });
+    const fileB = new File([new Uint8Array(41)], 'sync-b.wav', { type: 'audio/wav' });
+    const trackA = createTrackFromFile(fileA, 195);
+    const trackB = createTrackFromFile(fileB, 195);
+    trackA.analysis = { status: 'analyzed', bpm: 120 };
+    trackB.analysis = { status: 'analyzed', bpm: 125 };
+    await indexedDBStorage.saveTrack(trackA, fileA);
+    await indexedDBStorage.saveTrack(trackB, fileB);
+    assert.equal(await djStore.loadTrackToDeckA(trackA), true);
+    assert.equal(await djStore.loadTrackToDeckB(trackB), true);
+
+    assert.equal(djStore.syncDeck('B'), true);
+    const syncEvents = djStore.getSessionCapture()!.events.filter(
+      (event) => event.type === 'deck.playback-rate' && event.cause === 'sync',
+    );
+    assert.equal(syncEvents.length, 1);
+    assert.equal(syncEvents[0].deckId, 'B');
+    assert.equal(syncEvents[0].effectiveRate, 0.96);
   });
 });
 

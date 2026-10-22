@@ -8,9 +8,22 @@ import type { Track, TrackAnalysis } from '../../types/track.ts';
 import { AnalysisService, analysisService } from './AnalysisService.ts';
 import { IndexedDBStorage, indexedDBStorage } from '../storage/IndexedDBStorage.ts';
 import { audioEngine } from '../../audio/index.ts';
+import { computeFileHash } from '../../utils/cryptoHash.ts';
 
 export type AudioDecoder = (arrayBuffer: ArrayBuffer) => Promise<AudioBuffer>;
-export type AnalysisUpdateListener = (trackId: string, analysis: TrackAnalysis) => void;
+
+export interface AnalysisUpdateMetadata {
+  contentHash?: string;
+  requestId?: string;
+  deckId?: 'A' | 'B';
+  selectionToken?: number;
+}
+
+export type AnalysisUpdateListener = (
+  trackId: string,
+  analysis: TrackAnalysis,
+  metadata?: AnalysisUpdateMetadata
+) => void;
 
 /**
  * Determina si un objeto de análisis contiene resultados musicales reales y válidos.
@@ -46,13 +59,13 @@ export class AnalysisSyncManager {
     // Escuchar actualizaciones directas del servicio de análisis (p. ej. 'analyzing', 'failed', 'unsupported')
     this.service.subscribe((update) => {
       if (update.result) {
-        this.notifyListeners(update.trackId, update.result);
+        this.notifyListeners(update.trackId, update.result, { requestId: update.requestId });
       } else if (update.status === 'failed' || update.status === 'unsupported') {
         const failureAnalysis: TrackAnalysis = {
           status: update.status,
           analysisError: update.error || 'Fallo en servicio de análisis',
         };
-        this.notifyListeners(update.trackId, failureAnalysis);
+        this.notifyListeners(update.trackId, failureAnalysis, { requestId: update.requestId });
       }
     });
   }
@@ -81,26 +94,64 @@ export class AnalysisSyncManager {
    * - Si la pista se elimina durante el análisis, la escritura se descarta para evitar registros huérfanos.
    * - Si ocurre un error, se guarda con status: 'failed' sin inventar métricas.
    */
-  public async analyzeTrack(track: Track, options: { force?: boolean } = {}): Promise<TrackAnalysis> {
+  public async analyzeTrack(
+    track: Track,
+    options: {
+      force?: boolean;
+      deckId?: 'A' | 'B';
+      selectionToken?: number;
+    } = {}
+  ): Promise<TrackAnalysis> {
     const trackId = track.id;
 
     // Registrar nuevo token activo inmediatamente para indicar isAnalyzing y descartar desfasados
     const currentToken = (this.activeTokens.get(trackId) ?? 0) + 1;
     this.activeTokens.set(trackId, currentToken);
 
-    // 1. Evitar reanalizar si el resultado vigente ya está en memoria (salvo reemplazo de archivo)
+    // 0. Resolver contentHash si el archivo o blob está disponible en memoria
+    let contentHash = track.fileMeta?.contentHash;
+    if (!contentHash) {
+      const fileOrBlob = track.source.file || track.source.blob;
+      if (fileOrBlob && typeof fileOrBlob.arrayBuffer === 'function') {
+        try {
+          contentHash = await computeFileHash(fileOrBlob as File);
+          if (track.fileMeta) {
+            track.fileMeta.contentHash = contentHash;
+          }
+        } catch {
+          // Si falla el cálculo, la identidad permanece no verificada
+        }
+      }
+    }
+
+    const checkFileChanged = (stored: Track): boolean => {
+      const bothHaveHash =
+        typeof contentHash === 'string' &&
+        contentHash.length === 64 &&
+        typeof stored.fileMeta?.contentHash === 'string' &&
+        stored.fileMeta.contentHash.length === 64;
+
+      if (bothHaveHash) {
+        return contentHash !== stored.fileMeta!.contentHash;
+      }
+
+      return Boolean(
+        track.fileMeta &&
+        stored.fileMeta &&
+        (track.fileMeta.fileSize !== stored.fileMeta.fileSize ||
+          track.fileMeta.fileName !== stored.fileMeta.fileName ||
+          track.fileMeta.lastModified !== stored.fileMeta.lastModified)
+      );
+    };
+
+    // 1. Evitar reanalizar si el resultado vigente ya está en memoria (salvo reemplazo de archivo o estado pendiente en storage)
     if (!options.force && isAnalysisValid(track.analysis)) {
       try {
         const storedTrack = await this.storage.getTrack(trackId);
-        const fileChanged =
-          storedTrack &&
-          track.fileMeta &&
-          storedTrack.fileMeta &&
-          (track.fileMeta.fileSize !== storedTrack.fileMeta.fileSize ||
-            track.fileMeta.fileName !== storedTrack.fileMeta.fileName ||
-            track.fileMeta.lastModified !== storedTrack.fileMeta.lastModified);
+        const fileChanged = storedTrack ? checkFileChanged(storedTrack) : false;
+        const storedAnalysisPending = storedTrack ? !isAnalysisValid(storedTrack.analysis) : false;
 
-        if (fileChanged) {
+        if (fileChanged || storedAnalysisPending) {
           await this.invalidateAnalysis(trackId);
           options = { ...options, force: true };
         } else {
@@ -118,12 +169,7 @@ export class AnalysisSyncManager {
       try {
         const storedTrack = await this.storage.getTrack(trackId);
         if (storedTrack) {
-          const fileChanged =
-            track.fileMeta &&
-            storedTrack.fileMeta &&
-            (track.fileMeta.fileSize !== storedTrack.fileMeta.fileSize ||
-              track.fileMeta.fileName !== storedTrack.fileMeta.fileName ||
-              track.fileMeta.lastModified !== storedTrack.fileMeta.lastModified);
+          const fileChanged = checkFileChanged(storedTrack);
 
           if (fileChanged) {
             await this.invalidateAnalysis(trackId);
@@ -131,7 +177,11 @@ export class AnalysisSyncManager {
           } else if (isAnalysisValid(storedTrack.analysis)) {
             this.activeTokens.delete(trackId);
             track.analysis = storedTrack.analysis;
-            this.notifyListeners(trackId, storedTrack.analysis);
+            this.notifyListeners(trackId, storedTrack.analysis, {
+              contentHash: storedTrack.fileMeta?.contentHash,
+              deckId: options.deckId,
+              selectionToken: options.selectionToken,
+            });
             return storedTrack.analysis;
           }
         }
@@ -145,7 +195,11 @@ export class AnalysisSyncManager {
       status: 'analyzing',
     };
     track.analysis = analyzingState;
-    this.notifyListeners(trackId, analyzingState);
+    this.notifyListeners(trackId, analyzingState, {
+      contentHash,
+      deckId: options.deckId,
+      selectionToken: options.selectionToken,
+    });
 
     // 4. Recuperar el Blob binario de audio
     let audioBlob: Blob | null = track.source.blob || track.source.file || null;
@@ -158,12 +212,27 @@ export class AnalysisSyncManager {
       }
     }
 
+    // Si aún no tenemos contentHash pero obtuvimos audioBlob, calcularlo
+    if (!contentHash && audioBlob && typeof audioBlob.arrayBuffer === 'function') {
+      try {
+        contentHash = await computeFileHash(audioBlob as File);
+        if (track.fileMeta) {
+          track.fileMeta.contentHash = contentHash;
+        }
+      } catch {
+        // Ignorar
+      }
+    }
+
     if (!audioBlob) {
       const failureResult: TrackAnalysis = {
         status: 'failed',
         analysisError: 'Archivo de audio no disponible para decodificación',
       };
-      return this.handleAnalysisCompletion(trackId, currentToken, failureResult, track);
+      return this.handleAnalysisCompletion(trackId, currentToken, failureResult, track, contentHash, {
+        deckId: options.deckId,
+        selectionToken: options.selectionToken,
+      });
     }
 
     // 6. Decodificar audio a PCM Float32Array
@@ -184,7 +253,10 @@ export class AnalysisSyncManager {
         status: 'failed',
         analysisError: `Fallo al decodificar audio para análisis: ${decodeErr instanceof Error ? decodeErr.message : String(decodeErr)}`,
       };
-      return this.handleAnalysisCompletion(trackId, currentToken, failureResult, track);
+      return this.handleAnalysisCompletion(trackId, currentToken, failureResult, track, contentHash, {
+        deckId: options.deckId,
+        selectionToken: options.selectionToken,
+      });
     }
 
     // 7. Encolar en el Worker mediante AnalysisService
@@ -193,25 +265,33 @@ export class AnalysisSyncManager {
         transferBuffer: false,
       });
 
-      return await this.handleAnalysisCompletion(trackId, currentToken, rawResult, track);
+      return await this.handleAnalysisCompletion(trackId, currentToken, rawResult, track, contentHash, {
+        deckId: options.deckId,
+        selectionToken: options.selectionToken,
+      });
     } catch (analysisErr) {
       const failureResult: TrackAnalysis = {
         status: 'failed',
         analysisError: analysisErr instanceof Error ? analysisErr.message : String(analysisErr),
       };
-      return await this.handleAnalysisCompletion(trackId, currentToken, failureResult, track);
+      return await this.handleAnalysisCompletion(trackId, currentToken, failureResult, track, contentHash, {
+        deckId: options.deckId,
+        selectionToken: options.selectionToken,
+      });
     }
   }
 
   /**
-   * Finaliza el análisis protegiendo contra escrituras obsoletas si la pista fue eliminada
-   * o superada por una nueva solicitud.
+   * Finaliza el análisis protegiendo contra escrituras obsoletas si la pista fue eliminada,
+   * superada por una nueva solicitud o si su contenido cambió durante el procesamiento.
    */
   private async handleAnalysisCompletion(
     trackId: string,
     token: number,
     result: TrackAnalysis,
-    trackRef?: Track
+    trackRef?: Track,
+    expectedContentHash?: string,
+    selectionInfo?: { deckId?: 'A' | 'B'; selectionToken?: number }
   ): Promise<TrackAnalysis> {
     // Si el token ya no es el actual, descartar escritura (hubo un análisis más reciente)
     if (this.activeTokens.get(trackId) !== token) {
@@ -227,11 +307,17 @@ export class AnalysisSyncManager {
       return result;
     }
 
-    // Persistir el resultado atómicamente en IndexedDB
+    // Persistir el resultado atómicamente en IndexedDB verificando que el contenido no cambió
+    let persisted = false;
     try {
-      await this.storage.updateTrackAnalysis(trackId, result);
+      persisted = await this.storage.updateTrackAnalysis(trackId, result, expectedContentHash);
     } catch (err) {
       console.warn(`[AnalysisSyncManager] Error persistiendo análisis de ${trackId}:`, err);
+    }
+
+    // Si la escritura fue rechazada (p. ej. el contenido cambió bajo el mismo trackId mientras el worker procesaba)
+    if (!persisted) {
+      return result;
     }
 
     // Actualizar referencia de memoria si está presente
@@ -240,7 +326,11 @@ export class AnalysisSyncManager {
     }
 
     // Notificar reactivamente a los suscriptores (useDJStore, Decks, Biblioteca)
-    this.notifyListeners(trackId, result);
+    this.notifyListeners(trackId, result, {
+      contentHash: expectedContentHash,
+      deckId: selectionInfo?.deckId,
+      selectionToken: selectionInfo?.selectionToken,
+    });
 
     return result;
   }
@@ -294,10 +384,10 @@ export class AnalysisSyncManager {
     return wasActiveInManager || wasActiveInService;
   }
 
-  private notifyListeners(trackId: string, analysis: TrackAnalysis): void {
+  private notifyListeners(trackId: string, analysis: TrackAnalysis, metadata?: AnalysisUpdateMetadata): void {
     for (const listener of this.listeners) {
       try {
-        listener(trackId, analysis);
+        listener(trackId, analysis, metadata);
       } catch (err) {
         console.warn('[AnalysisSyncManager] Error en suscriptor de análisis:', err);
       }

@@ -11,15 +11,41 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { Track, TrackAnalysis, HotCue } from '../types/track.ts';
-import type { DeckId, PhaseAlignmentState } from '../types/deck.ts';
+import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../types/track.ts';
+import type { DeckId, PhaseAlignmentState, BarSyncState, BarSyncStatus } from '../types/deck.ts';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
 import { analysisSyncManager } from '../services/analysis/index.ts';
 import {
+  sessionRecorder,
+  type RecordedSession,
+  type SessionEventPayload,
+  type SessionInitialState,
+  type SessionMetadata,
+  type SessionTrackReference,
+} from '../session/SessionRecorder.ts';
+import {
   calculatePhaseAlignmentPlan,
 } from '../audio/analysis/phaseAlignment.ts';
+import {
+  calculateBarSyncPlan,
+  type BarSyncPlanResult,
+  type BarSyncPlanInput,
+} from '../audio/analysis/barSync.ts';
+import {
+  createManualDownbeatConfirmation,
+  createSuggestedDownbeat,
+  validateDownbeatForContent,
+} from '../utils/downbeat.ts';
+
+/** Parámetros explícitos para la confirmación manual de downbeat y métrica de compás. */
+export interface ConfirmDownbeatParams {
+  position: number;
+  beatsPerBar: number;
+  suggestedPosition?: number | null;
+  confirmedAt?: number;
+}
 
 export type DeckPlaybackStatus = 'stopped' | 'playing' | 'paused' | 'loading' | 'error';
 
@@ -64,6 +90,8 @@ export interface DeckStoreState {
   isMaster: boolean;
   /** Estado de alineación progresiva de fase mediante micro-slew. */
   phaseAlignment: PhaseAlignmentState;
+  /** Estado de preparación de compás (BAR SYNC V1). */
+  barSync: BarSyncState;
   errorCode: DeckErrorCode | null;
   errorMessage: string | null;
 }
@@ -119,6 +147,15 @@ const INITIAL_DECK_A: DeckStoreState = {
     status: 'idle',
     progressPercent: 0,
   },
+  barSync: {
+    status: 'idle',
+    preparedPosition: null,
+    previousPosition: null,
+    displacementSec: null,
+    targetDownbeatSec: null,
+    beatsPerBar: null,
+    reason: null,
+  },
   errorCode: null,
   errorMessage: null,
 };
@@ -142,6 +179,15 @@ const INITIAL_DECK_B: DeckStoreState = {
   phaseAlignment: {
     status: 'idle',
     progressPercent: 0,
+  },
+  barSync: {
+    status: 'idle',
+    preparedPosition: null,
+    previousPosition: null,
+    displacementSec: null,
+    targetDownbeatSec: null,
+    beatsPerBar: null,
+    reason: null,
   },
   errorCode: null,
   errorMessage: null,
@@ -220,6 +266,21 @@ function computeEffectiveBpm(track: Track | null, rate: number): number | null {
   return bpm === null ? null : Number((bpm * rate).toFixed(1));
 }
 
+function toSessionTrackReference(track: Track): SessionTrackReference {
+  return {
+    trackId: track.id,
+    title: track.title,
+    artist: track.artist,
+    durationSeconds: track.duration,
+    ...(track.fileMeta?.contentHash ? { contentHash: track.fileMeta.contentHash } : {}),
+    ...(track.fileMeta?.fileName ? { fileName: track.fileMeta.fileName } : {}),
+  };
+}
+
+function sliderEqToDb(value: number): number {
+  return Number((((value - 50) / 50) * 12).toFixed(2));
+}
+
 class DJStore {
   private static instance: DJStore | null = null;
   private state: DJStoreState = INITIAL_STATE;
@@ -228,9 +289,14 @@ class DJStore {
   private lastRafUpdate = 0;
   /** Identificadores de carga por deck para descartar cargas obsoletas sin interferencia cruzada. */
   private loadTokens: Record<DeckId, number> = { A: 0, B: 0 };
+  /** Identidad de selección activa por deck para protección contra resultados obsoletos (secuencia A -> B -> A). */
+  private deckSelections: Record<DeckId, { trackId: string; selectionToken: number; contentHash?: string } | null> = {
+    A: null,
+    B: null,
+  };
   /** Indicador de reproducción momentánea CUP activa por deck. */
   private isCupPlaying: Record<DeckId, boolean> = { A: false, B: false };
-
+  private cupPressTokens: Record<DeckId, number> = { A: 0, B: 0 };
 
   private constructor() {
     // Escuchar la finalización natural de la reproducción en ambos decks
@@ -242,8 +308,8 @@ class DJStore {
     });
 
     // Escuchar actualizaciones de análisis de pistas para sincronizar reactivamente los decks
-    analysisSyncManager.subscribe((trackId, analysis) => {
-      this.handleAnalysisUpdated(trackId, analysis);
+    analysisSyncManager.subscribe((trackId, analysis, metadata) => {
+      this.handleAnalysisUpdated(trackId, analysis, metadata);
     });
   }
 
@@ -257,6 +323,93 @@ class DJStore {
   public getSnapshot = (): DJStoreState => {
     return this.state;
   };
+
+  /** Starts in-memory capture and anchors it with the current audible deck/mixer state. */
+  public startSessionCapture(metadata: SessionMetadata = {}): RecordedSession {
+    sessionRecorder.start(metadata);
+    sessionRecorder.record({
+      type: 'session.initial-state',
+      state: this.captureInitialSessionState(),
+    });
+    for (const deckId of ['A', 'B'] as const) {
+      const alignment = this.getDeckState(deckId).phaseAlignment;
+      if (alignment.status === 'active') {
+        this.recordSessionEvent({ type: 'deck.micro-slew', deckId });
+      }
+    }
+    return sessionRecorder.getSession()!;
+  }
+
+  /** Stops capture and returns a detached snapshot of the recorded session. */
+  public finalizeSessionCapture(): RecordedSession | null {
+    return sessionRecorder.finalize();
+  }
+
+  /** Returns a detached snapshot of the active or most recently finalized session. */
+  public getSessionCapture(): RecordedSession | null {
+    return sessionRecorder.getSession();
+  }
+
+  private recordSessionEvent(event: SessionEventPayload): void {
+    sessionRecorder.record(event);
+  }
+
+  private captureInitialSessionState(): SessionInitialState {
+    const captureDeck = (deckId: DeckId): SessionInitialState['decks'][DeckId] => {
+      const deck = this.getDeckState(deckId);
+      let trackPositionSeconds = deck.currentTime;
+      if (deck.playbackState === 'playing') {
+        try {
+          trackPositionSeconds = audioEngine.getDeckCurrentTime(deckId);
+        } catch {
+          // Retain the last store snapshot if engine telemetry is unavailable.
+        }
+      }
+      let effectivePlaybackRate = deck.playbackRate;
+      try {
+        if (deck.track) effectivePlaybackRate = audioEngine.getDeckPlaybackRate(deckId);
+      } catch {
+        // Retain the store rate if engine telemetry is unavailable.
+      }
+      return {
+        track: deck.track ? toSessionTrackReference(deck.track) : null,
+        playbackState: deck.playbackState === 'playing' || deck.playbackState === 'paused'
+          ? deck.playbackState
+          : 'stopped',
+        trackPositionSeconds: Math.max(0, trackPositionSeconds),
+        effectivePlaybackRate,
+      };
+    };
+
+    const captureChannel = (channel: ChannelStripState): SessionInitialState['mixer']['channels'][DeckId] => ({
+      gainLinear: Number((channel.gain / 50).toFixed(4)),
+      volumeLinear: Number((channel.volume / 100).toFixed(4)),
+      eqDb: {
+        high: sliderEqToDb(channel.eq.high),
+        mid: sliderEqToDb(channel.eq.mid),
+        low: sliderEqToDb(channel.eq.low),
+      },
+      filter: Number((((channel.eq.filter - 50) / 50) * 100).toFixed(2)),
+    });
+
+    return {
+      decks: {
+        A: captureDeck('A'),
+        B: captureDeck('B'),
+      },
+      mixer: {
+        channels: {
+          A: captureChannel(this.state.mixer.channelA),
+          B: captureChannel(this.state.mixer.channelB),
+        },
+        crossfaderPosition: Number((this.state.mixer.crossfader / 100).toFixed(4)),
+        crossfaderCurve: this.state.mixer.crossfaderCurve,
+        masterGainLinear: this.state.isMasterMuted
+          ? 0
+          : Number((this.state.masterVolume / 100).toFixed(4)),
+      },
+    };
+  }
 
   public subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -283,38 +436,152 @@ class DJStore {
     }
   }
 
+  /** Publishes the Master/Slave relationship and both role flags as one store snapshot. */
+  private setSyncRoles(
+    masterDeckId: DeckId | null,
+    deckUpdates: Partial<Record<DeckId, Partial<DeckStoreState>>> = {}
+  ): void {
+    this.setState({
+      syncMasterDeck: masterDeckId,
+      deckA: {
+        ...this.state.deckA,
+        ...deckUpdates.A,
+        isMaster: masterDeckId === 'A',
+        isSyncActive: masterDeckId === 'B',
+      },
+      deckB: {
+        ...this.state.deckB,
+        ...deckUpdates.B,
+        isMaster: masterDeckId === 'B',
+        isSyncActive: masterDeckId === 'A',
+      },
+    });
+  }
+
+  private applyHotCuesToMatchingDecks(trackId: string, hotCues: HotCue[]): void {
+    for (const deckId of ['A', 'B'] as const) {
+      const deck = this.getDeckState(deckId);
+      if (deck.track?.id === trackId) {
+        this.setDeck(deckId, { hotCues, track: { ...deck.track, hotCues } });
+      }
+    }
+  }
+
+  /** Remove the SYNC link involving a deck whose track is being replaced. */
+  private decoupleSyncForDeck(deckId: DeckId): void {
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    if (this.state.syncMasterDeck !== deckId && this.state.syncMasterDeck !== otherDeckId) return;
+
+    const nextState: Partial<DJStoreState> = {
+      syncMasterDeck: null,
+      [deckId === 'A' ? 'deckA' : 'deckB']: {
+        ...this.getDeckState(deckId),
+        isMaster: false,
+        isSyncActive: false,
+      },
+    };
+    if (this.state.syncMasterDeck === deckId) {
+      nextState[otherDeckId === 'A' ? 'deckA' : 'deckB'] = {
+        ...this.getDeckState(otherDeckId),
+        isMaster: false,
+        isSyncActive: false,
+      };
+    } else {
+      nextState[otherDeckId === 'A' ? 'deckA' : 'deckB'] = {
+        ...this.getDeckState(otherDeckId),
+        isMaster: false,
+      };
+    }
+    this.setState(nextState);
+  }
+
   /**
    * Actualiza el estado reactivo de Deck A o Deck B cuando finaliza o cambia el análisis de una pista.
+   * Valida selección activa y concordancia de contentHash para evitar contaminación por resultados obsoletos.
    */
-  public handleAnalysisUpdated(trackId: string, analysis: TrackAnalysis): void {
+  public handleAnalysisUpdated(
+    trackId: string,
+    analysis: TrackAnalysis,
+    metadata?: { contentHash?: string; deckId?: DeckId; selectionToken?: number }
+  ): void {
     let hasChanged = false;
     const updates: Partial<DJStoreState> = {};
 
-    if (this.state.deckA.track?.id === trackId) {
+    const updateDeckIfValid = (targetDeckId: DeckId, deckState: DeckStoreState): DeckStoreState | null => {
+      if (!deckState.track || deckState.track.id !== trackId) return null;
+
+      const currentSelection = this.deckSelections[targetDeckId];
+
+      // 1. Caso: Notificación vinculada explícitamente a un deck
+      if (metadata?.deckId) {
+        // Si no está dirigida a este deck, descartar
+        if (metadata.deckId !== targetDeckId) {
+          return null;
+        }
+
+        // Si el deck no tiene selección activa o el token no coincide (p. ej. A -> B -> A), descartar
+        if (!currentSelection || currentSelection.selectionToken !== metadata.selectionToken) {
+          return null;
+        }
+
+        // Si ambos disponen de contentHash y difieren, el contenido físico cambió: descartar
+        if (
+          metadata.contentHash &&
+          deckState.track.fileMeta?.contentHash &&
+          metadata.contentHash !== deckState.track.fileMeta.contentHash
+        ) {
+          return null;
+        }
+      } else {
+        // 2. Caso: Notificación no vinculada a un deck específico (global de biblioteca o huérfana)
+        // a) Si es una invalidación (status === 'pending'), se aplica para no retener métricas inválidas
+        if (analysis.status === 'pending') {
+          // Permitir invalidación en el deck
+        } else {
+          // b) Si el deck tiene una selección activa vinculada con un token:
+          // Una notificación incompleta (sin deckId ni selectionToken) no puede demostrar vigencia sobre la selección activa.
+          // Solo se acepta si dispone de contentHash verificado idéntico al de la selección activa.
+          if (currentSelection?.selectionToken !== undefined) {
+            const hasMatchingHash =
+              Boolean(metadata?.contentHash) &&
+              Boolean(currentSelection.contentHash) &&
+              metadata?.contentHash === currentSelection.contentHash;
+
+            if (!hasMatchingHash) {
+              return null;
+            }
+          } else if (
+            metadata?.contentHash &&
+            deckState.track.fileMeta?.contentHash &&
+            metadata.contentHash !== deckState.track.fileMeta.contentHash
+          ) {
+            return null;
+          }
+        }
+      }
+
       const updatedTrack: Track = {
-        ...this.state.deckA.track,
+        ...deckState.track,
         analysis,
       };
-      updates.deckA = {
-        ...this.state.deckA,
+
+      return {
+        ...deckState,
         track: updatedTrack,
-        calculatedBpm: computeEffectiveBpm(updatedTrack, this.state.deckA.playbackRate),
+        calculatedBpm: computeEffectiveBpm(updatedTrack, deckState.playbackRate),
         keyStr: getAnalyzedKey(updatedTrack),
       };
+    };
+
+    const newDeckA = updateDeckIfValid('A', this.state.deckA);
+    if (newDeckA) {
+      updates.deckA = newDeckA;
       hasChanged = true;
     }
 
-    if (this.state.deckB.track?.id === trackId) {
-      const updatedTrack: Track = {
-        ...this.state.deckB.track,
-        analysis,
-      };
-      updates.deckB = {
-        ...this.state.deckB,
-        track: updatedTrack,
-        calculatedBpm: computeEffectiveBpm(updatedTrack, this.state.deckB.playbackRate),
-        keyStr: getAnalyzedKey(updatedTrack),
-      };
+    const newDeckB = updateDeckIfValid('B', this.state.deckB);
+    if (newDeckB) {
+      updates.deckB = newDeckB;
       hasChanged = true;
     }
 
@@ -325,9 +592,11 @@ class DJStore {
 
   /**
    * Solicita el análisis musical de una pista sincronizado con IndexedDB y el store.
+   * Si se especifica deckId, asocia la solicitud con el selectionToken actual del deck.
    */
-  public async analyzeTrack(track: Track, force = false): Promise<TrackAnalysis> {
-    return analysisSyncManager.analyzeTrack(track, { force });
+  public async analyzeTrack(track: Track, force = false, deckId?: DeckId): Promise<TrackAnalysis> {
+    const selectionToken = deckId ? this.deckSelections[deckId]?.selectionToken : undefined;
+    return analysisSyncManager.analyzeTrack(track, { force, deckId, selectionToken });
   }
 
   /**
@@ -335,7 +604,22 @@ class DJStore {
    */
   public async updateTrackAnalysis(trackId: string, analysis: TrackAnalysis): Promise<boolean> {
     const success = await indexedDBStorage.updateTrackAnalysis(trackId, analysis);
-    this.handleAnalysisUpdated(trackId, analysis);
+    const metaA = this.deckSelections.A?.trackId === trackId
+      ? { deckId: 'A' as DeckId, selectionToken: this.deckSelections.A.selectionToken, contentHash: this.deckSelections.A.contentHash }
+      : undefined;
+    const metaB = this.deckSelections.B?.trackId === trackId
+      ? { deckId: 'B' as DeckId, selectionToken: this.deckSelections.B.selectionToken, contentHash: this.deckSelections.B.contentHash }
+      : undefined;
+
+    if (metaA) {
+      this.handleAnalysisUpdated(trackId, analysis, metaA);
+    }
+    if (metaB) {
+      this.handleAnalysisUpdated(trackId, analysis, metaB);
+    }
+    if (!metaA && !metaB) {
+      this.handleAnalysisUpdated(trackId, analysis);
+    }
     return success;
   }
 
@@ -344,12 +628,8 @@ class DJStore {
    * Devuelve `true` si la pista quedó cargada y lista para reproducirse.
    */
   public async loadTrackToDeck(deckId: DeckId, track: Track): Promise<boolean> {
+    const oppositeDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     const token = ++this.loadTokens[deckId];
-    const initialPitch = this.getDeckState(deckId).playbackRate;
-
-    // Detener y liberar el audio anterior en este deck ANTES de decodificar
-    audioEngine.unloadDeck(deckId);
-    this.checkStopTimeLoop();
 
     // Recuperar análisis existente de IndexedDB si la pista recibida en memoria aún no lo tenía actualizado
     let effectiveTrack = track;
@@ -367,11 +647,30 @@ class DJStore {
     // Recuperar CUEs guardados (mainCue y hotCues) si existen en almacenamiento persistente
     try {
       const persistedCues = await indexedDBStorage.getTrackCues(track.id);
-      if (persistedCues) {
+      const validPosition = (position: unknown): position is number =>
+        typeof position === 'number' && Number.isFinite(position) && position >= 0 && position <= effectiveTrack.duration;
+      const mainCueCandidate = persistedCues?.mainCue ?? effectiveTrack.mainCue;
+      const mainCue = validPosition(mainCueCandidate) ? mainCueCandidate : null;
+      const sourceHotCues = persistedCues?.hotCues.length ? persistedCues.hotCues : (effectiveTrack.hotCues ?? []);
+      const hotCues = sourceHotCues.filter((cue) =>
+        Number.isInteger(cue.id) && cue.id >= 1 && cue.id <= 8 && cue.trackId === track.id && validPosition(cue.position)
+      ).slice(0, 8);
+      effectiveTrack = { ...effectiveTrack, mainCue, hotCues };
+    } catch {
+      // Ignorar si no está disponible
+    }
+
+    // Recuperar Downbeat guardado si existe en almacenamiento persistente
+    try {
+      const persistedDownbeat = await indexedDBStorage.getTrackDownbeat(track.id);
+      if (persistedDownbeat) {
+        const validatedDownbeat = validateDownbeatForContent(
+          persistedDownbeat,
+          effectiveTrack.fileMeta?.contentHash
+        );
         effectiveTrack = {
           ...effectiveTrack,
-          mainCue: persistedCues.mainCue !== null ? persistedCues.mainCue : (effectiveTrack.mainCue ?? null),
-          hotCues: persistedCues.hotCues && persistedCues.hotCues.length > 0 ? persistedCues.hotCues : (effectiveTrack.hotCues ?? []),
+          downbeat: validatedDownbeat ?? persistedDownbeat,
         };
       }
     } catch {
@@ -379,19 +678,6 @@ class DJStore {
     }
 
     if (token !== this.loadTokens[deckId]) return false;
-
-    this.setDeck(deckId, {
-      track: effectiveTrack,
-      playbackState: 'loading',
-      currentTime: 0,
-      duration: 0,
-      calculatedBpm: computeEffectiveBpm(effectiveTrack, initialPitch),
-      keyStr: getAnalyzedKey(effectiveTrack),
-      mainCue: effectiveTrack.mainCue ?? null,
-      hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
-      errorCode: null,
-      errorMessage: null,
-    });
 
     // 1. Obtener el blob de audio binario real
     let audioBlob: Blob | null = effectiveTrack.source.blob || effectiveTrack.source.file || null;
@@ -410,11 +696,6 @@ class DJStore {
     if (token !== this.loadTokens[deckId]) return false; // Carga descartada por una más reciente en este deck
 
     if (!audioBlob) {
-      this.setDeck(deckId, {
-        playbackState: 'error',
-        errorCode: 'file_missing',
-        errorMessage: `El archivo de audio no se encuentra disponible para "${track.title}".`,
-      });
       return false;
     }
 
@@ -429,43 +710,66 @@ class DJStore {
 
       if (token !== this.loadTokens[deckId]) return false;
 
-      // 4. Cargar en el motor y sincronizar velocidad y volumen
+      // Commit only after the replacement is decoded. Until here, the current
+      // track, transport, pitch and SYNC relationship remain untouched.
+      this.cancelCup(deckId);
+      this.cancelPhaseAlignment(deckId);
+      this.cancelPhaseAlignment(oppositeDeckId);
+      this.decoupleSyncForDeck(deckId);
+
+      // 4. Replace the audio and synchronize the current pitch and volume.
       audioEngine.loadBufferToDeck(deckId, audioBuffer);
+      audioEngine.setDeckPitchBend(deckId, 0);
       audioEngine.setDeckPlaybackRate(deckId, this.getDeckState(deckId).playbackRate);
       audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : this.state.masterVolume);
 
-      // Si este deck era Master o Esclavo, desacoplar vínculos
-      const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
-      if (this.state.syncMasterDeck === deckId) {
-        this.setState({ syncMasterDeck: null });
-        this.setDeck(otherDeckId, { isSyncActive: false, isMaster: false });
-      } else if (this.state.syncMasterDeck === otherDeckId) {
-        this.setState({ syncMasterDeck: null });
-        this.setDeck(otherDeckId, { isMaster: false });
-      }
-
       this.setDeck(deckId, {
+        track: effectiveTrack,
         duration: audioBuffer.duration,
         currentTime: 0,
         playbackState: 'stopped',
+        calculatedBpm: computeEffectiveBpm(effectiveTrack, this.getDeckState(deckId).playbackRate),
+        keyStr: getAnalyzedKey(effectiveTrack),
         mainCue: effectiveTrack.mainCue ?? null,
         hotCues: effectiveTrack.hotCues ? [...effectiveTrack.hotCues] : [],
+        pitchBend: 0,
         isSyncActive: false,
         isMaster: false,
+        phaseAlignment: { status: 'idle', progressPercent: 0 },
+        barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
         errorCode: null,
         errorMessage: null,
       });
+      this.recordSessionEvent({
+        type: 'deck.track-loaded',
+        deckId,
+        track: {
+          ...toSessionTrackReference(effectiveTrack),
+          durationSeconds: audioBuffer.duration,
+        },
+        effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
+      });
+
+      // Si el otro deck tenía una preparación de BAR SYNC armada o alineada,
+      // invalidarla porque su contexto métrico / Master ha cambiado.
+      const otherDeck = this.getDeckState(oppositeDeckId);
+      if (otherDeck.barSync?.status === 'armed' || otherDeck.barSync?.status === 'already_aligned') {
+        this.setDeck(oppositeDeckId, {
+          barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+        });
+      }
+
+      this.deckSelections[deckId] = {
+        trackId: effectiveTrack.id,
+        selectionToken: token,
+        contentHash: effectiveTrack.fileMeta?.contentHash,
+      };
+      this.checkStopTimeLoop();
+
       return true;
     } catch (err) {
       if (token !== this.loadTokens[deckId]) return false;
       console.error(`[useDJStore] Error decodificando la pista en Deck ${deckId}:`, err);
-      audioEngine.unloadDeck(deckId);
-      this.setDeck(deckId, {
-        playbackState: 'error',
-        duration: 0,
-        errorCode: 'decode_failed',
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
       return false;
     }
   }
@@ -496,8 +800,26 @@ class DJStore {
     try {
       await audioEngine.resume();
       audioEngine.playDeck(deckId, deckState.currentTime);
-      this.setDeck(deckId, { playbackState: 'playing' });
+      const updates: Partial<DeckStoreState> = { playbackState: 'playing' };
+      if (deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned') {
+        updates.barSync = {
+          status: 'completed',
+          preparedPosition: deckState.barSync.preparedPosition,
+          previousPosition: deckState.barSync.previousPosition,
+          displacementSec: deckState.barSync.displacementSec,
+          targetDownbeatSec: deckState.barSync.targetDownbeatSec,
+          beatsPerBar: deckState.barSync.beatsPerBar,
+          reason: null,
+        };
+      }
+      this.setDeck(deckId, updates);
       this.ensureTimeLoop();
+      this.recordSessionEvent({
+        type: 'transport.play',
+        deckId,
+        trackPositionSeconds: deckState.currentTime,
+        effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
+      });
     } catch (err) {
       console.error(`[useDJStore] Error al reproducir Deck ${deckId}:`, err);
       this.checkStopTimeLoop();
@@ -532,11 +854,13 @@ class DJStore {
     }
 
     audioEngine.pauseDeck(deckId);
+    const trackPositionSeconds = audioEngine.getDeckCurrentTime(deckId);
     this.setDeck(deckId, {
       playbackState: 'paused',
-      currentTime: audioEngine.getDeckCurrentTime(deckId),
+      currentTime: trackPositionSeconds,
       isCupPlaying: false,
     });
+    this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds });
     this.checkStopTimeLoop();
   }
 
@@ -581,7 +905,20 @@ class DJStore {
     if (deckState.playbackState === 'loading' || deckState.playbackState === 'error') return;
 
     audioEngine.stopDeck(deckId);
-    this.setDeck(deckId, { playbackState: 'stopped', currentTime: 0, isCupPlaying: false });
+    const updates: Partial<DeckStoreState> = { playbackState: 'stopped', currentTime: 0, isCupPlaying: false };
+    if (deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned') {
+      updates.barSync = {
+        status: 'idle',
+        preparedPosition: null,
+        previousPosition: null,
+        displacementSec: null,
+        targetDownbeatSec: null,
+        beatsPerBar: null,
+        reason: null,
+      };
+    }
+    this.setDeck(deckId, updates);
+    this.recordSessionEvent({ type: 'transport.stop', deckId, trackPositionSeconds: 0 });
     this.checkStopTimeLoop();
   }
 
@@ -610,7 +947,27 @@ class DJStore {
     const maxPosition = Math.max(0, deckState.duration - SEEK_END_MARGIN_SECONDS);
     const clamped = Math.max(0, Math.min(positionSeconds, maxPosition));
     audioEngine.seekDeck(deckId, clamped);
-    this.setDeck(deckId, { currentTime: clamped, isCupPlaying: false });
+    const updates: Partial<DeckStoreState> = { currentTime: clamped, isCupPlaying: false };
+    if (deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned') {
+      updates.barSync = {
+        status: 'idle',
+        preparedPosition: null,
+        previousPosition: null,
+        displacementSec: null,
+        targetDownbeatSec: null,
+        beatsPerBar: null,
+        reason: null,
+      };
+    }
+    this.setDeck(deckId, updates);
+    this.recordSessionEvent({
+      type: 'transport.seek',
+      deckId,
+      trackPositionSeconds: clamped,
+      playbackState: deckState.playbackState === 'playing' || deckState.playbackState === 'paused'
+        ? deckState.playbackState
+        : 'stopped',
+    });
   }
 
   public seekDeckA(positionSeconds: number): void {
@@ -678,14 +1035,41 @@ class DJStore {
     const targetPos = deck.mainCue ?? 0;
     this.isCupPlaying[deckId] = false;
 
+    const barSyncReset = (deck.barSync?.status === 'armed' || deck.barSync?.status === 'already_aligned')
+      ? { status: 'idle' as const, preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null }
+      : undefined;
+
     if (deck.playbackState === 'playing') {
       audioEngine.pauseDeck(deckId);
+      const pausedAtPosition = audioEngine.getDeckCurrentTime(deckId);
       audioEngine.seekDeck(deckId, targetPos);
-      this.setDeck(deckId, { playbackState: 'paused', currentTime: targetPos, isCupPlaying: false });
+      this.setDeck(deckId, {
+        playbackState: 'paused',
+        currentTime: targetPos,
+        isCupPlaying: false,
+        ...(barSyncReset ? { barSync: barSyncReset } : {}),
+      });
+      this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds: pausedAtPosition });
+      this.recordSessionEvent({
+        type: 'transport.seek',
+        deckId,
+        trackPositionSeconds: targetPos,
+        playbackState: 'paused',
+      });
       this.checkStopTimeLoop();
     } else {
       audioEngine.seekDeck(deckId, targetPos);
-      this.setDeck(deckId, { currentTime: targetPos, isCupPlaying: false });
+      this.setDeck(deckId, {
+        currentTime: targetPos,
+        isCupPlaying: false,
+        ...(barSyncReset ? { barSync: barSyncReset } : {}),
+      });
+      this.recordSessionEvent({
+        type: 'transport.seek',
+        deckId,
+        trackPositionSeconds: targetPos,
+        playbackState: deck.playbackState === 'paused' ? 'paused' : 'stopped',
+      });
     }
   }
 
@@ -705,6 +1089,12 @@ class DJStore {
       return;
     }
 
+    if (this.isCupPlaying[deckId]) return;
+    const pressToken = ++this.cupPressTokens[deckId];
+    const trackId = deck.track.id;
+    this.isCupPlaying[deckId] = true;
+    this.setDeck(deckId, { isCupPlaying: true });
+
     // Estado paused o stopped:
     // Si no había mainCue, o si la posición actual se movió más de 50 ms del CUE existente, actualizar CUE
     const currentCue = deck.mainCue ?? 0;
@@ -712,14 +1102,34 @@ class DJStore {
       await this.setMainCue(deckId, deck.currentTime);
     }
 
+    if (this.cupPressTokens[deckId] !== pressToken || !this.isCupPlaying[deckId] || this.getDeckState(deckId).track?.id !== trackId) return;
+
     // Iniciar reproducción CUP
     const cueToPlay = this.getDeckState(deckId).mainCue ?? 0;
-    this.isCupPlaying[deckId] = true;
     try {
       await audioEngine.resume();
+      if (this.cupPressTokens[deckId] !== pressToken || !this.isCupPlaying[deckId] || this.getDeckState(deckId).track?.id !== trackId) return;
       audioEngine.playDeck(deckId, cueToPlay);
-      this.setDeck(deckId, { playbackState: 'playing', currentTime: cueToPlay, isCupPlaying: true });
+      const updates: Partial<DeckStoreState> = { playbackState: 'playing', currentTime: cueToPlay, isCupPlaying: true };
+      if (deck.barSync?.status === 'armed' || deck.barSync?.status === 'already_aligned') {
+        updates.barSync = {
+          status: 'completed',
+          preparedPosition: deck.barSync.preparedPosition,
+          previousPosition: deck.barSync.previousPosition,
+          displacementSec: deck.barSync.displacementSec,
+          targetDownbeatSec: deck.barSync.targetDownbeatSec,
+          beatsPerBar: deck.barSync.beatsPerBar,
+          reason: null,
+        };
+      }
+      this.setDeck(deckId, updates);
       this.ensureTimeLoop();
+      this.recordSessionEvent({
+        type: 'transport.play',
+        deckId,
+        trackPositionSeconds: cueToPlay,
+        effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
+      });
     } catch (err) {
       this.isCupPlaying[deckId] = false;
       this.setDeck(deckId, { isCupPlaying: false });
@@ -733,14 +1143,23 @@ class DJStore {
    */
   public handleCueUp(deckId: DeckId): void {
     if (!this.isCupPlaying[deckId]) return;
+    this.cupPressTokens[deckId] += 1;
     this.isCupPlaying[deckId] = false;
 
     const deck = this.getDeckState(deckId);
     const targetPos = deck.mainCue ?? 0;
 
     audioEngine.pauseDeck(deckId);
+    const pausedAtPosition = audioEngine.getDeckCurrentTime(deckId);
     audioEngine.seekDeck(deckId, targetPos);
     this.setDeck(deckId, { playbackState: 'paused', currentTime: targetPos, isCupPlaying: false });
+    this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds: pausedAtPosition });
+    this.recordSessionEvent({
+      type: 'transport.seek',
+      deckId,
+      trackPositionSeconds: targetPos,
+      playbackState: 'paused',
+    });
     this.checkStopTimeLoop();
   }
 
@@ -787,34 +1206,10 @@ class DJStore {
     const filtered = currentCues.filter((c) => c.id !== slotNumber);
     const updatedCues = [...filtered, newCue].sort((a, b) => a.id - b.id);
 
-    const updatedTrack: Track = {
-      ...deck.track,
-      hotCues: updatedCues,
-    };
-
-    const updates: Partial<DJStoreState> = {};
-    if (deckId === 'A') {
-      updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: updatedTrack };
-    } else {
-      updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: updatedTrack };
-    }
-
-    // Sincronizar en el otro deck si comparte la misma pista
-    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
-    const otherDeck = this.getDeckState(otherDeckId);
-    if (otherDeck.track?.id === deck.track.id) {
-      const otherUpdatedTrack: Track = { ...otherDeck.track, hotCues: updatedCues };
-      if (otherDeckId === 'A') {
-        updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: otherUpdatedTrack };
-      } else {
-        updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: otherUpdatedTrack };
-      }
-    }
-
-    this.setState(updates);
-
     try {
-      await indexedDBStorage.updateTrackCues(deck.track.id, { hotCues: updatedCues });
+      const persisted = await indexedDBStorage.updateTrackCues(deck.track.id, { hotCues: updatedCues });
+      if (!persisted) return false;
+      this.applyHotCuesToMatchingDecks(deck.track.id, updatedCues);
       return true;
     } catch (err) {
       console.warn(`[useDJStore] Error persistiendo hotCues para ${deck.track.id}:`, err);
@@ -848,33 +1243,10 @@ class DJStore {
     if (!cueExists) return false;
 
     const updatedCues = currentCues.filter((c) => c.id !== slotNumber);
-    const updatedTrack: Track = {
-      ...deck.track,
-      hotCues: updatedCues,
-    };
-
-    const updates: Partial<DJStoreState> = {};
-    if (deckId === 'A') {
-      updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: updatedTrack };
-    } else {
-      updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: updatedTrack };
-    }
-
-    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
-    const otherDeck = this.getDeckState(otherDeckId);
-    if (otherDeck.track?.id === deck.track.id) {
-      const otherUpdatedTrack: Track = { ...otherDeck.track, hotCues: updatedCues };
-      if (otherDeckId === 'A') {
-        updates.deckA = { ...this.state.deckA, hotCues: updatedCues, track: otherUpdatedTrack };
-      } else {
-        updates.deckB = { ...this.state.deckB, hotCues: updatedCues, track: otherUpdatedTrack };
-      }
-    }
-
-    this.setState(updates);
-
     try {
-      await indexedDBStorage.updateTrackCues(deck.track.id, { hotCues: updatedCues });
+      const persisted = await indexedDBStorage.updateTrackCues(deck.track.id, { hotCues: updatedCues });
+      if (!persisted) return false;
+      this.applyHotCuesToMatchingDecks(deck.track.id, updatedCues);
       return true;
     } catch (err) {
       console.warn(`[useDJStore] Error eliminando hotCue en almacenamiento para ${deck.track.id}:`, err);
@@ -907,18 +1279,19 @@ class DJStore {
     let isSyncActive = deckState.isSyncActive;
     if (isSyncActive) {
       isSyncActive = false;
-      if (this.state.syncMasterDeck === otherDeckId) {
-        this.setDeck(otherDeckId, { isMaster: false });
-        this.setState({ syncMasterDeck: null });
-      }
     }
 
-    this.setDeck(deckId, {
+    const pitchUpdate: Partial<DeckStoreState> = {
       pitch: clampedPitch,
       playbackRate: rate,
       calculatedBpm: computeEffectiveBpm(deckState.track, rate),
       isSyncActive,
-    });
+    };
+    if (deckState.isSyncActive && this.state.syncMasterDeck === otherDeckId) {
+      this.setSyncRoles(null, { [deckId]: pitchUpdate });
+    } else {
+      this.setDeck(deckId, pitchUpdate);
+    }
 
     // 2. Si este deck es el Master y el otro deck es Esclavo (isSyncActive), propagar nuevo tempo
     if (this.state.syncMasterDeck === deckId && otherDeck.isSyncActive && otherDeck.track) {
@@ -939,14 +1312,38 @@ class DJStore {
           });
         } else {
           // Desacoplar esclavo de forma segura si el Master excede el rango de pitch alcanzable (±8%)
-          this.setDeck(otherDeckId, {
-            isSyncActive: false,
-            errorMessage: 'SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±8%).',
+          this.setSyncRoles(null, {
+            [otherDeckId]: {
+              errorMessage: 'SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±8%).',
+            },
           });
-          this.setDeck(deckId, { isMaster: false });
-          this.setState({ syncMasterDeck: null });
         }
       }
+    }
+
+    if (deckState.track && deckState.duration > 0) {
+      this.recordSessionEvent({
+        type: 'deck.playback-rate',
+        deckId,
+        effectiveRate: audioEngine.getDeckPlaybackRate(deckId),
+        rampDurationMs: 0,
+        cause: 'pitch',
+      });
+    }
+    const updatedOtherDeck = this.getDeckState(otherDeckId);
+    if (
+      this.state.syncMasterDeck === deckId &&
+      otherDeck.isSyncActive &&
+      updatedOtherDeck.track &&
+      updatedOtherDeck.playbackRate !== otherDeck.playbackRate
+    ) {
+      this.recordSessionEvent({
+        type: 'deck.playback-rate',
+        deckId: otherDeckId,
+        effectiveRate: audioEngine.getDeckPlaybackRate(otherDeckId),
+        rampDurationMs: 0,
+        cause: 'sync',
+      });
     }
   }
 
@@ -980,13 +1377,25 @@ class DJStore {
     this.cancelPhaseAlignment(deckId);
     this.cancelPhaseAlignment(otherDeckId);
 
+    let effectiveBendPercent = bendPercent;
     if (deckState.track && deckState.duration > 0) {
       audioEngine.setDeckPitchBend(deckId, bendAmount);
+      const effectiveRate = audioEngine.calculateEffectiveRate(deckState.playbackRate, bendAmount);
+      effectiveBendPercent = Number((((effectiveRate / deckState.playbackRate) - 1) * 100).toFixed(4));
     }
 
     this.setDeck(deckId, {
-      pitchBend: bendPercent,
+      pitchBend: effectiveBendPercent,
     });
+    if (deckState.track && deckState.duration > 0) {
+      this.recordSessionEvent({
+        type: 'deck.playback-rate',
+        deckId,
+        effectiveRate: audioEngine.getDeckPlaybackRate(deckId),
+        rampDurationMs: direction === 'release' && deckState.playbackState === 'playing' ? 40 : 0,
+        cause: 'pitch-bend',
+      });
+    }
   }
 
   public pitchBendDeckA(direction: 'up' | 'down' | 'release'): void {
@@ -1004,8 +1413,7 @@ class DJStore {
    *
    * Reglas de selección de Master:
    * 1. Si un solo deck está en reproducción, ese deck es el MASTER indiscutible.
-   * 2. Si ambos están en reproducción, el deck opuesto al que pulsa SYNC actúa como MASTER.
-   * 3. Si ambos están detenidos, el deck opuesto actúa como MASTER determinista.
+   * 2. Si ambos están en reproducción o detenidos, el opuesto al pulsado actúa como MASTER.
    *
    * Reglas de validación:
    * 1. No utiliza relaciones de medio/doble tiempo automáticamente.
@@ -1015,31 +1423,33 @@ class DJStore {
    *    Slave dependiente (isMaster: false, isSyncActive: true).
    */
   public syncDeck(deckId: DeckId): boolean {
-    const slaveDeck = this.getDeckState(deckId);
-    const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    let slaveDeckId: DeckId = deckId;
+    let masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const deckA = this.getDeckState('A');
+    const deckB = this.getDeckState('B');
+    const aPlaying = deckA.playbackState === 'playing';
+    const bPlaying = deckB.playbackState === 'playing';
+    if (aPlaying !== bPlaying) {
+      masterDeckId = aPlaying ? 'A' : 'B';
+      slaveDeckId = masterDeckId === 'A' ? 'B' : 'A';
+    }
+    const slaveDeck = this.getDeckState(slaveDeckId);
     const masterDeck = this.getDeckState(masterDeckId);
 
-    // Cancelar cualquier micro-slew activo antes de alterar el acoplamiento de sincronización
-    this.cancelPhaseAlignment(deckId);
-    this.cancelPhaseAlignment(masterDeckId);
-
     // 1. Si SYNC ya está activo en este deck: DESACTIVAR conservando la velocidad actual
-    if (slaveDeck.isSyncActive) {
-      this.setDeck(deckId, {
-        isSyncActive: false,
-      });
-
+    if (slaveDeckId === deckId && slaveDeck.isSyncActive) {
       // Si el otro deck era el Master y ya no tiene esclavos, liberar rol de Master
       if (this.state.syncMasterDeck === masterDeckId) {
-        this.setDeck(masterDeckId, { isMaster: false });
-        this.setState({ syncMasterDeck: null });
+        this.setSyncRoles(null);
+      } else {
+        this.setDeck(slaveDeckId, { isSyncActive: false });
       }
       return false;
     }
 
-    // 2. Validación de la pista del deck solicitante (Esclavo)
+    // Validate both selected roles before changing synchronization state.
     if (!slaveDeck.track || slaveDeck.duration <= 0) {
-      this.setDeck(deckId, {
+      this.setDeck(slaveDeckId, {
         errorCode: 'sync_failed',
         errorMessage: 'No es posible sincronizar: este deck no tiene una pista cargada.',
       });
@@ -1048,7 +1458,7 @@ class DJStore {
 
     const slaveBaseBpm = getAnalyzedBpm(slaveDeck.track);
     if (typeof slaveBaseBpm !== 'number' || slaveBaseBpm <= 0) {
-      this.setDeck(deckId, {
+      this.setDeck(slaveDeckId, {
         errorCode: 'sync_failed',
         errorMessage: 'No es posible sincronizar: la pista no tiene un BPM analizado válido.',
       });
@@ -1057,7 +1467,7 @@ class DJStore {
 
     // 3. Validación de la pista del deck de referencia (Maestro)
     if (!masterDeck.track || masterDeck.duration <= 0) {
-      this.setDeck(deckId, {
+      this.setDeck(slaveDeckId, {
         errorCode: 'sync_failed',
         errorMessage: 'No es posible sincronizar: el deck opuesto no tiene una pista cargada para actuar como Master.',
       });
@@ -1066,7 +1476,7 @@ class DJStore {
 
     const masterBaseBpm = getAnalyzedBpm(masterDeck.track);
     if (typeof masterBaseBpm !== 'number' || masterBaseBpm <= 0) {
-      this.setDeck(deckId, {
+      this.setDeck(slaveDeckId, {
         errorCode: 'sync_failed',
         errorMessage: 'No es posible sincronizar: el deck opuesto no tiene un BPM analizado válido.',
       });
@@ -1084,7 +1494,7 @@ class DJStore {
     // 6. Validación estricta del rango de velocidad [0.92, 1.08] (±8%)
     // No recortar silenciosamente; rechazar si está fuera de rango
     if (requiredRate < 0.92 || requiredRate > 1.08) {
-      this.setDeck(deckId, {
+      this.setDeck(slaveDeckId, {
         errorCode: 'sync_failed',
         errorMessage: `No es posible sincronizar: el tempo requerido (${masterTargetBpm.toFixed(1)} BPM) excede el rango de pitch (±8%) para la pista actual (${slaveBaseBpm.toFixed(1)} BPM).`,
       });
@@ -1097,26 +1507,27 @@ class DJStore {
     );
 
     // 8. Aplicar la velocidad al motor de audio
-    audioEngine.setDeckPlaybackRate(deckId, requiredRate);
+    // Cancelar micro-slew solo tras validar ambos decks y el ratio requerido.
+    this.cancelPhaseAlignment(slaveDeckId);
+    this.cancelPhaseAlignment(masterDeckId);
+    audioEngine.setDeckPlaybackRate(slaveDeckId, requiredRate);
 
     // 9. Actualizar estado garantizando asimetría Maestro/Esclavo
-    this.setState({ syncMasterDeck: masterDeckId });
-
-    // Deck Maestro
-    this.setDeck(masterDeckId, {
-      isMaster: true,
-      isSyncActive: false,
+    this.setSyncRoles(masterDeckId, {
+      [slaveDeckId]: {
+        pitch: targetPitch,
+        playbackRate: requiredRate,
+        calculatedBpm: Number((slaveBaseBpm * requiredRate).toFixed(1)),
+        errorCode: null,
+        errorMessage: null,
+      },
     });
-
-    // Deck Esclavo
-    this.setDeck(deckId, {
-      isMaster: false,
-      isSyncActive: true,
-      pitch: targetPitch,
-      playbackRate: requiredRate,
-      calculatedBpm: Number((slaveBaseBpm * requiredRate).toFixed(1)),
-      errorCode: null,
-      errorMessage: null,
+    this.recordSessionEvent({
+      type: 'deck.playback-rate',
+      deckId: slaveDeckId,
+      effectiveRate: audioEngine.getDeckPlaybackRate(slaveDeckId),
+      rampDurationMs: 0,
+      cause: 'sync',
     });
 
     return true;
@@ -1219,13 +1630,22 @@ class DJStore {
     const slaveAnalysis = slaveTrack.analysis;
     const masterAnalysis = masterTrack.analysis;
 
-    const slaveFirstBeat = typeof slaveAnalysis?.firstBeatTime === 'number' && Number.isFinite(slaveAnalysis.firstBeatTime)
-      ? slaveAnalysis.firstBeatTime
-      : 0;
-
-    const masterFirstBeat = typeof masterAnalysis?.firstBeatTime === 'number' && Number.isFinite(masterAnalysis.firstBeatTime)
-      ? masterAnalysis.firstBeatTime
-      : 0;
+    const slaveFirstBeat = slaveAnalysis?.firstBeatTime;
+    const masterFirstBeat = masterAnalysis?.firstBeatTime;
+    if (
+      typeof slaveFirstBeat !== 'number' || !Number.isFinite(slaveFirstBeat) || slaveFirstBeat < 0 || slaveFirstBeat > slaveState.duration ||
+      typeof masterFirstBeat !== 'number' || !Number.isFinite(masterFirstBeat) || masterFirstBeat < 0 || masterFirstBeat > masterState.duration ||
+      slaveAnalysis?.isAmbiguous === true || masterAnalysis?.isAmbiguous === true
+    ) {
+      this.setDeck(slaveDeckId, {
+        phaseAlignment: {
+          status: 'rejected_confidence',
+          progressPercent: 0,
+          reason: 'Ambos decks requieren un primer beat válido y una referencia métrica no ambigua.',
+        },
+      });
+      return false;
+    }
 
     const slaveBend = (slaveState.pitchBend || 0) / 100;
     const masterBend = (masterState.pitchBend || 0) / 100;
@@ -1239,7 +1659,7 @@ class DJStore {
       masterPlaybackRate: masterState.playbackRate,
       masterBendAmount: masterBend,
       masterBpmConfidence: masterAnalysis?.bpmConfidence,
-      masterIsAmbiguous: masterAnalysis?.status === 'unsupported',
+      masterIsAmbiguous: Boolean(masterAnalysis?.isAmbiguous),
 
       slaveCurrentTime: audioEngine.getDeckCurrentTime(slaveDeckId),
       slaveBpm,
@@ -1248,7 +1668,7 @@ class DJStore {
       slavePlaybackRate: slaveState.playbackRate,
       slaveBendAmount: slaveBend,
       slaveBpmConfidence: slaveAnalysis?.bpmConfidence,
-      slaveIsAmbiguous: slaveAnalysis?.status === 'unsupported',
+      slaveIsAmbiguous: Boolean(slaveAnalysis?.isAmbiguous),
       validateTempoCompatibility: true,
     });
 
@@ -1292,7 +1712,6 @@ class DJStore {
         reason: null,
       },
     });
-
     // 6. Aplicar la automatización al motor Web Audio
     const applied = audioEngine.applyDeckSlew(slaveDeckId, plan, () => {
       // Callback de finalización al expirar el tiempo del micro-slew
@@ -1323,6 +1742,16 @@ class DJStore {
       return false;
     }
 
+    this.recordSessionEvent({
+      type: 'deck.micro-slew',
+      deckId: slaveDeckId,
+      baseRate: plan.baseRate,
+      peakRate: plan.peakRate,
+      rampDurationSeconds: plan.tRamp,
+      plateauDurationSeconds: plan.tPlateau,
+      targetDisplacementSeconds: plan.targetDisplacement,
+    });
+
     return true;
   }
 
@@ -1349,9 +1778,557 @@ class DJStore {
   }
 
   /**
+   * Prepara el deck Esclavo detenido o pausado en la frontera de compás (Downbeat)
+   * calculada con base en la fase musical del deck Maestro en reproducción.
+   *
+   * Cumple rigurosamente el contrato de BAR SYNC V1 (Fase 23.4 — Etapa C.4):
+   * 1. Asimetría estricta: Master en reproducción ('playing'), Slave detenido ('stopped') o pausado ('paused').
+   * 2. No inicia reproducción automáticamente (ni PLAY ni CUP).
+   * 3. No altera tempo, pitch, playbackRate, SYNC ni asignación de Master.
+   * 4. Exige confirmación manual explícita ('manual') vinculada al contentHash verificado en ambos decks.
+   * 5. Exige compatibilidad métrica idéntica (beatsPerBar).
+   * 6. Prepara el Slave en targetPosition utilizando exclusivamente la API segura seekDeck sobre deck detenido/pausado.
+   * 7. Si ya está alineado dentro de la tolerancia, no reposiciona el transporte ('already_aligned').
+   * 8. Si falla el cálculo o el posicionamiento, no declara 'armed' y registra el estado de rechazo correspondiente.
+   * 9. Invalida operaciones obsoletas si la selección o el hash del archivo cambian concurrentemente.
+   */
+  public prepareBarSync(deckId: DeckId, toleranceSec?: number): BarSyncPlanResult {
+    const slaveDeckId: DeckId = deckId;
+    const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+
+    const slaveState = this.getDeckState(slaveDeckId);
+    const masterState = this.getDeckState(masterDeckId);
+
+    const reject = (status: BarSyncStatus, reason: string): BarSyncPlanResult => {
+      const result: BarSyncPlanResult = {
+        status,
+        targetPosition: null,
+        targetDownbeatSec: null,
+        beatsPerBar: null,
+        masterBarPhase: null,
+        masterBarPeriodSec: null,
+        timeToNextMasterDownbeatSec: null,
+        slaveBarPeriodSec: null,
+        targetBarIndex: null,
+        reason,
+      };
+      this.setDeck(slaveDeckId, {
+        barSync: {
+          status,
+          preparedPosition: null,
+          previousPosition: null,
+          displacementSec: null,
+          targetDownbeatSec: null,
+          beatsPerBar: null,
+          reason,
+        },
+      });
+      return result;
+    };
+
+    // 0. Comprobación estricta de roles: el deck designado como Master no puede prepararse como Esclavo
+    if (slaveState.isMaster || this.state.syncMasterDeck === slaveDeckId) {
+      return reject(
+        'rejected_state',
+        'El deck actúa como Master de sincronización; solo el deck esclavo puede prepararse con BAR SYNC.'
+      );
+    }
+
+    // 1. Validar estados de transporte: Master debe estar en reproducción activa ('playing')
+    if (masterState.playbackState !== 'playing') {
+      return reject(
+        'rejected_state',
+        `El deck Master debe estar en reproducción activa (estado actual: ${masterState.playbackState})`
+      );
+    }
+
+    // 2. Slave debe estar detenido o pausado (nunca 'playing')
+    if (slaveState.playbackState === 'playing') {
+      return reject(
+        'rejected_state',
+        'El deck Slave está reproduciéndose. BAR SYNC V1 solo prepara decks detenidos o pausados (micro-slew de compás no permitido en V1)'
+      );
+    }
+
+    if (slaveState.playbackState === 'loading' || slaveState.playbackState === 'error') {
+      return reject(
+        'rejected_state',
+        `El deck Slave no está listo para preparación de transporte (estado actual: ${slaveState.playbackState})`
+      );
+    }
+
+    // 3. Capturar instantánea de identidad y token para detección de operaciones obsoletas
+    const slaveSelection = this.deckSelections[slaveDeckId];
+    const slaveTrack = slaveState.track;
+    const slaveToken = slaveSelection?.selectionToken;
+    const slaveTrackId = slaveTrack?.id;
+    const slaveContentHash = slaveTrack?.fileMeta?.contentHash ?? slaveSelection?.contentHash;
+
+    const masterSelection = this.deckSelections[masterDeckId];
+    const masterTrack = masterState.track;
+    const masterToken = masterSelection?.selectionToken;
+    const masterTrackId = masterTrack?.id;
+    const masterContentHash = masterTrack?.fileMeta?.contentHash ?? masterSelection?.contentHash;
+
+    // Verificar presencia de pistas cargadas
+    if (!slaveTrack || slaveState.duration <= 0) {
+      return reject('rejected_limits', 'El deck Slave no tiene una pista válida cargada');
+    }
+    if (!masterTrack || masterState.duration <= 0) {
+      return reject('rejected_limits', 'El deck Master no tiene una pista válida cargada');
+    }
+
+    // 4. Obtener posiciones reales de transporte desde el motor de audio
+    const masterCurrentTime = audioEngine.getDeckCurrentTime(masterDeckId);
+    const slaveCurrentTime = audioEngine.getDeckCurrentTime(slaveDeckId);
+
+    // Obtener BPM base y calcular BPM efectivo
+    const masterBaseBpm = getAnalyzedBpm(masterTrack);
+    const slaveBaseBpm = getAnalyzedBpm(slaveTrack);
+
+    if (typeof masterBaseBpm !== 'number' || masterBaseBpm <= 0) {
+      return reject('rejected_limits', 'El deck Master no dispone de un BPM analizado válido');
+    }
+    if (typeof slaveBaseBpm !== 'number' || slaveBaseBpm <= 0) {
+      return reject('rejected_limits', 'El deck Slave no dispone de un BPM analizado válido');
+    }
+
+    const masterEffectiveBpm = Number((masterBaseBpm * masterState.playbackRate).toFixed(4));
+    const slaveEffectiveBpm = Number((slaveBaseBpm * slaveState.playbackRate).toFixed(4));
+
+    // 5. Construir parámetros para calculateBarSyncPlan
+    const planInput: BarSyncPlanInput = {
+      master: {
+        playbackState: masterState.playbackState,
+        currentTime: masterCurrentTime,
+        duration: masterState.duration,
+        bpm: masterBaseBpm,
+        playbackRate: masterState.playbackRate,
+        effectiveBpm: masterEffectiveBpm,
+        downbeat: masterTrack.downbeat,
+        contentHash: masterContentHash,
+      },
+      slave: {
+        playbackState: slaveState.playbackState,
+        currentTime: slaveCurrentTime,
+        duration: slaveState.duration,
+        bpm: slaveBaseBpm,
+        playbackRate: slaveState.playbackRate,
+        effectiveBpm: slaveEffectiveBpm,
+        downbeat: slaveTrack.downbeat,
+        contentHash: slaveContentHash,
+      },
+      toleranceSec,
+    };
+
+    // 6. Invocar el algoritmo puro
+    const plan = calculateBarSyncPlan(planInput);
+
+    // 7. Si fue rechazado por el planificador puro, registrar y retornar sin mover transporte
+    if (plan.status !== 'armed' && plan.status !== 'already_aligned') {
+      return reject(plan.status, plan.reason ?? 'Cálculo de BAR SYNC rechazado');
+    }
+
+    // 8. Verificación anti-carrera (comprobar que la pista, token y contentHash no hayan cambiado)
+    const currentSlaveSelection = this.deckSelections[slaveDeckId];
+    const currentSlaveState = this.getDeckState(slaveDeckId);
+    const currentMasterSelection = this.deckSelections[masterDeckId];
+    const currentMasterState = this.getDeckState(masterDeckId);
+
+    if (
+      currentSlaveSelection?.selectionToken !== slaveToken ||
+      currentSlaveState.track?.id !== slaveTrackId ||
+      (currentSlaveState.track?.fileMeta?.contentHash ?? currentSlaveSelection?.contentHash) !== slaveContentHash ||
+      currentMasterSelection?.selectionToken !== masterToken ||
+      currentMasterState.track?.id !== masterTrackId ||
+      (currentMasterState.track?.fileMeta?.contentHash ?? currentMasterSelection?.contentHash) !== masterContentHash ||
+      currentSlaveState.playbackState === 'playing' ||
+      currentMasterState.playbackState !== 'playing'
+    ) {
+      return reject('rejected_state', 'La pista o el estado de transporte cambiaron durante la preparación; operación obsoleta descartada');
+    }
+
+    // 9. Si el estado es 'already_aligned', registrar posición real y diferencia sin ejecutar seek
+    if (plan.status === 'already_aligned') {
+      const realPosition = Number(slaveCurrentTime.toFixed(3));
+      const targetPos = plan.targetPosition ?? realPosition;
+      const diffToTarget = Number((realPosition - targetPos).toFixed(3));
+      this.setDeck(slaveDeckId, {
+        barSync: {
+          status: 'already_aligned',
+          preparedPosition: realPosition,
+          previousPosition: realPosition,
+          displacementSec: diffToTarget,
+          targetDownbeatSec: plan.targetDownbeatSec,
+          beatsPerBar: plan.beatsPerBar,
+          reason: null,
+        },
+      });
+      return plan;
+    }
+
+    // 10. Si el estado es 'armed', aplicar posicionamiento estático seguro en el transporte
+    const targetPos = plan.targetPosition;
+    if (typeof targetPos !== 'number' || !Number.isFinite(targetPos) || targetPos < 0 || targetPos > slaveState.duration) {
+      return reject('rejected_limits', `Posición objetivo calculada (${targetPos}) fuera de límites válidos`);
+    }
+
+    try {
+      audioEngine.seekDeck(slaveDeckId, targetPos);
+      const verifiedTime = audioEngine.getDeckCurrentTime(slaveDeckId);
+      // Validar que el motor realmente aceptó y posicionó el cabezal dentro de un margen seguro (10 ms)
+      if (Math.abs(verifiedTime - targetPos) > 0.01) {
+        throw new Error(`Posición reportada por el transporte (${verifiedTime.toFixed(3)}s) discrepa de la posición objetivo (${targetPos.toFixed(3)}s)`);
+      }
+    } catch (err) {
+      const errorReason = `Fallo al posicionar el cabezal en el motor de audio: ${err instanceof Error ? err.message : String(err)}`;
+      return reject('rejected_state', errorReason);
+    }
+
+    // 11. Registrar en el store el estado exitosamente armado sin alterar playbackState (conserva stopped o paused)
+    const verifiedPos = Number(audioEngine.getDeckCurrentTime(slaveDeckId).toFixed(3));
+    const prevPos = Number(slaveCurrentTime.toFixed(3));
+    const displacement = Number((verifiedPos - prevPos).toFixed(3));
+
+    this.setDeck(slaveDeckId, {
+      currentTime: targetPos,
+      isCupPlaying: false,
+      barSync: {
+        status: 'armed',
+        preparedPosition: verifiedPos,
+        previousPosition: prevPos,
+        displacementSec: displacement,
+        targetDownbeatSec: plan.targetDownbeatSec,
+        beatsPerBar: plan.beatsPerBar,
+        reason: null,
+      },
+    });
+    this.recordSessionEvent({
+      type: 'transport.seek',
+      deckId: slaveDeckId,
+      trackPositionSeconds: verifiedPos,
+      playbackState: slaveState.playbackState === 'paused' ? 'paused' : 'stopped',
+    });
+
+    return plan;
+  }
+
+  public prepareBarSyncDeckA(toleranceSec?: number): BarSyncPlanResult {
+    return this.prepareBarSync('A', toleranceSec);
+  }
+
+  public prepareBarSyncDeckB(toleranceSec?: number): BarSyncPlanResult {
+    return this.prepareBarSync('B', toleranceSec);
+  }
+
+  public cancelBarSync(deckId: DeckId): void {
+    const currentDeck = this.getDeckState(deckId);
+    if (currentDeck.barSync?.status === 'armed' || currentDeck.barSync?.status === 'already_aligned') {
+      this.setDeck(deckId, {
+        barSync: {
+          status: 'cancelled',
+          preparedPosition: null,
+          previousPosition: null,
+          displacementSec: null,
+          targetDownbeatSec: null,
+          beatsPerBar: null,
+          reason: 'Preparación de BAR SYNC cancelada manualmente',
+        },
+      });
+    }
+  }
+
+  // =========================================================================
+  // Confirmación Manual y Limpieza de Downbeat (BAR SYNC V1 — Fase 23.4)
+  // =========================================================================
+
+  /**
+   * Confirma manualmente el downbeat y la métrica de compás para la pista actualmente cargada en el deck.
+   *
+   * Invariantes y protecciones:
+   * 1. Exige posición no negativa finita (dentro de la duración si es conocida) y métrica entera positiva >= 1.
+   * 2. Exige un contentHash SHA-256 válido (64 caracteres hex) asociado a la pista cargada.
+   * 3. Valida la identidad y el token de selección antes y después de la persistencia asíncrona.
+   * 4. Persiste atómicamente a través de IndexedDBStorage.updateTrackDownbeat sin duplicar lógica de almacenamiento.
+   * 5. Actualiza inmediatamente el estado reactivo del deck tras persistencia satisfactoria.
+   * 6. Si la misma pista está cargada en el otro deck, mantiene ambos estados coherentes.
+   * 7. Ante fallo, discrepancia de hash o cambio de pista concurrente, aborta y retorna false sin mutar el estado.
+   * 8. Invalida preparaciones de BAR SYNC que hayan quedado obsoletas en cualquiera de los decks.
+   */
+  public async confirmDownbeat(
+    deckId: DeckId,
+    positionOrParams: number | ConfirmDownbeatParams,
+    metric?: number
+  ): Promise<boolean> {
+    let position: number;
+    let beatsPerBar: number;
+    let suggestedPositionOverride: number | null | undefined;
+    let confirmedAtOverride: number | undefined;
+
+    if (typeof positionOrParams === 'object' && positionOrParams !== null) {
+      position = positionOrParams.position;
+      beatsPerBar = positionOrParams.beatsPerBar;
+      suggestedPositionOverride = positionOrParams.suggestedPosition;
+      confirmedAtOverride = positionOrParams.confirmedAt;
+    } else {
+      position = positionOrParams;
+      beatsPerBar = metric as number;
+    }
+
+    // 1. Validar parámetros de posición y métrica
+    if (typeof position !== 'number' || !Number.isFinite(position) || position < 0) {
+      return false;
+    }
+    if (
+      typeof beatsPerBar !== 'number' ||
+      !Number.isFinite(beatsPerBar) ||
+      !Number.isInteger(beatsPerBar) ||
+      beatsPerBar < 1
+    ) {
+      return false;
+    }
+
+    // 2. Verificar estado inicial del deck
+    const preDeckState = this.getDeckState(deckId);
+    if (!preDeckState.track || preDeckState.playbackState === 'loading' || preDeckState.playbackState === 'error') {
+      return false;
+    }
+
+    if (preDeckState.duration > 0 && position > preDeckState.duration) {
+      return false;
+    }
+
+    // 3. Capturar instantánea de identidad y token para detección de operaciones obsoletas
+    const preSelection = this.deckSelections[deckId];
+    const preToken = preSelection?.selectionToken;
+    const preTrack = preDeckState.track;
+    const preTrackId = preTrack.id;
+    const preContentHash = preTrack.fileMeta?.contentHash ?? preSelection?.contentHash;
+
+    if (
+      typeof preContentHash !== 'string' ||
+      preContentHash.length !== 64 ||
+      !/^[0-9a-f]{64}$/i.test(preContentHash)
+    ) {
+      return false;
+    }
+
+    const effectiveSuggestedPosition =
+      suggestedPositionOverride !== undefined
+        ? suggestedPositionOverride
+        : (preTrack.downbeat?.suggestedPosition ?? null);
+
+    let newDownbeat: TrackDownbeat;
+    try {
+      newDownbeat = createManualDownbeatConfirmation({
+        position,
+        beatsPerBar,
+        contentHash: preContentHash,
+        confirmedAt: confirmedAtOverride,
+        suggestedPosition: effectiveSuggestedPosition,
+      });
+    } catch {
+      return false;
+    }
+
+    return this.applyTrackDownbeatUpdate(deckId, preTrackId, preToken, preContentHash, newDownbeat);
+  }
+
+  public confirmDownbeatDeckA(
+    positionOrParams: number | ConfirmDownbeatParams,
+    metric?: number
+  ): Promise<boolean> {
+    return this.confirmDownbeat('A', positionOrParams, metric);
+  }
+
+  public confirmDownbeatDeckB(
+    positionOrParams: number | ConfirmDownbeatParams,
+    metric?: number
+  ): Promise<boolean> {
+    return this.confirmDownbeat('B', positionOrParams, metric);
+  }
+
+  public confirmDownbeatA(
+    positionOrParams: number | ConfirmDownbeatParams,
+    metric?: number
+  ): Promise<boolean> {
+    return this.confirmDownbeat('A', positionOrParams, metric);
+  }
+
+  public confirmDownbeatB(
+    positionOrParams: number | ConfirmDownbeatParams,
+    metric?: number
+  ): Promise<boolean> {
+    return this.confirmDownbeat('B', positionOrParams, metric);
+  }
+
+  /**
+   * Limpia una confirmación manual existente, respetando el modelo de estados none / suggested / confirmed.
+   * Si la pista poseía una posición preliminar sugerida válida, pasa a 'suggested' sin confirmación.
+   * Si no la poseía, pasa a 'none'.
+   */
+  public async clearDownbeat(deckId: DeckId): Promise<boolean> {
+    const preDeckState = this.getDeckState(deckId);
+    if (!preDeckState.track || preDeckState.playbackState === 'loading' || preDeckState.playbackState === 'error') {
+      return false;
+    }
+
+    const preSelection = this.deckSelections[deckId];
+    const preToken = preSelection?.selectionToken;
+    const preTrack = preDeckState.track;
+    const preTrackId = preTrack.id;
+    const preContentHash = preTrack.fileMeta?.contentHash ?? preSelection?.contentHash;
+
+    if (
+      typeof preContentHash !== 'string' ||
+      preContentHash.length !== 64 ||
+      !/^[0-9a-f]{64}$/i.test(preContentHash)
+    ) {
+      return false;
+    }
+
+    const clearedDownbeat: TrackDownbeat = createSuggestedDownbeat(preTrack.downbeat?.suggestedPosition);
+
+    return this.applyTrackDownbeatUpdate(deckId, preTrackId, preToken, preContentHash, clearedDownbeat);
+  }
+
+  public clearDownbeatDeckA(): Promise<boolean> {
+    return this.clearDownbeat('A');
+  }
+
+  public clearDownbeatDeckB(): Promise<boolean> {
+    return this.clearDownbeat('B');
+  }
+
+  public clearDownbeatA(): Promise<boolean> {
+    return this.clearDownbeat('A');
+  }
+
+  public clearDownbeatB(): Promise<boolean> {
+    return this.clearDownbeat('B');
+  }
+
+  /**
+   * Aplica atómicamente la actualización persistida de downbeat y coordina el estado de ambos decks.
+   */
+  private async applyTrackDownbeatUpdate(
+    deckId: DeckId,
+    preTrackId: string,
+    preToken: number | undefined,
+    preContentHash: string,
+    targetDownbeat: TrackDownbeat
+  ): Promise<boolean> {
+    // 1. Persistir atómicamente en IndexedDB validando coincidencia de contentHash
+    let persisted: boolean;
+    try {
+      persisted = await indexedDBStorage.updateTrackDownbeat(preTrackId, targetDownbeat, preContentHash);
+    } catch (err) {
+      console.warn(`[useDJStore] Error al persistir downbeat para pista ${preTrackId}:`, err);
+      persisted = false;
+    }
+
+    if (!persisted) {
+      return false;
+    }
+
+    // 2. Verificación anti-carrera post-asíncrona
+    const postDeckState = this.getDeckState(deckId);
+    const postSelection = this.deckSelections[deckId];
+    const postTrack = postDeckState.track;
+    const postToken = postSelection?.selectionToken;
+    const postTrackId = postTrack?.id;
+    const postContentHash = postTrack?.fileMeta?.contentHash ?? postSelection?.contentHash;
+
+    if (
+      !postTrack ||
+      postTrackId !== preTrackId ||
+      postToken !== preToken ||
+      postContentHash !== preContentHash
+    ) {
+      // La pista cambió o fue descargada concurrentemente durante la persistencia: descartar mutación de deck
+      return false;
+    }
+
+    // 3. Preparar mutaciones reactivas
+    const updatedTrack: Track = {
+      ...postTrack,
+      downbeat: targetDownbeat,
+    };
+
+    const updates: Partial<DJStoreState> = {};
+    const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
+    const otherDeckState = this.getDeckState(otherDeckId);
+    const otherSelection = this.deckSelections[otherDeckId];
+    const otherHash = otherDeckState.track?.fileMeta?.contentHash ?? otherSelection?.contentHash;
+
+    const isSameTrackInOtherDeck =
+      Boolean(otherDeckState.track) &&
+      otherDeckState.track?.id === preTrackId &&
+      otherHash === preContentHash;
+
+    const deckBarSyncNeedsReset =
+      postDeckState.barSync?.status === 'armed' || postDeckState.barSync?.status === 'already_aligned';
+
+    const otherBarSyncNeedsReset =
+      otherDeckState.barSync?.status === 'armed' || otherDeckState.barSync?.status === 'already_aligned';
+
+    const idleBarSync: BarSyncState = {
+      status: 'idle',
+      preparedPosition: null,
+      previousPosition: null,
+      displacementSec: null,
+      targetDownbeatSec: null,
+      beatsPerBar: null,
+      reason: null,
+    };
+
+    if (deckId === 'A') {
+      updates.deckA = {
+        ...postDeckState,
+        track: updatedTrack,
+        ...(deckBarSyncNeedsReset ? { barSync: idleBarSync } : {}),
+      };
+      if (isSameTrackInOtherDeck && otherDeckState.track) {
+        updates.deckB = {
+          ...otherDeckState,
+          track: { ...otherDeckState.track, downbeat: targetDownbeat },
+          ...(otherBarSyncNeedsReset ? { barSync: idleBarSync } : {}),
+        };
+      } else if (otherBarSyncNeedsReset) {
+        updates.deckB = {
+          ...otherDeckState,
+          barSync: idleBarSync,
+        };
+      }
+    } else {
+      updates.deckB = {
+        ...postDeckState,
+        track: updatedTrack,
+        ...(deckBarSyncNeedsReset ? { barSync: idleBarSync } : {}),
+      };
+      if (isSameTrackInOtherDeck && otherDeckState.track) {
+        updates.deckA = {
+          ...otherDeckState,
+          track: { ...otherDeckState.track, downbeat: targetDownbeat },
+          ...(otherBarSyncNeedsReset ? { barSync: idleBarSync } : {}),
+        };
+      } else if (otherBarSyncNeedsReset) {
+        updates.deckA = {
+          ...otherDeckState,
+          barSync: idleBarSync,
+        };
+      }
+    }
+
+    this.setState(updates);
+    return true;
+  }
+
+  /**
    * Descarga la pista del deck indicado y libera sus recursos en memoria.
    */
   public unloadDeck(deckId: DeckId): void {
+    const loadedTrack = this.getDeckState(deckId).track;
     this.cancelCup(deckId);
     this.cancelPhaseAlignment(deckId);
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
@@ -1359,28 +2336,38 @@ class DJStore {
     this.loadTokens[deckId]++;
     audioEngine.setDeckPitchBend(deckId, 0);
     audioEngine.unloadDeck(deckId);
-    this.checkStopTimeLoop();
-
-    if (this.state.syncMasterDeck === deckId) {
-      // El Maestro fue descargado: desacoplar el Esclavo conservando su tempo actual
-      this.setState({ syncMasterDeck: null });
-      this.setDeck(otherDeckId, { isSyncActive: false, isMaster: false });
-    } else if (this.state.syncMasterDeck === otherDeckId) {
-      // El Esclavo fue descargado: desvincular el Maestro
-      this.setState({ syncMasterDeck: null });
-      this.setDeck(otherDeckId, { isMaster: false });
-    }
+    this.deckSelections[deckId] = null;
 
     const initialDeck = deckId === 'A' ? INITIAL_DECK_A : INITIAL_DECK_B;
     const currentDeck = this.getDeckState(deckId);
-    this.setDeck(deckId, {
+    const unloadedDeck: DeckStoreState = {
       ...initialDeck,
       pitch: currentDeck.pitch,
       playbackRate: currentDeck.playbackRate,
       isSyncActive: false,
       isMaster: false,
       phaseAlignment: { status: 'idle', progressPercent: 0 },
+      barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+    };
+    const currentOtherDeck = this.getDeckState(otherDeckId);
+    const otherBarSync = currentOtherDeck.barSync?.status === 'armed' || currentOtherDeck.barSync?.status === 'already_aligned'
+      ? { status: 'idle' as const, preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null }
+      : currentOtherDeck.barSync;
+    const otherDeck = {
+      ...currentOtherDeck,
+      isSyncActive: false,
+      isMaster: false,
+      barSync: otherBarSync,
+    };
+    this.setState({
+      syncMasterDeck: null,
+      [deckId === 'A' ? 'deckA' : 'deckB']: unloadedDeck,
+      [otherDeckId === 'A' ? 'deckA' : 'deckB']: otherDeck,
     });
+    if (loadedTrack) {
+      this.recordSessionEvent({ type: 'deck.track-unloaded', deckId, trackId: loadedTrack.id });
+    }
+    this.checkStopTimeLoop();
   }
 
   public unloadDeckA(): void {
@@ -1411,6 +2398,10 @@ class DJStore {
         masterVolume: clamped,
       },
     });
+    this.recordSessionEvent({
+      type: 'mixer.master-gain',
+      gainLinear: this.state.isMasterMuted ? 0 : Number((clamped / 100).toFixed(4)),
+    });
   }
 
   /**
@@ -1424,6 +2415,10 @@ class DJStore {
       // Ignorar si el motor aún no está disponible
     }
     this.setState({ isMasterMuted });
+    this.recordSessionEvent({
+      type: 'mixer.master-gain',
+      gainLinear: isMasterMuted ? 0 : Number((this.state.masterVolume / 100).toFixed(4)),
+    });
   }
 
   /**
@@ -1446,6 +2441,11 @@ class DJStore {
           gain: clamped,
         },
       },
+    });
+    this.recordSessionEvent({
+      type: 'mixer.channel-gain',
+      deckId,
+      gainLinear: Number((clamped / 50).toFixed(4)),
     });
   }
 
@@ -1484,6 +2484,7 @@ class DJStore {
         },
       },
     });
+    this.recordSessionEvent({ type: 'mixer.eq', deckId, band, gainDb: dbValue });
   }
 
   /**
@@ -1521,6 +2522,7 @@ class DJStore {
         },
       },
     });
+    this.recordSessionEvent({ type: 'mixer.filter', deckId, value: bipolarValue });
   }
 
   /**
@@ -1544,6 +2546,11 @@ class DJStore {
         },
       },
     });
+    this.recordSessionEvent({
+      type: 'mixer.channel-volume',
+      deckId,
+      volumeLinear: Number((clamped / 100).toFixed(4)),
+    });
   }
 
   /**
@@ -1563,6 +2570,11 @@ class DJStore {
         crossfader: clamped,
       },
     });
+    this.recordSessionEvent({
+      type: 'mixer.crossfader',
+      position: Number((clamped / 100).toFixed(4)),
+      curve: this.state.mixer.crossfaderCurve,
+    });
   }
 
   /**
@@ -1580,6 +2592,11 @@ class DJStore {
         ...this.state.mixer,
         crossfaderCurve: curve,
       },
+    });
+    this.recordSessionEvent({
+      type: 'mixer.crossfader',
+      position: Number((this.state.mixer.crossfader / 100).toFixed(4)),
+      curve,
     });
   }
 
@@ -1691,7 +2708,12 @@ class DJStore {
   }
 
   private handlePlaybackEnded(deckId: DeckId): void {
-    this.setDeck(deckId, { playbackState: 'stopped', currentTime: 0 });
+    this.setDeck(deckId, {
+      playbackState: 'stopped',
+      currentTime: 0,
+      barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+    });
+    this.recordSessionEvent({ type: 'transport.ended', deckId, trackPositionSeconds: 0 });
     this.checkStopTimeLoop();
   }
 }
@@ -1707,6 +2729,9 @@ export function useDJStore(): {
   masterVolume: number;
   isMasterMuted: boolean;
   mixer: MixerState;
+  startSessionCapture: (metadata?: SessionMetadata) => RecordedSession;
+  finalizeSessionCapture: () => RecordedSession | null;
+  getSessionCapture: () => RecordedSession | null;
   loadTrackToDeckA: (track: Track) => Promise<boolean>;
   playDeckA: () => Promise<void>;
   pauseDeckA: () => void;
@@ -1752,7 +2777,7 @@ export function useDJStore(): {
   setFilter: (deckId: DeckId, value: number) => void;
 
   // Análisis musical y sincronización
-  analyzeTrack: (track: Track, force?: boolean) => Promise<TrackAnalysis>;
+  analyzeTrack: (track: Track, force?: boolean, deckId?: DeckId) => Promise<TrackAnalysis>;
   updateTrackAnalysis: (trackId: string, analysis: TrackAnalysis) => Promise<boolean>;
 
   // CUE principal y CUP
@@ -1779,6 +2804,24 @@ export function useDJStore(): {
   alignPhaseB: () => boolean;
   alignPhase: (deckId: DeckId) => boolean;
   cancelPhaseAlignment: (deckId: DeckId) => void;
+
+  // Preparación de compás (BAR SYNC V1)
+  prepareBarSyncA: (toleranceSec?: number) => BarSyncPlanResult;
+  prepareBarSyncB: (toleranceSec?: number) => BarSyncPlanResult;
+  prepareBarSync: (deckId: DeckId, toleranceSec?: number) => BarSyncPlanResult;
+  cancelBarSync: (deckId: DeckId) => void;
+
+  // Confirmación y limpieza de downbeat (BAR SYNC V1)
+  confirmDownbeatA: (positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
+  confirmDownbeatB: (positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
+  confirmDownbeatDeckA: (positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
+  confirmDownbeatDeckB: (positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
+  confirmDownbeat: (deckId: DeckId, positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
+  clearDownbeatA: () => Promise<boolean>;
+  clearDownbeatB: () => Promise<boolean>;
+  clearDownbeatDeckA: () => Promise<boolean>;
+  clearDownbeatDeckB: () => Promise<boolean>;
+  clearDownbeat: (deckId: DeckId) => Promise<boolean>;
 } {
   const state = useSyncExternalStore(djStore.subscribe, djStore.getSnapshot);
 
@@ -1789,6 +2832,9 @@ export function useDJStore(): {
     masterVolume: state.masterVolume,
     isMasterMuted: state.isMasterMuted,
     mixer: state.mixer,
+    startSessionCapture: djStore.startSessionCapture.bind(djStore),
+    finalizeSessionCapture: djStore.finalizeSessionCapture.bind(djStore),
+    getSessionCapture: djStore.getSessionCapture.bind(djStore),
 
     // Deck A
     loadTrackToDeckA: djStore.loadTrackToDeckA.bind(djStore),
@@ -1830,6 +2876,24 @@ export function useDJStore(): {
     alignPhase: djStore.alignPhase.bind(djStore),
     cancelPhaseAlignment: djStore.cancelPhaseAlignment.bind(djStore),
     unloadDeck: djStore.unloadDeck.bind(djStore),
+
+    // Preparación de compás (BAR SYNC V1)
+    prepareBarSyncA: djStore.prepareBarSyncDeckA.bind(djStore),
+    prepareBarSyncB: djStore.prepareBarSyncDeckB.bind(djStore),
+    prepareBarSync: djStore.prepareBarSync.bind(djStore),
+    cancelBarSync: djStore.cancelBarSync.bind(djStore),
+
+    // Confirmación y limpieza de downbeat (BAR SYNC V1)
+    confirmDownbeatA: djStore.confirmDownbeatA.bind(djStore),
+    confirmDownbeatB: djStore.confirmDownbeatB.bind(djStore),
+    confirmDownbeatDeckA: djStore.confirmDownbeatDeckA.bind(djStore),
+    confirmDownbeatDeckB: djStore.confirmDownbeatDeckB.bind(djStore),
+    confirmDownbeat: djStore.confirmDownbeat.bind(djStore),
+    clearDownbeatA: djStore.clearDownbeatA.bind(djStore),
+    clearDownbeatB: djStore.clearDownbeatB.bind(djStore),
+    clearDownbeatDeckA: djStore.clearDownbeatDeckA.bind(djStore),
+    clearDownbeatDeckB: djStore.clearDownbeatDeckB.bind(djStore),
+    clearDownbeat: djStore.clearDownbeat.bind(djStore),
 
     // Master
     setMasterVolume: djStore.setMasterVolume.bind(djStore),

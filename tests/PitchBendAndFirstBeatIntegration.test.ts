@@ -17,10 +17,15 @@ import { analyzeAudioPcm } from '../src/audio/analysis/audioAnalyzer.ts';
 // Mock minimal de Web Audio API para simulación determinista en Node.js
 class MockAudioParam {
   public value: number;
+  public ramps: Array<{ value: number; time: number }> = [];
   constructor(val = 1) {
     this.value = val;
   }
   public setValueAtTime(v: number): void {
+    this.value = v;
+  }
+  public linearRampToValueAtTime(v: number, time: number): void {
+    this.ramps.push({ value: v, time });
     this.value = v;
   }
 }
@@ -218,6 +223,9 @@ describe('Fase 23.3: Pitch Bend y Detección de Primer Beat (firstBeatTime)', ()
         Math.abs(timeAfterRelease - timeDuringBend) < 0.01,
         'No debe existir salto temporal discontinuo al liberar pitch bend'
       );
+      const playbackRateParam = (audioEngine as unknown as { deckGraphs: Map<string, { sourceNode: MockAudioBufferSourceNode }> }).deckGraphs.get('A')?.sourceNode.playbackRate;
+      assert.equal(playbackRateParam?.ramps.at(-1)?.value, 1.0, 'Release debe programar la tasa nominal');
+      assert.equal(playbackRateParam?.ramps.at(-1)?.time, 10.04, 'Release debe usar una rampa de 40 ms');
     });
   });
 
@@ -247,6 +255,53 @@ describe('Fase 23.3: Pitch Bend y Detección de Primer Beat (firstBeatTime)', ()
       djStore.pitchBend('A', 'release');
       assert.equal(djStore.getSnapshot().deckA.pitchBend, 0);
       assert.equal(audioEngine.getDeckPitchBend('A'), 0);
+
+      const permanentRate = djStore.getSnapshot().deckA.playbackRate;
+      djStore.pitchBend('A', 'up');
+      const firstBendRate = audioEngine.getDeckPlaybackRate('A');
+      djStore.pitchBend('A', 'up');
+      assert.equal(audioEngine.getDeckPlaybackRate('A'), firstBendRate, 'Pulsaciones repetidas no acumulan el bend');
+      djStore.pitchBend('A', 'release');
+      assert.equal(audioEngine.getDeckPlaybackRate('A'), permanentRate);
+      assert.equal(djStore.getSnapshot().deckA.playbackRate, permanentRate);
+    });
+
+    it('2.1a El bend respeta el pitch permanente y refleja el clamping efectivo', async () => {
+      const file = createTestAudioFile('track_bend_limit_store.mp3');
+      const track = createTrackFromFile(file, 120.0);
+      track.analysis = { status: 'analyzed', bpm: 120, bpmConfidence: 0.99, firstBeatTime: 0.2 };
+      await indexedDBStorage.saveTrack(track, file);
+      await djStore.loadTrackToDeckA(track);
+      djStore.setPitchDeckA(100);
+      const permanentRate = djStore.getSnapshot().deckA.playbackRate;
+      djStore.pitchBend('A', 'up');
+      assert.equal(audioEngine.getDeckPlaybackRate('A'), 1.08);
+      assert.equal(djStore.getSnapshot().deckA.pitchBend, 0);
+      assert.equal(djStore.getSnapshot().deckA.playbackRate, permanentRate);
+      assert.equal(djStore.getSnapshot().deckA.calculatedBpm, 129.6);
+      djStore.pitchBend('A', 'release');
+      assert.equal(audioEngine.getDeckPitchBend('A'), 0);
+      assert.equal(djStore.getSnapshot().deckA.playbackRate, permanentRate);
+      djStore.setPitchDeckA(50);
+    });
+
+    it('2.1b alignPhase rechaza análisis legacy sin firstBeatTime en vez de asumir posición cero', async () => {
+      const createAnalyzed = async (name: string) => {
+        const file = createTestAudioFile(name);
+        const track = createTrackFromFile(file, 120.0);
+        track.analysis = { status: 'analyzed', bpm: 120, bpmConfidence: 0.99 };
+        await indexedDBStorage.saveTrack(track, file);
+        return track;
+      };
+      const trackA = await createAnalyzed('phase_master_missing_anchor.mp3');
+      const trackB = await createAnalyzed('phase_slave_missing_anchor.mp3');
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+      assert.equal(djStore.syncDeck('B'), true);
+      await djStore.playDeckA();
+      await djStore.playDeckB();
+      assert.equal(djStore.alignPhase('B'), false);
+      assert.equal(djStore.getSnapshot().deckB.phaseAlignment.status, 'rejected_confidence');
     });
 
     it('2.2 Independencia absoluta de Pitch Bend entre Deck A y Deck B', async () => {

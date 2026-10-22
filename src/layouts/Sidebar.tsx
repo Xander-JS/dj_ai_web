@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Home, Music, ListMusic, SlidersHorizontal } from 'lucide-react';
+import { Home, Music, ListMusic, SlidersHorizontal, Disc3 } from 'lucide-react';
 import { clsx } from 'clsx';
 import './Sidebar.css';
 
@@ -33,6 +33,11 @@ export const Sidebar: React.FC = () => {
         <NavLink to="/mixer" className={getNavClass}>
           <SlidersHorizontal size={20} />
           <span>{t('navigation.mixer')}</span>
+        </NavLink>
+
+        <NavLink to="/sessions" className={getNavClass}>
+          <Disc3 size={20} />
+          <span>{t('navigation.sessions')}</span>
         </NavLink>
 
       </nav>

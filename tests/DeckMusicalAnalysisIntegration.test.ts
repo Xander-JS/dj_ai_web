@@ -444,6 +444,16 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
       'no_track',
       'unknown_artist',
       'seek_title',
+      'phase_align_grid_tooltip',
+      'phase_align_rejected_state',
+      'sync_reject_slave_track',
+      'sync_reject_slave_bpm',
+      'sync_reject_master_track',
+      'sync_reject_master_bpm',
+      'sync_reject_insufficient_evidence',
+      'sync_reject_half_time',
+      'sync_reject_double_time',
+      'sync_reject_pitch_limit',
     ];
 
     for (const key of requiredDeckKeys) {
@@ -452,6 +462,11 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
       assert.notEqual(esJson.dj[key].trim(), '', `La clave dj.${key} en es está vacía`);
       assert.notEqual(enJson.dj[key].trim(), '', `La clave dj.${key} en en está vacía`);
     }
+
+    const deckSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'), 'utf-8');
+    assert.ok(deckSource.includes("title={t('dj.phase_align_grid_tooltip')}"));
+    assert.ok(deckSource.includes('t(deck.syncFeedback.key, deck.syncFeedback.values)'));
+    assert.ok(deckSource.includes('role="alert"'));
   });
 
   it('5.12 Inspección de renderizado: Deck.tsx y Deck.css implementan SVG y diseño sin mocks', () => {

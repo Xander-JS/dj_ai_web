@@ -129,6 +129,7 @@ export function analyzeAudioPcm(
       waveformPeaks,
       bpmConfidence: bpmResult.confidence,
       isAmbiguous: bpmResult.isAmbiguous,
+      alternateBpm: bpmResult.alternateBpm,
       keyConfidence: keyResult.confidence,
       firstBeatTime: hasBpm ? firstBeatTime : null,
     };

@@ -137,6 +137,11 @@ function createAnalyzedTrack(name: string, bpm: number, firstBeat = 0.0, duratio
     status: 'analyzed',
     bpm,
     bpmConfidence: 0.90,
+    isAmbiguous: false,
+    alternateBpm: [
+      ...(bpm * 0.5 >= 50 ? [Number((bpm * 0.5).toFixed(1))] : []),
+      ...(bpm * 2 <= 220 ? [Number((bpm * 2).toFixed(1))] : []),
+    ],
     key: '8B',
     camelot: '8B',
     energy: 6.5,

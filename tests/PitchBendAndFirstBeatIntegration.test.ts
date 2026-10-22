@@ -289,7 +289,13 @@ describe('Fase 23.3: Pitch Bend y Detección de Primer Beat (firstBeatTime)', ()
       const createAnalyzed = async (name: string) => {
         const file = createTestAudioFile(name);
         const track = createTrackFromFile(file, 120.0);
-        track.analysis = { status: 'analyzed', bpm: 120, bpmConfidence: 0.99 };
+        track.analysis = {
+          status: 'analyzed',
+          bpm: 120,
+          bpmConfidence: 0.99,
+          isAmbiguous: false,
+          alternateBpm: [60],
+        };
         await indexedDBStorage.saveTrack(track, file);
         return track;
       };

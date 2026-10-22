@@ -305,7 +305,7 @@ export const SmartRecommendationCard: React.FC = () => {
 
         {!isLoading && errorMsg && (
           <div className="smart-rec-error-box">
-            <AlertTriangle size={24} color="#f59e0b" />
+            <AlertTriangle size={24} color="var(--color-warning)" />
             <span>{errorMsg}</span>
             <div className="smart-rec-item-actions">
               <Button
@@ -420,7 +420,7 @@ export const SmartRecommendationCard: React.FC = () => {
                       </span>
                     )}
                     {rec.tempoEvaluation?.relation === 'out_of_range' && (
-                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-error-500, #ef4444)', color: 'var(--color-error-500, #ef4444)' }}>
+                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)' }}>
                         {t('dashboard.pitch_out_of_range', 'Pitch > ±8%')}
                       </span>
                     )}
@@ -444,7 +444,7 @@ export const SmartRecommendationCard: React.FC = () => {
                       </span>
                     )}
                     {rec.harmonicEvaluation?.relation === 'incompatible' && (
-                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-warning-500, #f59e0b)', color: 'var(--color-warning-500, #f59e0b)' }}>
+                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-warning)', color: 'var(--color-warning)' }}>
                         {t('dashboard.different_harmony', 'Armonía diferente')}
                       </span>
                     )}

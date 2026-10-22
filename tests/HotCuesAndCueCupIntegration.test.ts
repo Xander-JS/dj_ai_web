@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 import { djStore, HOT_CUE_COLORS } from '../src/store/useDJStore.ts';
 import { audioEngine } from '../src/audio/index.ts';
-import { indexedDBStorage } from '../src/services/storage/IndexedDBStorage.ts';
+import { IndexedDBStorage, indexedDBStorage } from '../src/services/storage/IndexedDBStorage.ts';
 import { createTrackFromFile } from '../src/utils/audioValidation.ts';
 import type { HotCue } from '../src/types/track.ts';
 
@@ -290,6 +290,15 @@ describe('Fase 23.2 — Hot Cues y CUE Principal con CUP', () => {
     assert.equal(persistedCues.mainCue, 12.0);
     assert.equal(persistedCues.hotCues?.length, 8);
 
+    // Una instancia de almacenamiento fría debe recuperar los ocho slots desde IndexedDB.
+    const coldStorage = new IndexedDBStorage();
+    const cuesAfterRestart = await coldStorage.getTrackCues(track.id);
+    assert.ok(cuesAfterRestart);
+    assert.deepEqual(
+      cuesAfterRestart.hotCues.map((cue) => [cue.id, cue.position]),
+      Array.from({ length: 8 }, (_, index) => [index + 1, (index + 1) * 15.0])
+    );
+
     // Descargar Deck A
     djStore.unloadDeckA();
     assert.equal(djStore.getSnapshot().deckA.track, null);
@@ -384,6 +393,39 @@ describe('Fase 23.2 — Hot Cues y CUE Principal con CUP', () => {
     const snapTrack2 = djStore.getSnapshot().deckA;
     assert.equal(snapTrack2.hotCues.length, 1);
     assert.equal(snapTrack2.hotCues[0].position, 45.0, 'Canción 2 debe recuperar su propio Hot Cue');
+  });
+
+  it('6.2 Una lista persistida vacía prevalece sobre cues obsoletos de una pista en memoria', async () => {
+    const file = createTestAudioFile('track_deleted_cue_not_resurrected.mp3');
+    const track = createTrackFromFile(file, 180.0);
+    await indexedDBStorage.saveTrack(track, file);
+    await djStore.loadTrackToDeckA(track);
+    await djStore.setHotCue('A', 1, 24.125);
+
+    const staleCue = djStore.getSnapshot().deckA.hotCues[0];
+    const staleTrack = { ...track, hotCues: [staleCue] };
+    assert.equal(await djStore.deleteHotCue('A', 1), true);
+    assert.deepEqual((await indexedDBStorage.getTrackCues(track.id))?.hotCues, []);
+
+    djStore.unloadDeckA();
+    assert.equal(await djStore.loadTrackToDeckA(staleTrack), true);
+    assert.deepEqual(djStore.getSnapshot().deckA.hotCues, []);
+  });
+
+  it('6.3 Sin registro persistido, conserva los cues recibidos junto con la pista', async () => {
+    const file = createTestAudioFile('track_without_saved_cues.mp3');
+    const track = createTrackFromFile(file, 180.0);
+    const cue: HotCue = {
+      id: 8,
+      position: 37.625,
+      trackId: track.id,
+      color: HOT_CUE_COLORS[7],
+      createdAt: 123,
+    };
+
+    assert.equal(await indexedDBStorage.getTrackCues(track.id), null);
+    assert.equal(await djStore.loadTrackToDeckA({ ...track, hotCues: [cue] }), true);
+    assert.deepEqual(djStore.getSnapshot().deckA.hotCues, [cue]);
   });
 
   // ==========================================

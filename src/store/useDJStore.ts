@@ -28,6 +28,7 @@ import {
 import {
   calculatePhaseAlignmentPlan,
 } from '../audio/analysis/phaseAlignment.ts';
+import { assessTempoCompatibility } from '../audio/analysis/tempoCompatibility.ts';
 import {
   calculateBarSyncPlan,
   type BarSyncPlanResult,
@@ -51,6 +52,11 @@ export type DeckPlaybackStatus = 'stopped' | 'playing' | 'paused' | 'loading' | 
 
 /** Códigos de error traducibles por la interfaz. */
 export type DeckErrorCode = 'file_missing' | 'decode_failed' | 'playback_failed' | 'sync_failed';
+
+export interface SyncFeedback {
+  key: string;
+  values?: Record<string, string | number>;
+}
 
 /** Paleta de 8 colores distintivos para los pads de Hot Cue estilo DJ profesional. */
 export const HOT_CUE_COLORS: readonly string[] = [
@@ -94,6 +100,7 @@ export interface DeckStoreState {
   barSync: BarSyncState;
   errorCode: DeckErrorCode | null;
   errorMessage: string | null;
+  syncFeedback: SyncFeedback | null;
 }
 
 
@@ -158,6 +165,7 @@ const INITIAL_DECK_A: DeckStoreState = {
   },
   errorCode: null,
   errorMessage: null,
+  syncFeedback: null,
 };
 
 const INITIAL_DECK_B: DeckStoreState = {
@@ -191,6 +199,7 @@ const INITIAL_DECK_B: DeckStoreState = {
   },
   errorCode: null,
   errorMessage: null,
+  syncFeedback: null,
 };
 
 
@@ -436,6 +445,19 @@ class DJStore {
     }
   }
 
+  private setSyncFailure(
+    deckId: DeckId,
+    key: string,
+    message: string,
+    values?: Record<string, string | number>
+  ): void {
+    this.setDeck(deckId, {
+      errorCode: 'sync_failed',
+      errorMessage: message,
+      syncFeedback: { key, ...(values ? { values } : {}) },
+    });
+  }
+
   /** Publishes the Master/Slave relationship and both role flags as one store snapshot. */
   private setSyncRoles(
     masterDeckId: DeckId | null,
@@ -651,7 +673,7 @@ class DJStore {
         typeof position === 'number' && Number.isFinite(position) && position >= 0 && position <= effectiveTrack.duration;
       const mainCueCandidate = persistedCues?.mainCue ?? effectiveTrack.mainCue;
       const mainCue = validPosition(mainCueCandidate) ? mainCueCandidate : null;
-      const sourceHotCues = persistedCues?.hotCues.length ? persistedCues.hotCues : (effectiveTrack.hotCues ?? []);
+      const sourceHotCues = persistedCues ? persistedCues.hotCues : (effectiveTrack.hotCues ?? []);
       const hotCues = sourceHotCues.filter((cue) =>
         Number.isInteger(cue.id) && cue.id >= 1 && cue.id <= 8 && cue.trackId === track.id && validPosition(cue.position)
       ).slice(0, 8);
@@ -739,6 +761,7 @@ class DJStore {
         barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
         errorCode: null,
         errorMessage: null,
+        syncFeedback: null,
       });
       this.recordSessionEvent({
         type: 'deck.track-loaded',
@@ -756,7 +779,10 @@ class DJStore {
       if (otherDeck.barSync?.status === 'armed' || otherDeck.barSync?.status === 'already_aligned') {
         this.setDeck(oppositeDeckId, {
           barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+          ...(otherDeck.syncFeedback ? { errorCode: null, errorMessage: null, syncFeedback: null } : {}),
         });
+      } else if (otherDeck.syncFeedback) {
+        this.setDeck(oppositeDeckId, { errorCode: null, errorMessage: null, syncFeedback: null });
       }
 
       this.deckSelections[deckId] = {
@@ -905,7 +931,12 @@ class DJStore {
     if (deckState.playbackState === 'loading' || deckState.playbackState === 'error') return;
 
     audioEngine.stopDeck(deckId);
-    const updates: Partial<DeckStoreState> = { playbackState: 'stopped', currentTime: 0, isCupPlaying: false };
+    const updates: Partial<DeckStoreState> = {
+      playbackState: 'stopped',
+      currentTime: 0,
+      isCupPlaying: false,
+      pitchBend: 0,
+    };
     if (deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned') {
       updates.barSync = {
         status: 'idle',
@@ -1286,7 +1317,11 @@ class DJStore {
       playbackRate: rate,
       calculatedBpm: computeEffectiveBpm(deckState.track, rate),
       isSyncActive,
+      ...(deckState.syncFeedback ? { errorCode: null, errorMessage: null, syncFeedback: null } : {}),
     };
+    if (otherDeck.syncFeedback) {
+      this.setDeck(otherDeckId, { errorCode: null, errorMessage: null, syncFeedback: null });
+    }
     if (deckState.isSyncActive && this.state.syncMasterDeck === otherDeckId) {
       this.setSyncRoles(null, { [deckId]: pitchUpdate });
     } else {
@@ -1449,36 +1484,40 @@ class DJStore {
 
     // Validate both selected roles before changing synchronization state.
     if (!slaveDeck.track || slaveDeck.duration <= 0) {
-      this.setDeck(slaveDeckId, {
-        errorCode: 'sync_failed',
-        errorMessage: 'No es posible sincronizar: este deck no tiene una pista cargada.',
-      });
+      this.setSyncFailure(slaveDeckId, 'dj.sync_reject_slave_track', 'No es posible sincronizar: este deck no tiene una pista cargada.');
       return false;
     }
 
     const slaveBaseBpm = getAnalyzedBpm(slaveDeck.track);
     if (typeof slaveBaseBpm !== 'number' || slaveBaseBpm <= 0) {
-      this.setDeck(slaveDeckId, {
-        errorCode: 'sync_failed',
-        errorMessage: 'No es posible sincronizar: la pista no tiene un BPM analizado válido.',
-      });
+      this.setSyncFailure(slaveDeckId, 'dj.sync_reject_slave_bpm', 'No es posible sincronizar: la pista no tiene un BPM analizado válido.');
       return false;
     }
 
     // 3. Validación de la pista del deck de referencia (Maestro)
     if (!masterDeck.track || masterDeck.duration <= 0) {
-      this.setDeck(slaveDeckId, {
-        errorCode: 'sync_failed',
-        errorMessage: 'No es posible sincronizar: el deck opuesto no tiene una pista cargada para actuar como Master.',
-      });
+      this.setSyncFailure(slaveDeckId, 'dj.sync_reject_master_track', 'No es posible sincronizar: el deck opuesto no tiene una pista cargada para actuar como Master.');
       return false;
     }
 
     const masterBaseBpm = getAnalyzedBpm(masterDeck.track);
     if (typeof masterBaseBpm !== 'number' || masterBaseBpm <= 0) {
-      this.setDeck(slaveDeckId, {
-        errorCode: 'sync_failed',
-        errorMessage: 'No es posible sincronizar: el deck opuesto no tiene un BPM analizado válido.',
+      this.setSyncFailure(slaveDeckId, 'dj.sync_reject_master_bpm', 'No es posible sincronizar: el deck opuesto no tiene un BPM analizado válido.');
+      return false;
+    }
+
+    // BPM equality and pitch reachability do not establish a shared beat level.
+    // Check detector hypotheses first and fail closed if this analysis lacks evidence.
+    const tempoCompatibility = assessTempoCompatibility(masterDeck.track.analysis, slaveDeck.track.analysis);
+    if (tempoCompatibility.status !== 'no_harmonic_conflict') {
+      const compatibilityKey = tempoCompatibility.status === 'half_time_hypothesis'
+        ? 'dj.sync_reject_half_time'
+        : tempoCompatibility.status === 'double_time_hypothesis'
+        ? 'dj.sync_reject_double_time'
+        : 'dj.sync_reject_insufficient_evidence';
+      this.setSyncFailure(slaveDeckId, compatibilityKey, tempoCompatibility.reason ?? 'SYNC rechazado por compatibilidad de tempo.', {
+        masterBpm: masterBaseBpm.toFixed(1),
+        slaveBpm: slaveBaseBpm.toFixed(1),
       });
       return false;
     }
@@ -1494,10 +1533,12 @@ class DJStore {
     // 6. Validación estricta del rango de velocidad [0.92, 1.08] (±8%)
     // No recortar silenciosamente; rechazar si está fuera de rango
     if (requiredRate < 0.92 || requiredRate > 1.08) {
-      this.setDeck(slaveDeckId, {
-        errorCode: 'sync_failed',
-        errorMessage: `No es posible sincronizar: el tempo requerido (${masterTargetBpm.toFixed(1)} BPM) excede el rango de pitch (±8%) para la pista actual (${slaveBaseBpm.toFixed(1)} BPM).`,
-      });
+      this.setSyncFailure(
+        slaveDeckId,
+        'dj.sync_reject_pitch_limit',
+        `No es posible sincronizar: el tempo requerido (${masterTargetBpm.toFixed(1)} BPM) excede el rango de pitch (±8%) para la pista actual (${slaveBaseBpm.toFixed(1)} BPM).`,
+        { targetBpm: masterTargetBpm.toFixed(1), trackBpm: slaveBaseBpm.toFixed(1) }
+      );
       return false;
     }
 
@@ -1520,6 +1561,7 @@ class DJStore {
         calculatedBpm: Number((slaveBaseBpm * requiredRate).toFixed(1)),
         errorCode: null,
         errorMessage: null,
+        syncFeedback: null,
       },
     });
     this.recordSessionEvent({
@@ -2358,6 +2400,7 @@ class DJStore {
       isSyncActive: false,
       isMaster: false,
       barSync: otherBarSync,
+      ...(currentOtherDeck.syncFeedback ? { errorCode: null, errorMessage: null, syncFeedback: null } : {}),
     };
     this.setState({
       syncMasterDeck: null,

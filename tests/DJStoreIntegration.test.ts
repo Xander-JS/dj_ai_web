@@ -1000,8 +1000,8 @@ describe('DJStore — Captura determinista de sesión', () => {
     const fileB = new File([new Uint8Array(41)], 'sync-b.wav', { type: 'audio/wav' });
     const trackA = createTrackFromFile(fileA, 195);
     const trackB = createTrackFromFile(fileB, 195);
-    trackA.analysis = { status: 'analyzed', bpm: 120 };
-    trackB.analysis = { status: 'analyzed', bpm: 125 };
+    trackA.analysis = { status: 'analyzed', bpm: 120, bpmConfidence: 0.85, isAmbiguous: false, alternateBpm: [60] };
+    trackB.analysis = { status: 'analyzed', bpm: 125, bpmConfidence: 0.85, isAmbiguous: false, alternateBpm: [62.5] };
     await indexedDBStorage.saveTrack(trackA, fileA);
     await indexedDBStorage.saveTrack(trackB, fileB);
     assert.equal(await djStore.loadTrackToDeckA(trackA), true);

@@ -246,7 +246,10 @@ export const Library: React.FC = () => {
     } else if (successCount > 0 && errors.length > 0) {
       setFeedback({
         type: 'warning',
-        text: `${t('library.import_success', { count: successCount })} Advertencias: ${errors.join(', ')}`,
+        text: t('library.import_partial_warning', {
+          success: t('library.import_success', { count: successCount }),
+          warnings: errors.join(', '),
+        }),
       });
     } else if (errors.length > 0) {
       setFeedback({
@@ -351,7 +354,7 @@ export const Library: React.FC = () => {
       console.error('[Library] Error al eliminar pista:', err);
       setFeedback({
         type: 'error',
-        text: `Error al eliminar la pista: ${err instanceof Error ? err.message : String(err)}`,
+        text: t('library.delete_error', { error: err instanceof Error ? err.message : String(err) }),
       });
     }
   };
@@ -402,7 +405,10 @@ export const Library: React.FC = () => {
       const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
       setFeedback({
         type: 'error',
-        text: `Error al cargar en ${deckLabel}: ${err instanceof Error ? err.message : String(err)}`,
+        text: t('library.load_exception_error', {
+          deck: deckLabel,
+          error: err instanceof Error ? err.message : String(err),
+        }),
       });
     }
   };
@@ -799,11 +805,11 @@ export const Library: React.FC = () => {
             </p>
             <div className="delete-modal-actions">
               <Button variant="outline" onClick={() => setDeleteConfirmTrack(null)}>
-                {t('common.cancel', 'Cancelar')}
+                {t('common.cancel')}
               </Button>
               <Button variant="primary" onClick={() => handleDeleteTrack(deleteConfirmTrack)}>
                 <Trash2 size={16} />
-                {t('common.delete', 'Eliminar')}
+                {t('common.delete')}
               </Button>
             </div>
           </div>

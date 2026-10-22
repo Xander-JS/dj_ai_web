@@ -6,6 +6,7 @@ import { useDJStore, HOT_CUE_COLORS } from '../../store/useDJStore';
 import { formatDuration } from '../../utils/formatters';
 import type { AnalysisStatus } from '../../types/track';
 import { isDownbeatConfirmed } from '../../utils/downbeat';
+import '../ui/Badge.css';
 import './Deck.css';
 
 export interface DeckProps {
@@ -116,6 +117,42 @@ export const Deck: React.FC<DeckProps> = ({
   const suggestedPos = track?.downbeat?.suggestedPosition ?? (typeof analysis?.firstBeatTime === 'number' ? analysis.firstBeatTime : null);
   const hasSuggested = typeof suggestedPos === 'number' && Number.isFinite(suggestedPos) && suggestedPos >= 0;
 
+  const barSyncReasonKey = barSyncStatus === 'rejected_state' || barSyncStatus === 'rejected_unconfirmed' ||
+    barSyncStatus === 'rejected_no_downbeat' || barSyncStatus === 'rejected_metric_mismatch' ||
+    barSyncStatus === 'rejected_limits' || barSyncStatus === 'rejected_confidence'
+    ? `dj.bar_sync_reason_${barSyncStatus}`
+    : 'dj.bar_sync_reason_generic';
+
+  const phaseStatusLabel = phaseAlignment?.status === 'active'
+    ? `${t('dj.phase_align_active')} (${Math.round(phaseAlignment.progressPercent)}%)`
+    : phaseAlignment?.status === 'completed'
+    ? t('dj.phase_align_completed')
+    : phaseAlignment?.status === 'cancelled'
+    ? t('dj.phase_align_cancelled')
+    : phaseAlignment?.status === 'rejected_limits'
+    ? t('dj.phase_align_rejected_limits')
+    : phaseAlignment?.status === 'rejected_confidence'
+    ? t('dj.phase_align_rejected_confidence')
+    : phaseAlignment?.status === 'already_aligned'
+    ? t('dj.phase_align_already_aligned')
+    : phaseAlignment?.status === 'rejected_state'
+    ? t('dj.phase_align_rejected_state')
+    : phaseAlignment?.status;
+
+  const phaseStatusTooltip = phaseAlignment?.status === 'rejected_limits'
+    ? t('dj.phase_align_rejected_limits')
+    : phaseAlignment?.status === 'rejected_confidence'
+    ? t('dj.phase_align_rejected_confidence')
+    : phaseAlignment?.status === 'rejected_state'
+    ? t('dj.phase_align_rejected_state')
+    : phaseAlignment?.status === 'already_aligned'
+    ? t('dj.phase_align_already_aligned')
+    : phaseAlignment?.status === 'cancelled'
+    ? t('dj.phase_align_cancelled')
+    : phaseAlignment?.status === 'completed'
+    ? t('dj.phase_align_completed_tooltip')
+    : t('dj.phase_align_tooltip');
+
   const formatDeltaSeconds = (val: number | null | undefined): string => {
     if (val === null || val === undefined || Math.abs(val) < 0.0005) return '0.00s';
     const sign = val > 0 ? '+' : '';
@@ -178,7 +215,7 @@ export const Deck: React.FC<DeckProps> = ({
 
   const barSyncBadgeTooltip = barSync && barSync.status !== 'idle'
     ? (barSync.status as string) === 'preparing'
-      ? t('dj.bar_sync_preparing', 'PREPARANDO...')
+      ? t('dj.bar_sync_badge_preparing')
       : barSync.status === 'armed'
       ? t('dj.bar_sync_armed_badge_tooltip', {
           prepared: barSync.preparedPosition?.toFixed(3) ?? '0.000',
@@ -195,10 +232,10 @@ export const Deck: React.FC<DeckProps> = ({
           beats: barSync.beatsPerBar ?? 4,
         })
       : barSync.status === 'completed'
-      ? t('dj.bar_sync_completed_tooltip', 'Preparación de compás finalizada al arrancar la reproducción')
+      ? t('dj.bar_sync_completed_tooltip')
       : barSync.status === 'cancelled'
-      ? t('dj.bar_sync_cancelled_tooltip', 'Preparación de compás cancelada manualmente')
-      : (barSync.reason || 'Preparación de compás rechazada')
+      ? t('dj.bar_sync_cancelled_tooltip')
+      : t(barSyncReasonKey)
     : undefined;
 
   // 4.2 Estado del análisis:
@@ -432,8 +469,12 @@ export const Deck: React.FC<DeckProps> = ({
 
           <div className="deck-subtitle-row">
             <span className="deck-track-artist">
-              {isError && deck.errorMessage ? (
-                <span className="deck-error-badge" title={deck.errorMessage}>
+              {deck.errorCode === 'sync_failed' && deck.syncFeedback ? (
+                <span className="deck-error-badge" title={t(deck.syncFeedback.key, deck.syncFeedback.values)} role="alert">
+                  {t(deck.syncFeedback.key, deck.syncFeedback.values)}
+                </span>
+              ) : isError && deck.errorMessage ? (
+                <span className="deck-error-badge" title={deck.errorMessage} role="alert">
                   {deck.errorMessage}
                 </span>
               ) : (
@@ -508,7 +549,7 @@ export const Deck: React.FC<DeckProps> = ({
             {hasProvisionalGrid && (
               <span
                 className="status-badge deck-grid-prov-badge"
-                title="Beatgrid provisional basado en primer transitorio detectado (no representa compás o downbeat garantizado)"
+                title={t('dj.phase_align_grid_tooltip')}
                 data-testid={`deck-${deckName.toLowerCase()}-grid-badge`}
               >
                 {t('dj.phase_align_badge_prov')}
@@ -523,24 +564,10 @@ export const Deck: React.FC<DeckProps> = ({
                   'deck-phase-badge',
                   `phase-badge-${phaseAlignment.status}`
                 )}
-                title={phaseAlignment.reason || undefined}
+                title={phaseStatusTooltip}
                 data-testid={`deck-${deckName.toLowerCase()}-phase-badge`}
               >
-                {phaseAlignment.status === 'active'
-                  ? `${t('dj.phase_align_active')} (${Math.round(phaseAlignment.progressPercent)}%)`
-                  : phaseAlignment.status === 'completed'
-                  ? t('dj.phase_align_completed')
-                  : phaseAlignment.status === 'cancelled'
-                  ? t('dj.phase_align_cancelled')
-                  : phaseAlignment.status === 'rejected_limits'
-                  ? t('dj.phase_align_rejected_limits')
-                  : phaseAlignment.status === 'rejected_confidence'
-                  ? t('dj.phase_align_rejected_confidence')
-                  : phaseAlignment.status === 'already_aligned'
-                  ? t('dj.phase_align_already_aligned')
-                  : phaseAlignment.status === 'rejected_state'
-                  ? (phaseAlignment.reason || 'Rechazado')
-                  : phaseAlignment.status}
+                {phaseStatusLabel}
               </span>
             )}
 
@@ -572,16 +599,16 @@ export const Deck: React.FC<DeckProps> = ({
                 data-testid={`deck-${deckName.toLowerCase()}-barsync-badge`}
               >
                 {(barSync.status as string) === 'preparing'
-                  ? 'BAR PREPARING...'
+                  ? t('dj.bar_sync_badge_preparing')
                   : barSync.status === 'armed'
-                  ? `BAR ARMED (${barSync.preparedPosition?.toFixed(2)}s, Δ ${formatDeltaSeconds(barSync.displacementSec)})`
+                  ? t('dj.bar_sync_badge_armed', { prepared: barSync.preparedPosition?.toFixed(2) ?? '0.00', disp: formatDeltaSeconds(barSync.displacementSec) })
                   : barSync.status === 'already_aligned'
-                  ? `BAR ALIGNED (${barSync.preparedPosition?.toFixed(2)}s, Δ ${formatDeltaSeconds(barSync.displacementSec)})`
+                  ? t('dj.bar_sync_badge_aligned', { prepared: barSync.preparedPosition?.toFixed(2) ?? '0.00', disp: formatDeltaSeconds(barSync.displacementSec) })
                   : barSync.status === 'completed'
-                  ? 'BAR COMPLETED'
+                  ? t('dj.bar_sync_badge_completed')
                   : barSync.status === 'cancelled'
-                  ? 'BAR CANCELLED'
-                  : `BAR REJECTED: ${barSync.reason || barSync.status}`}
+                  ? t('dj.bar_sync_badge_cancelled')
+                  : t('dj.bar_sync_badge_rejected')}
               </span>
             )}
           </div>
@@ -986,7 +1013,7 @@ export const Deck: React.FC<DeckProps> = ({
                 : phaseAlignment?.status === 'already_aligned'
                 ? t('dj.phase_align_already_aligned')
                 : phaseAlignment?.status === 'rejected_state'
-                ? (phaseAlignment.reason || t('dj.phase_align_tooltip'))
+                ? t('dj.phase_align_rejected_state')
                 : phaseAlignment?.status === 'cancelled'
                 ? t('dj.phase_align_cancelled')
                 : phaseAlignment?.status === 'completed'
@@ -1014,7 +1041,7 @@ export const Deck: React.FC<DeckProps> = ({
             disabled={!hasTrack || isLoading || isPreparingBarSync}
             title={
               isPreparingBarSync || (barSyncStatus as string) === 'preparing'
-                ? t('dj.bar_sync_preparing', 'PREPARANDO...')
+                ? t('dj.bar_sync_preparing')
                 : isBarSyncArmed
                 ? t('dj.bar_sync_armed_btn_tooltip', {
                     prepared: barSync?.preparedPosition?.toFixed(3) ?? '0.000',
@@ -1030,27 +1057,27 @@ export const Deck: React.FC<DeckProps> = ({
                     beats: barSync?.beatsPerBar ?? 4,
                   })
                 : barSyncStatus === 'completed'
-                ? t('dj.bar_sync_completed_tooltip', 'Preparación de compás finalizada al arrancar la reproducción manual.')
+                ? t('dj.bar_sync_completed_tooltip')
                 : barSyncStatus === 'cancelled'
-                ? t('dj.bar_sync_cancelled_tooltip', 'Preparación cancelada manualmente.')
+                ? t('dj.bar_sync_cancelled_tooltip')
                 : barSyncStatus?.startsWith('rejected_')
-                ? `BAR SYNC RECHAZADO: ${barSync?.reason || 'Condiciones incompatibles'}`
-                : t('dj.bar_sync_tooltip', 'Preparar el Slave en la fase de compás confirmada del Master (BAR SYNC V1)')
+                ? t(barSyncReasonKey)
+                : t('dj.bar_sync_tooltip')
             }
-            aria-label={t('dj.bar_sync', 'BAR SYNC')}
+            aria-label={t('dj.bar_sync')}
             data-testid={`deck-${deckName.toLowerCase()}-barsync`}
           >
             {isPreparingBarSync || (barSyncStatus as string) === 'preparing'
-              ? t('dj.bar_sync_preparing', 'PREPARING...')
+              ? t('dj.bar_sync_preparing')
               : isBarSyncArmed
-              ? t('dj.bar_sync_armed', 'ARMED')
+              ? t('dj.bar_sync_armed')
               : isBarSyncAligned
-              ? t('dj.bar_sync_already_aligned', 'ALIGNED')
+              ? t('dj.bar_sync_already_aligned')
               : barSyncStatus === 'completed'
-              ? t('dj.bar_sync_completed', 'DONE')
+              ? t('dj.bar_sync_completed')
               : barSyncStatus?.startsWith('rejected_')
-              ? t('dj.bar_sync_rejected', 'REJECT')
-              : t('dj.bar_sync', 'BAR SYNC')}
+              ? t('dj.bar_sync_rejected')
+              : t('dj.bar_sync')}
           </button>
           <button 
             type="button"

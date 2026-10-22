@@ -9,6 +9,7 @@ import { AnalysisService, analysisService } from './AnalysisService.ts';
 import { IndexedDBStorage, indexedDBStorage } from '../storage/IndexedDBStorage.ts';
 import { audioEngine } from '../../audio/index.ts';
 import { computeFileHash } from '../../utils/cryptoHash.ts';
+import { normalizeTrackAnalysis } from '../../utils/trackAnalysis.ts';
 
 export type AudioDecoder = (arrayBuffer: ArrayBuffer) => Promise<AudioBuffer>;
 
@@ -103,6 +104,7 @@ export class AnalysisSyncManager {
     } = {}
   ): Promise<TrackAnalysis> {
     const trackId = track.id;
+    track.analysis = normalizeTrackAnalysis(track.analysis);
 
     // Registrar nuevo token activo inmediatamente para indicar isAnalyzing y descartar desfasados
     const currentToken = (this.activeTokens.get(trackId) ?? 0) + 1;

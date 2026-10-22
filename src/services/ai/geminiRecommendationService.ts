@@ -17,6 +17,7 @@ import type {
   AIRecommendationErrorCode,
   HarmonicEvaluation,
   TempoEvaluation,
+  RecommendationEvidenceStatus,
 } from './types.ts';
 
 /**
@@ -87,6 +88,10 @@ export function extractCandidateMetadata(track: Track): TrackCandidateMetadata {
   const rawKey = isAnalyzed ? track.analysis?.key : undefined;
   const rawCamelot = isAnalyzed ? track.analysis?.camelot : undefined;
   const camelot = keyToCamelot(rawCamelot || rawKey || '');
+  const rawEnergy = isAnalyzed ? track.analysis?.energy : undefined;
+  const energy = typeof rawEnergy === 'number' && Number.isFinite(rawEnergy) && rawEnergy >= 0 && rawEnergy <= 10
+    ? rawEnergy
+    : undefined;
 
   return {
     id: track.id,
@@ -95,7 +100,7 @@ export function extractCandidateMetadata(track: Track): TrackCandidateMetadata {
     bpm,
     key: camelot ? rawKey : undefined,
     camelot,
-    energy: isAnalyzed ? track.analysis?.energy : undefined,
+    energy,
     isAnalysisVerified: Boolean(
       isAnalyzed &&
       bpm !== undefined &&
@@ -339,74 +344,48 @@ export function calculateValidatedScore(
   return Math.max(65, Math.min(99, baseCalculated));
 }
 
-/**
- * Sanitiza o reemplaza explicaciones del modelo que contradigan los cálculos técnicos locales:
- * - Detecta y anula afirmaciones de tonalidad relativa/compatible cuando las claves chocan en Camelot.
- * - Detecta y anula afirmaciones de "ajuste manejable" o medio/doble tiempo cuando el tempo está fuera de rango.
- * - Unifica el signo y valor del porcentaje de pitch en la explicación con el cálculo técnico verificado (+1.1% vs −1.08%).
- * - Conserva sugerencias válidas de Gemini cuando no contradicen los datos comprobados.
- */
+function getEvidenceStatus(
+  harmonic: HarmonicEvaluation,
+  tempo: TempoEvaluation
+): RecommendationEvidenceStatus {
+  return harmonic.relation === 'unknown' || tempo.relation === 'unknown' ? 'partial' : 'complete';
+}
+
+function hasInsufficientEvidence(
+  reference: TrackCandidateMetadata,
+  candidate: TrackCandidateMetadata
+): boolean {
+  return evaluateHarmonicCompatibility(reference.camelot || reference.key, candidate.camelot || candidate.key).relation === 'unknown' &&
+    evaluateTempoCompatibility(reference.bpm, candidate.bpm).relation === 'unknown';
+}
+
+/** Replaces unverified free-form provider claims with the locally calculated evidence. */
 export function sanitizeJustification(
-  rawJustification: string,
+  _rawJustification: string,
   harmonic: HarmonicEvaluation,
   tempo: TempoEvaluation
 ): string {
-  const text = (rawJustification || '').trim();
+  // Text from a model is not evidence. Always show the local calculation so any
+  // unparsed phrasing or numerical claim is replaced with verified metrics.
+  return `[Validación técnica SYSTEM DJ] ${harmonic.description} ${tempo.description}`;
+}
 
-  const claimsHarmonicCompatibility =
-    /relativ[ao]|misma tonalidad|compatible arm[oó]nicamente|armon[íi]a perfecta|camelot compatible/i.test(text);
-
-  const claimsTempoCompatibility =
-    /manejable|ajuste peque[ñn]o|tempo compatible|f[aá]cil beatmatch|ajuste f[aá]cil|pitch c[oó]modo/i.test(text);
-
-  const claimsHalfOrDoubleTime =
-    /half[- ]?time|doble[- ]?tiempo|medio[- ]?tiempo|mitad de tempo|doble de tempo/i.test(text);
-
-  const hasHarmonicContradiction =
-    harmonic.relation === 'incompatible' && claimsHarmonicCompatibility;
-
-  const hasTempoContradiction =
-    (tempo.relation === 'out_of_range' && (claimsTempoCompatibility || claimsHalfOrDoubleTime)) ||
-    (claimsHalfOrDoubleTime && tempo.relation !== 'half_time' && tempo.relation !== 'double_time');
-
-  // Si hay contradicciones técnicas con los cálculos locales verificados
-  if (hasHarmonicContradiction || hasTempoContradiction) {
-    return `[Validación técnica SYSTEM DJ] ${harmonic.description} ${tempo.description}`;
+function createTechnicalTransitionSuggestion(
+  harmonic: HarmonicEvaluation,
+  tempo: TempoEvaluation
+): string {
+  if (harmonic.relation === 'unknown' || tempo.relation === 'unknown') {
+    const missing: string[] = [];
+    if (harmonic.relation === 'unknown') missing.push('tonalidad');
+    if (tempo.relation === 'unknown') missing.push('BPM');
+    return `Falta validar ${missing.join(' y ')} en el análisis local antes de elegir una técnica de transición.`;
   }
 
-  // Si no hay texto, usar la evaluación técnica directa
-  if (!text) {
-    return `${harmonic.description} ${tempo.description}`;
+  if (harmonic.relation === 'incompatible' || tempo.relation === 'out_of_range') {
+    return 'Transición compleja según la validación local: considera un drop mix, corte o mezcla rápida con eco.';
   }
 
-  let sanitized = text;
-
-  // Unificación del cálculo y la explicación del pitch:
-  // Si tempo.pitchShiftPercent está disponible, unifica cualquier mención discordante de pitch o signo
-  // para que coincida exactamente con el cálculo técnico verificable (ej. corregir -1.08% / −1.08% a +1.1%).
-  if (tempo.pitchShiftPercent !== undefined && Number.isFinite(tempo.pitchShiftPercent)) {
-    const targetSign = tempo.pitchShiftPercent > 0 ? '+' : '';
-    const targetPitchStr = `${targetSign}${tempo.pitchShiftPercent.toFixed(1)}%`;
-
-    // 1. Reemplazo específico para el caso auditado de signo invertido e imprecisión de denominador (-1.08% / −1.08%)
-    sanitized = sanitized.replace(/[−-]\s*1\.08%/g, targetPitchStr);
-
-    // 2. Unificar patrones explícitos de ajuste de pitch con porcentajes discordantes o signo opuesto
-    // Ejemplo: "pitch de -1.08%", "ajuste de pitch de −1.08%", "Pitch: -1.08%"
-    sanitized = sanitized.replace(
-      /(pitch(?:\s+(?:shift|fader|adjustment|ajuste))?|ajuste(?:\s+de\s+pitch)?)\s*(?:de|en|of|is|:)?\s*([+−-]?\s*\d+(?:\.\d+)?%)/gi,
-      `$1 ${targetPitchStr}`
-    );
-
-    // 3. Unificar porcentajes entre paréntesis que expresen el ajuste de pitch si tienen signo opuesto
-    if (tempo.pitchShiftPercent > 0) {
-      sanitized = sanitized.replace(/\([−-]\s*\d+(?:\.\d+)?%\)/g, `(${targetPitchStr})`);
-    } else if (tempo.pitchShiftPercent < 0) {
-      sanitized = sanitized.replace(/\(\+\s*\d+(?:\.\d+)?%\)/g, `(${targetPitchStr})`);
-    }
-  }
-
-  return sanitized;
+  return 'Alinea tiempos de compás y modula el crossfader suavemente; la recomendación no activa controles automáticamente.';
 }
 
 /**
@@ -432,10 +411,7 @@ export function generateMockRecommendations(
     const score = calculateValidatedScore(harmonicEval, tempoEval);
 
     const justification = `[SIMULACIÓN] ${harmonicEval.description} ${tempoEval.description}`;
-    const transitionSuggestion =
-      tempoEval.relation === 'out_of_range' || harmonicEval.relation === 'incompatible'
-        ? '[SIMULACIÓN] Transición compleja: considera un drop mix, corte en el compás 1 o mezcla rápida con eco debido a las diferencias musicales.'
-        : '[SIMULACIÓN] Realiza transición en el compás 32 intercambiando frecuencias bajas progresivamente.';
+    const transitionSuggestion = `[SIMULACIÓN] ${createTechnicalTransitionSuggestion(harmonicEval, tempoEval)}`;
 
     return {
       trackId: cand.id,
@@ -446,6 +422,7 @@ export function generateMockRecommendations(
       camelot: cand.camelot as MusicalKeyCamelot | undefined,
       energy: cand.energy,
       compatibilityScore: score,
+      evidenceStatus: getEvidenceStatus(harmonicEval, tempoEval),
       justification,
       transitionSuggestion,
       isMock: true,
@@ -479,16 +456,17 @@ export function validateRecommendations(
   isMock: boolean,
   reference?: TrackCandidateMetadata
 ): TrackRecommendation[] {
-  if (!Array.isArray(rawList)) return [];
+  if (!Array.isArray(rawList) || !reference) return [];
 
   const candidateMap = new Map<string, TrackCandidateMetadata>(
     candidates.map((c) => [c.id, c])
   );
 
   const validated: TrackRecommendation[] = [];
+  const includedTrackIds = new Set<string>();
 
   for (const item of rawList) {
-    if (!item || typeof item !== 'object') continue;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
 
     const cand = item as Record<string, unknown>;
     const trackId = typeof cand.trackId === 'string' ? cand.trackId : '';
@@ -501,33 +479,30 @@ export function validateRecommendations(
     const original = candidateMap.get(trackId)!;
     const { artist, title } = resolveTrackArtistAndTitle(original.artist, original.title);
 
-    const harmonicEval = reference
-      ? evaluateHarmonicCompatibility(reference.camelot || reference.key, original.camelot || original.key)
+    const harmonicEval = evaluateHarmonicCompatibility(reference.camelot || reference.key, original.camelot || original.key);
+    const tempoEval = evaluateTempoCompatibility(reference.bpm, original.bpm);
+
+    const rawScore = typeof cand.compatibilityScore === 'number' &&
+      Number.isFinite(cand.compatibilityScore) && cand.compatibilityScore >= 0 && cand.compatibilityScore <= 100
+      ? Math.round(cand.compatibilityScore)
       : undefined;
 
-    const tempoEval = reference
-      ? evaluateTempoCompatibility(reference.bpm, original.bpm)
-      : undefined;
-
-    const rawScore = typeof cand.compatibilityScore === 'number' && Number.isFinite(cand.compatibilityScore)
-      ? Math.max(1, Math.min(100, Math.round(cand.compatibilityScore)))
-      : undefined;
-
-    const finalScore = harmonicEval && tempoEval
-      ? calculateValidatedScore(harmonicEval, tempoEval, rawScore)
-      : rawScore ?? null;
+    const finalScore = calculateValidatedScore(harmonicEval, tempoEval, rawScore);
 
     // Missing both metrics is incomplete evidence, not a score of zero.
     if (harmonicEval?.relation === 'unknown' && tempoEval?.relation === 'unknown') continue;
-    if (finalScore === null) continue;
+    // Local mode omits zero-score candidates; remote mode must apply the same rule.
+    if (finalScore === null || finalScore <= 0) continue;
+    // The endpoint may repeat a valid candidate ID. A track must appear once;
+    // preserve the first valid response entry deterministically.
+    if (includedTrackIds.has(trackId)) continue;
+    includedTrackIds.add(trackId);
 
     const rawJustification = typeof cand.justification === 'string' && cand.justification.trim()
       ? cand.justification.trim()
       : '';
 
-    const finalJustification = harmonicEval && tempoEval
-      ? sanitizeJustification(rawJustification, harmonicEval, tempoEval)
-      : (rawJustification || 'Compatibilidad evaluada según BPM y clave armónica.');
+    const finalJustification = sanitizeJustification(rawJustification, harmonicEval, tempoEval);
 
     validated.push({
       trackId,
@@ -538,10 +513,9 @@ export function validateRecommendations(
       camelot: original.camelot,
       energy: original.energy,
       compatibilityScore: finalScore,
+      evidenceStatus: getEvidenceStatus(harmonicEval, tempoEval),
       justification: finalJustification,
-      transitionSuggestion: typeof cand.transitionSuggestion === 'string' && cand.transitionSuggestion.trim()
-        ? cand.transitionSuggestion.trim()
-        : 'Alinea tiempos de compás y modula el crossfader suavemente.',
+      transitionSuggestion: createTechnicalTransitionSuggestion(harmonicEval, tempoEval),
       isMock,
       isAnalysisVerified: original.isAnalysisVerified ?? (original.bpm !== undefined && original.key !== undefined),
       ...(harmonicEval ? { harmonicEvaluation: harmonicEval } : {}),
@@ -556,6 +530,8 @@ export function validateRecommendations(
 }
 
 export interface RecommendationServiceOptions {
+  /** Remote Gemini mode is opt-in; local deterministic recommendations are the MVP default. */
+  mode?: 'local' | 'remote';
   forceMock?: boolean;
   endpointUrl?: string;
   timeoutMs?: number;
@@ -572,6 +548,7 @@ export async function getTrackRecommendations(
   options: RecommendationServiceOptions = {}
 ): Promise<AIRecommendationResponse> {
   const {
+    mode = 'local',
     forceMock = false,
     endpointUrl = '/api/ai/recommendations',
     timeoutMs = 15000,
@@ -601,13 +578,15 @@ export async function getTrackRecommendations(
   }
 
   const candMetas = validCandidates.map(extractCandidateMetadata);
+  const insufficientCandidateCount = candMetas.filter((candidate) => hasInsufficientEvidence(refMeta, candidate)).length;
 
-  if (forceMock) {
+  if (forceMock || mode === 'local') {
     return {
       success: true,
       recommendations: generateMockRecommendations(refMeta, candMetas),
+      insufficientCandidateCount,
       isMock: true,
-      model: 'local-heuristic-simulator',
+      model: 'local-deterministic-engine',
     };
   }
 
@@ -641,7 +620,7 @@ export async function getTrackRecommendations(
       warning?: string;
     };
 
-    if (!response.ok || !data.success) {
+    if (!response.ok || data.success !== true) {
       const errorMsg = data?.error || `Error del servidor HTTP ${response.status}`;
       const errorCode = data?.errorCode || (
         response.status === 429
@@ -662,12 +641,13 @@ export async function getTrackRecommendations(
       };
     }
 
-    const isMock = Boolean(data.isMock);
+    const isMock = data.isMock === true;
     const validatedRecs = validateRecommendations(data.recommendations, candMetas, isMock, refMeta);
 
     return {
       success: true,
       recommendations: validatedRecs,
+      insufficientCandidateCount,
       isMock,
       model: data.model || (isMock ? 'mock' : 'gemini-2.5-flash'),
       warning: data.warning,

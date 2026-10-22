@@ -223,14 +223,22 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
       assert.ok(enTitle, `Falta library.status_${status}_title en inglés`);
     }
 
-    // Verificar clases de insignia de estado en CSS
-    const cssContent = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Library.css'), 'utf-8');
+    // Las clases compartidas de insignia de estado viven en Badge.css.
+    const cssContent = fs.readFileSync(path.resolve(process.cwd(), 'src/components/ui/Badge.css'), 'utf-8');
+    const deckCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.css'), 'utf-8');
+    const libraryCss = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Library.css'), 'utf-8');
+    const deckSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'), 'utf-8');
     for (const status of statuses) {
       assert.ok(
         cssContent.includes(`.status-badge-${status}`),
-        `Falta clase CSS .status-badge-${status} en Library.css`
+        `Falta clase CSS compartida .status-badge-${status} en Badge.css`
       );
     }
+    assert.ok(deckCss.includes('.dj-deck .status-badge'), 'Deck debe conservar su variante compacta');
+    assert.ok(deckCss.includes('padding: 2px var(--space-2)'), 'Deck debe conservar el padding compacto original');
+    assert.ok(deckSource.includes("import '../ui/Badge.css';"), 'Deck debe cargar los estilos compartidos al entrar por la ruta lazy de Mixer');
+    assert.equal(deckCss.includes('.status-badge-pending'), false, 'Deck no debe duplicar los estados compartidos');
+    assert.equal(libraryCss.includes('.status-badge-pending'), false, 'Library no debe duplicar los estados compartidos');
   });
 
   it('4.4 Inicio de análisis desde la Biblioteca invocando el método real de análisis', async () => {
@@ -444,6 +452,9 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
       'analysis_error',
       'energy_label',
       'delete_success',
+      'import_partial_warning',
+      'delete_error',
+      'load_exception_error',
     ];
 
     for (const key of requiredKeys) {
@@ -454,16 +465,35 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
       assert.notEqual(esJson.library[key].trim(), '');
       assert.notEqual(enJson.library[key].trim(), '');
     }
+
+    for (const key of ['cancel', 'delete']) {
+      assert.ok(esJson.common[key], `Falta translation.json [es] common.${key}`);
+      assert.ok(enJson.common[key], `Falta translation.json [en] common.${key}`);
+      assert.notEqual(esJson.common[key].trim(), '');
+      assert.notEqual(enJson.common[key].trim(), '');
+    }
+
+    const librarySource = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Library.tsx'), 'utf-8');
+    assert.ok(librarySource.includes("t('library.import_partial_warning'"));
+    assert.ok(librarySource.includes("t('library.delete_error'"));
+    assert.ok(librarySource.includes("t('library.load_exception_error'"));
+    assert.ok(esJson.library.import_partial_warning.includes('{{warnings}}'));
+    assert.ok(enJson.library.import_partial_warning.includes('{{warnings}}'));
+    assert.ok(esJson.library.delete_error.includes('{{error}}'));
+    assert.ok(enJson.library.delete_error.includes('{{error}}'));
+    assert.ok(esJson.library.load_exception_error.includes('{{deck}}'));
+    assert.ok(enJson.library.load_exception_error.includes('{{deck}}'));
   });
 
   it('4.11 Tema claro y oscuro: Estilos usan exclusivamente tokens semánticos del sistema de diseño', () => {
-    const libraryCss = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Library.css'), 'utf-8');
+    const badgeCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/ui/Badge.css'), 'utf-8');
+    const deckCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.css'), 'utf-8');
 
-    // Las nuevas clases deben usar tokens CSS y color-mix sin colores hex arbitrarios
-    const analysisSectionMatch = libraryCss.indexOf('/* Musical Analysis Status & Badges */');
-    assert.ok(analysisSectionMatch !== -1, 'Debe existir la sección de estilos de análisis en Library.css');
+    // Las clases compartidas deben usar tokens CSS y color-mix, manteniendo la densidad del Deck.
+    const analysisSectionMatch = badgeCss.indexOf('/* Shared analysis status badges used by Library and Deck. */');
+    assert.ok(analysisSectionMatch !== -1, 'Debe existir la sección compartida de estados de análisis en Badge.css');
 
-    const analysisStyles = libraryCss.slice(analysisSectionMatch);
+    const analysisStyles = badgeCss.slice(analysisSectionMatch);
 
     // No debe contener valores hex duros (#fff, #000, etc.)
     const hexPattern = /#[0-9a-fA-F]{3,6}/;
@@ -479,7 +509,7 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
     assert.ok(analysisStyles.includes('var(--color-error)'));
     assert.ok(analysisStyles.includes('var(--color-warning)'));
     assert.ok(analysisStyles.includes('var(--text-secondary)'));
-    assert.ok(analysisStyles.includes('var(--text-primary)'));
+    assert.ok(deckCss.includes('padding: 2px var(--space-2)'));
   });
 
   it('4.12 Ausencia de regresiones en las funcionalidades existentes de la Biblioteca (carga en Decks)', async () => {

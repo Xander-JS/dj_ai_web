@@ -588,6 +588,37 @@ describe('Fase 22 — Etapa 3: Persistencia en IndexedDB y Sincronización useDJ
     assert.equal(blob.size, 6000);
   });
 
+  it('3.11a Persiste el beatUnit confirmado y conserva análisis legacy sin unidad como desconocidos', async () => {
+    const file = createTestAudioFile('beat_unit_persistence.mp3', 6000);
+    const track = createTrackFromFile(file, 120);
+    assert.equal((await storage.saveTrack(track, file)).persisted, true);
+
+    const confirmedAnalysis: TrackAnalysis = {
+      status: 'analyzed',
+      bpm: 120,
+      beatUnit: { value: 4, status: 'confirmed', source: 'manual' },
+    };
+    assert.equal(await storage.updateTrackAnalysis(track.id, confirmedAnalysis), true);
+    assert.deepEqual((await storage.getTrackAnalysis(track.id))?.beatUnit, confirmedAnalysis.beatUnit);
+
+    const persistedTrack = await storage.getTrack(track.id);
+    assert.ok(persistedTrack);
+    assert.equal(await djStore.loadTrackToDeck('A', persistedTrack), true);
+    assert.deepEqual(djStore.getSnapshot().deckA.track?.analysis.beatUnit, confirmedAnalysis.beatUnit);
+
+    const legacyAnalysis = { status: 'analyzed', bpm: 120 } as TrackAnalysis;
+    assert.equal(await storage.updateTrackAnalysis(track.id, legacyAnalysis), true);
+    assert.equal((await storage.getTrackAnalysis(track.id))?.beatUnit, undefined);
+
+    const malformedAnalysis = {
+      status: 'analyzed',
+      bpm: 120,
+      beatUnit: { value: 3, status: 'confirmed', source: 'manual' },
+    } as unknown as TrackAnalysis;
+    assert.equal(await storage.updateTrackAnalysis(track.id, malformedAnalysis), true);
+    assert.equal((await storage.getTrackAnalysis(track.id))?.beatUnit, undefined);
+  });
+
   it('3.12 Reemplazar el archivo físico de una pista invalida sus metadatos de análisis anteriores (mismo trackId)', async () => {
     const fileA = createTestAudioFile('original_song.mp3', 4000);
     const track = createTrackFromFile(fileA, 120);

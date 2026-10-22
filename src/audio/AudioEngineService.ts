@@ -407,6 +407,7 @@ export class AudioEngineService implements IAudioEngineService {
     const graph = this.getDeckGraph(deckId);
 
     const clampedBend = Math.max(-0.08, Math.min(0.08, bendAmount));
+    const previousBend = transport.bendAmount;
     const previousEffective = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
 
     if (transport.isPlaying && this.audioContext) {
@@ -436,7 +437,12 @@ export class AudioEngineService implements IAudioEngineService {
           // Ignorar si el nodo ya no está activo
         }
       }
-      param.setValueAtTime(newEffective, now);
+      if (clampedBend === 0 && previousBend !== 0 && transport.isPlaying && typeof param.linearRampToValueAtTime === 'function') {
+        param.setValueAtTime(previousEffective, now);
+        param.linearRampToValueAtTime(newEffective, now + 0.04);
+      } else {
+        param.setValueAtTime(newEffective, now);
+      }
     }
   }
 

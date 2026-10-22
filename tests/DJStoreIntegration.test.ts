@@ -270,6 +270,58 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
     }
   });
 
+  test('decode/read failure while replacing a track preserves the prior deck and the other deck', async () => {
+    const fileA = new File([new Uint8Array(100)], 'priorA.wav', { type: 'audio/wav' });
+    const priorA = createTrackFromFile(fileA, 195);
+    const fileB = new File([new Uint8Array(120)], 'priorB.mp3', { type: 'audio/mpeg' });
+    const priorB = createTrackFromFile(fileB, 195);
+    await indexedDBStorage.saveTrack(priorA, fileA);
+    await indexedDBStorage.saveTrack(priorB, fileB);
+    assert.equal(await djStore.loadTrackToDeckA(priorA), true);
+    assert.equal(await djStore.loadTrackToDeckB(priorB), true);
+    await djStore.playDeckA();
+    await djStore.playDeckB();
+
+    const graphs = (audioEngine as unknown as {
+      deckGraphs: Map<string, { sourceNode: MockAudioBufferSourceNode | null }>;
+    }).deckGraphs;
+    const sourceA = graphs.get('A')?.sourceNode;
+    const sourceB = graphs.get('B')?.sourceNode;
+    assert.ok(sourceA);
+    assert.ok(sourceB);
+
+    const corruptFile = new File([new Uint8Array([1, 2, 3])], 'corrupt-replacement.mp3', { type: 'audio/mpeg' });
+    const corruptTrack = createTrackFromFile(corruptFile, 0);
+    await indexedDBStorage.saveTrack(corruptTrack, corruptFile);
+    const originalDecode = MockAudioContext.prototype.decodeAudioData;
+    MockAudioContext.prototype.decodeAudioData = async () => { throw new Error('decode failed'); };
+    try {
+      assert.equal(await djStore.loadTrackToDeckA(corruptTrack), false);
+    } finally {
+      MockAudioContext.prototype.decodeAudioData = originalDecode;
+    }
+
+    const readFailureFile = new File([new Uint8Array([4, 5, 6])], 'read-error.wav', { type: 'audio/wav' });
+    Object.defineProperty(readFailureFile, 'arrayBuffer', {
+      value: async () => { throw new Error('read failed'); },
+    });
+    const readFailureTrack = createTrackFromFile(readFailureFile, 0);
+    assert.equal(await djStore.loadTrackToDeckA(readFailureTrack), false);
+
+    const snapshot = djStore.getSnapshot();
+    assert.equal(snapshot.deckA.track?.id, priorA.id);
+    assert.equal(snapshot.deckA.duration, 195);
+    assert.equal(snapshot.deckA.playbackState, 'playing');
+    assert.equal(snapshot.deckA.errorMessage, null);
+    assert.equal(snapshot.deckB.track?.id, priorB.id);
+    assert.equal(snapshot.deckB.duration, 195);
+    assert.equal(snapshot.deckB.playbackState, 'playing');
+    assert.equal(graphs.get('A')?.sourceNode, sourceA);
+    assert.equal(graphs.get('B')?.sourceNode, sourceB);
+    assert.equal(sourceA.isStopped, false);
+    assert.equal(sourceB.isStopped, false);
+  });
+
   test('Estado inicial incluye Deck B vacío y detenido', () => {
     const snap = djStore.getSnapshot();
     assert.ok(snap.deckB);

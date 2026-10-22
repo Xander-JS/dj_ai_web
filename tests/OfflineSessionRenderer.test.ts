@@ -179,6 +179,32 @@ describe('OfflineSessionRenderer — deterministic planning and graph scheduling
     await assert.rejects(renderSessionOffline(session([event(0, 0, { type: 'session.initial-state', state: initialState })], -1), resolver), { code: 'INVALID_DURATION' });
   });
 
+  test('rejects render duration and stereo output allocations above configured resource limits', async () => {
+    const noTracks: SessionInitialState = {
+      decks: {
+        A: { track: null, playbackState: 'stopped', trackPositionSeconds: 0, effectivePlaybackRate: 1 },
+        B: { track: null, playbackState: 'stopped', trackPositionSeconds: 0, effectivePlaybackRate: 1 },
+      },
+      mixer: initialState.mixer,
+    };
+    const s = session([event(0, 0, { type: 'session.initial-state', state: noTracks })], 2000);
+    await assert.rejects(renderSessionOffline(s, resolver, { maxDurationSeconds: 1 }), { code: 'RESOURCE_LIMIT' });
+    await assert.rejects(renderSessionOffline(s, resolver, { maxOutputBytes: 1024 }), { code: 'RESOURCE_LIMIT' });
+  });
+
+  test('reports OfflineAudioContext unavailable in Node when no real implementation is installed', async () => {
+    if (typeof globalThis.OfflineAudioContext !== 'undefined') return;
+    const noTracks: SessionInitialState = {
+      decks: {
+        A: { track: null, playbackState: 'stopped', trackPositionSeconds: 0, effectivePlaybackRate: 1 },
+        B: { track: null, playbackState: 'stopped', trackPositionSeconds: 0, effectivePlaybackRate: 1 },
+      },
+      mixer: initialState.mixer,
+    };
+    const s = session([event(0, 0, { type: 'session.initial-state', state: noTracks })]);
+    await assert.rejects(renderSessionOffline(s, resolver), { code: 'OFFLINE_AUDIO_UNAVAILABLE' });
+  });
+
   test('keeps legacy version-1 sessions renderable', async () => {
     const fake = offlineFactory();
     const legacy = session([

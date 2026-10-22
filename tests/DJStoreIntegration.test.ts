@@ -241,10 +241,9 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
 
     assert.equal(await djStore.loadTrackToDeckA(ghostTrack), false);
     const snap = djStore.getSnapshot();
-    assert.equal(snap.deckA.playbackState, 'error');
-    assert.equal(snap.deckA.errorCode, 'file_missing');
-    assert.ok(snap.deckA.errorMessage);
-    assert.match(snap.deckA.errorMessage, /no se encuentra/i);
+    assert.equal(snap.deckA.track, null);
+    assert.equal(snap.deckA.playbackState, 'stopped');
+    assert.equal(snap.deckA.duration, 0);
   });
 
   test('Manejo de errores cuando decodeAudioData falla (archivo dañado o corrupto)', async () => {
@@ -262,10 +261,8 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
       assert.equal(loadResult, false);
 
       const snap = djStore.getSnapshot();
-      assert.equal(snap.deckA.playbackState, 'error');
-      assert.equal(snap.deckA.errorCode, 'decode_failed');
-      assert.ok(snap.deckA.errorMessage);
-      assert.match(snap.deckA.errorMessage, /dañado/i);
+      assert.equal(snap.deckA.track, null);
+      assert.equal(snap.deckA.playbackState, 'stopped');
       assert.equal(snap.deckA.duration, 0);
       assert.equal(audioEngine.getDeckDuration('A'), 0);
     } finally {
@@ -587,10 +584,9 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
     assert.equal(loadResult, false);
 
     const snap = djStore.getSnapshot();
-    assert.equal(snap.deckB.playbackState, 'error');
-    assert.equal(snap.deckB.errorCode, 'file_missing');
-    assert.ok(snap.deckB.errorMessage);
-    assert.match(snap.deckB.errorMessage, /no se encuentra/i);
+    assert.equal(snap.deckB.track, null);
+    assert.equal(snap.deckB.playbackState, 'stopped');
+    assert.equal(snap.deckB.duration, 0);
   });
 });
 

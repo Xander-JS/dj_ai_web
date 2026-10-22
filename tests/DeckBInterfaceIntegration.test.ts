@@ -188,23 +188,141 @@ describe('Fase 20 Etapa 4 — Integración Real de la Interfaz de Deck B', () =>
     assert.equal(snap.deckB.duration, 240.0);
   });
 
-  test('Cargar en Deck A no altera la pista de Deck B', async () => {
+  test('Cargas recomendadas exitosas o fallidas en Deck B preservan pista, transporte y pitch de Deck A', async () => {
+    const fileA = new File([new Uint8Array(120)], 'playing_in_a.mp3', { type: 'audio/mpeg' });
+    const trackA = createTrackFromFile(fileA, 120.0);
+    await indexedDBStorage.saveTrack(trackA, fileA);
+    await djStore.loadTrackToDeckA(trackA);
+    djStore.setPitchDeckA(75);
+    djStore.seekDeckA(24.0);
+    await djStore.playDeckA();
+
+    const stateBeforeRecommendationLoad = djStore.getSnapshot().deckA;
+    assert.equal(stateBeforeRecommendationLoad.playbackState, 'playing');
+    assert.equal(stateBeforeRecommendationLoad.playbackRate, 1.04);
+    assert.equal(stateBeforeRecommendationLoad.currentTime, 24.0);
+
+    const priorFileB = new File([new Uint8Array(180)], 'prior_track_b.wav', { type: 'audio/wav' });
+    const priorTrackB = createTrackFromFile(priorFileB, 180.0);
+    await indexedDBStorage.saveTrack(priorTrackB, priorFileB);
+    await djStore.loadTrackToDeckB(priorTrackB);
+    await djStore.playDeckB();
+    djStore.setDeck('B', { phaseAlignment: { status: 'active', progressPercent: 35 } });
+
+    const recommendedFile = new File([new Uint8Array(240)], 'recommended_in_b.wav', { type: 'audio/wav' });
+    const recommendedTrack = createTrackFromFile(recommendedFile, 240.0);
+    await indexedDBStorage.saveTrack(recommendedTrack, recommendedFile);
+    assert.equal(await djStore.loadTrackToDeckB(recommendedTrack), true);
+
+    let stateAfterLoad = djStore.getSnapshot();
+    assert.equal(stateAfterLoad.deckB.track?.id, recommendedTrack.id);
+    assert.equal(stateAfterLoad.deckB.phaseAlignment.status, 'idle');
+    assert.equal(stateAfterLoad.deckA.track?.id, trackA.id);
+    assert.equal(stateAfterLoad.deckA.playbackState, 'playing');
+    assert.equal(stateAfterLoad.deckA.playbackRate, 1.04);
+    assert.equal(stateAfterLoad.deckA.currentTime, 24.0);
+
+    djStore.setPitchDeckB(65);
+    djStore.seekDeckB(31.0);
+    await djStore.playDeckB();
+    djStore.setDeck('B', { phaseAlignment: { status: 'active', progressPercent: 42 } });
+    const deckBBeforeFailedLoad = djStore.getSnapshot().deckB;
+
+    const missingTrackB = {
+      ...recommendedTrack,
+      id: 'missing_recommendation_blob',
+      source: { type: 'indexeddb' as const, indexedDbKey: 'missing_recommendation_blob' },
+    };
+    assert.equal(await djStore.loadTrackToDeckB(missingTrackB), false);
+
+    stateAfterLoad = djStore.getSnapshot();
+    assert.deepEqual(stateAfterLoad.deckB, deckBBeforeFailedLoad);
+    assert.equal(stateAfterLoad.deckA.track?.id, trackA.id);
+    assert.equal(stateAfterLoad.deckA.playbackState, 'playing');
+    assert.equal(stateAfterLoad.deckA.playbackRate, 1.04);
+    assert.equal(stateAfterLoad.deckA.currentTime, 24.0);
+
+    // Restore the test fixture's neutral pitch value.
+    djStore.setPitchDeckA(50);
+    djStore.setPitchDeckB(50);
+  });
+
+  test('Una carga explícita en Deck A reemplaza A aunque reproduzca y conserva Deck B', async () => {
     const fileB = new File([new Uint8Array(300)], 'keep_in_b.wav', { type: 'audio/wav' });
     const trackB = createTrackFromFile(fileB, 300.0);
     await indexedDBStorage.saveTrack(trackB, fileB);
     await djStore.loadTrackToDeckB(trackB);
+    djStore.setPitchDeckB(65);
+    djStore.seekDeckB(35.0);
+    await djStore.playDeckB();
+    const deckBBefore = djStore.getSnapshot().deckB;
 
-    // Cargar en Deck A
+    const oldFileA = new File([new Uint8Array(150)], 'old_a.mp3', { type: 'audio/mpeg' });
+    const oldTrackA = createTrackFromFile(oldFileA, 150.0);
+    await indexedDBStorage.saveTrack(oldTrackA, oldFileA);
+    await djStore.loadTrackToDeckA(oldTrackA);
+    await djStore.playDeckA();
+    djStore.setPitchDeckA(75);
+    djStore.pitchBendDeckA('up');
+    djStore.seekDeckA(23.0);
+
     const fileA = new File([new Uint8Array(150)], 'brand_new_a.mp3', { type: 'audio/mpeg' });
     const trackA = createTrackFromFile(fileA, 150.0);
     await indexedDBStorage.saveTrack(trackA, fileA);
-    await djStore.loadTrackToDeckA(trackA);
+    assert.equal(await djStore.loadTrackToDeckA(trackA), true);
 
     const snap = djStore.getSnapshot();
-    assert.equal(snap.deckB.track?.title, 'keep_in_b');
-    assert.equal(snap.deckB.duration, 300.0);
+    assert.equal(snap.deckB.track?.id, deckBBefore.track?.id);
+    assert.equal(snap.deckB.duration, deckBBefore.duration);
+    assert.equal(snap.deckB.playbackState, 'playing');
+    assert.equal(snap.deckB.currentTime, 35.0);
+    assert.equal(snap.deckB.playbackRate, 1.024);
     assert.equal(snap.deckA.track?.title, 'brand_new_a');
     assert.equal(snap.deckA.duration, 150.0);
+    assert.equal(snap.deckA.playbackState, 'stopped');
+    assert.equal(snap.deckA.currentTime, 0);
+    assert.equal(snap.deckA.playbackRate, 1.04);
+    assert.equal(snap.deckA.pitchBend, 0);
+    djStore.setPitchDeckA(50);
+    djStore.setPitchDeckB(50);
+  });
+
+  test('Una respuesta de decodificación antigua no reemplaza la carga más reciente en el mismo deck', async () => {
+    const olderFile = new File([new Uint8Array([1, 1, 1])], 'older.mp3', { type: 'audio/mpeg' });
+    const olderTrack = createTrackFromFile(olderFile, 120.0);
+    await indexedDBStorage.saveTrack(olderTrack, olderFile);
+    const newerFile = new File([new Uint8Array([2, 2, 2, 2, 2])], 'newer.mp3', { type: 'audio/mpeg' });
+    const newerTrack = createTrackFromFile(newerFile, 130.0);
+    await indexedDBStorage.saveTrack(newerTrack, newerFile);
+
+    const originalDecode = audioEngine.decodeAudioData.bind(audioEngine);
+    let markOlderDecodeStarted: () => void = () => {};
+    let releaseOlderDecode: () => void = () => {};
+    const olderDecodeStarted = new Promise<void>((resolve) => { markOlderDecodeStarted = resolve; });
+    const olderDecodeGate = new Promise<void>((resolve) => { releaseOlderDecode = resolve; });
+    audioEngine.decodeAudioData = async (buffer: ArrayBuffer) => {
+      if (new Uint8Array(buffer)[0] === 1) {
+        markOlderDecodeStarted();
+        await olderDecodeGate;
+      }
+      return originalDecode(buffer);
+    };
+
+    try {
+      const olderLoad = djStore.loadTrackToDeckA(olderTrack);
+      await olderDecodeStarted;
+      assert.equal(await djStore.loadTrackToDeckA(newerTrack), true);
+      releaseOlderDecode();
+      assert.equal(await olderLoad, false);
+
+      const state = djStore.getSnapshot().deckA;
+      assert.equal(state.track?.id, newerTrack.id);
+      assert.equal(state.duration, 5);
+      assert.equal(audioEngine.getDeckDuration('A'), 5);
+    } finally {
+      releaseOlderDecode();
+      audioEngine.decodeAudioData = originalDecode;
+    }
   });
 
   test('Acciones de transporte en Deck B (Play, Pause, Stop, Seek, Pitch) funcionan con aislamiento', async () => {

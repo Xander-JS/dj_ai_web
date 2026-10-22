@@ -118,6 +118,23 @@ function createAnalyzedTrack(name: string, bpm: number, duration = 180.0): { tra
   return { track, file };
 }
 
+function assertSyncRoleInvariant(snapshot: ReturnType<typeof djStore.getSnapshot>): void {
+  if (snapshot.syncMasterDeck === null) {
+    assert.equal(snapshot.deckA.isMaster, false);
+    assert.equal(snapshot.deckB.isMaster, false);
+    assert.equal(snapshot.deckA.isSyncActive, false);
+    assert.equal(snapshot.deckB.isSyncActive, false);
+    return;
+  }
+
+  const master = snapshot.syncMasterDeck === 'A' ? snapshot.deckA : snapshot.deckB;
+  const slave = snapshot.syncMasterDeck === 'A' ? snapshot.deckB : snapshot.deckA;
+  assert.equal(master.isMaster, true);
+  assert.equal(master.isSyncActive, false);
+  assert.equal(slave.isMaster, false);
+  assert.equal(slave.isSyncActive, true);
+}
+
 describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esclavo', () => {
   let originalAudioContext: unknown;
   let originalWindow: unknown;
@@ -172,8 +189,13 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(djStore.getSnapshot().deckB.playbackState, 'stopped');
 
       // Activar SYNC en Deck B
+      const observedSnapshots: ReturnType<typeof djStore.getSnapshot>[] = [];
+      const unsubscribe = djStore.subscribe(() => observedSnapshots.push(djStore.getSnapshot()));
       const result = djStore.syncDeck('B');
+      unsubscribe();
       assert.equal(result, true, 'SYNC debe activarse con éxito');
+      assert.equal(observedSnapshots.length, 1, 'La activación de SYNC debe publicarse en una sola actualización');
+      observedSnapshots.forEach(assertSyncRoleInvariant);
 
       const state = djStore.getSnapshot();
       assert.equal(state.syncMasterDeck, 'A', 'Deck A debe ser el Master');
@@ -608,8 +630,13 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       const syncedRate = djStore.getSnapshot().deckB.playbackRate;
 
       // Desactivar SYNC (segunda pulsación)
+      const observedSnapshots: ReturnType<typeof djStore.getSnapshot>[] = [];
+      const unsubscribe = djStore.subscribe(() => observedSnapshots.push(djStore.getSnapshot()));
       const res = djStore.syncDeck('B');
+      unsubscribe();
       assert.equal(res, false, 'Debe devolver false al desactivar');
+      assert.equal(observedSnapshots.length, 1, 'La desactivación de SYNC debe publicarse en una sola actualización');
+      observedSnapshots.forEach(assertSyncRoleInvariant);
 
       const afterState = djStore.getSnapshot().deckB;
       assert.equal(afterState.isSyncActive, false);
@@ -631,7 +658,11 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(djStore.getSnapshot().deckB.isSyncActive, true);
 
       // Usuario mueve manualmente el fader de B a posición 80 (rate = 1.048)
+      const observedSnapshots: ReturnType<typeof djStore.getSnapshot>[] = [];
+      const unsubscribe = djStore.subscribe(() => observedSnapshots.push(djStore.getSnapshot()));
       djStore.setPitchDeckB(80);
+      unsubscribe();
+      observedSnapshots.forEach(assertSyncRoleInvariant);
 
       const stateB = djStore.getSnapshot().deckB;
       assert.equal(stateB.isSyncActive, false, 'SYNC debe desactivarse al tocar el fader');
@@ -731,7 +762,11 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
 
       // Master se acelera a +4% (pitch 75, rate 1.04 -> 104 BPM)
       // Nuevo requiredRate para B = 104 / 93 = 1.1183 (> 1.08)
+      const observedSnapshots: ReturnType<typeof djStore.getSnapshot>[] = [];
+      const unsubscribe = djStore.subscribe(() => observedSnapshots.push(djStore.getSnapshot()));
       djStore.setPitchDeckA(75);
+      unsubscribe();
+      observedSnapshots.forEach(assertSyncRoleInvariant);
 
       const stateB = djStore.getSnapshot().deckB;
       assert.equal(stateB.isSyncActive, false, 'Esclavo debe desacoplarse');
@@ -752,22 +787,30 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       await indexedDBStorage.saveTrack(trackB, fileB);
       await djStore.loadTrackToDeckA(trackA);
       await djStore.loadTrackToDeckB(trackB);
+      await djStore.playDeckA();
+      await djStore.playDeckB();
 
       djStore.syncDeck('B');
       assert.equal(djStore.getSnapshot().syncMasterDeck, 'A');
       assert.equal(djStore.getSnapshot().deckB.isSyncActive, true);
 
       // Descargar el Master A
+      const observedSnapshots: ReturnType<typeof djStore.getSnapshot>[] = [];
+      const unsubscribe = djStore.subscribe(() => observedSnapshots.push(djStore.getSnapshot()));
       djStore.unloadDeckA();
+      unsubscribe();
+      observedSnapshots.forEach(assertSyncRoleInvariant);
 
       const state = djStore.getSnapshot();
       assert.equal(state.syncMasterDeck, null, 'No debe quedar ningún master asignado');
       assert.equal(state.deckA.isMaster, false);
+      assert.equal(state.deckA.playbackState, 'stopped');
+      assert.equal(state.deckB.playbackState, 'playing', 'Descargar el Master no debe detener la reproducción del Slave');
       assert.equal(state.deckB.isSyncActive, false, 'El Esclavo se desacopla');
       assert.equal(state.deckB.playbackRate, 1.0, 'Mantiene su velocidad sin saltos');
     });
 
-    it('7.1a Si falla el blob del Master, elimina SYNC y ambos roles sin cambiar el tempo del Slave', async () => {
+    it('7.1a Si falla el blob de una nueva pista, conserva el Master y el SYNC actuales', async () => {
       const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
       const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
       await indexedDBStorage.saveTrack(trackA, fileA);
@@ -782,16 +825,16 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(await djStore.loadTrackToDeckA(missingTrack), false);
 
       const state = djStore.getSnapshot();
-      assert.equal(state.deckA.errorCode, 'file_missing');
-      assert.equal(state.syncMasterDeck, null);
-      assert.equal(state.deckA.isMaster, false);
+      assert.equal(state.deckA.track?.id, trackA.id);
+      assert.equal(state.syncMasterDeck, 'A');
+      assert.equal(state.deckA.isMaster, true);
       assert.equal(state.deckA.isSyncActive, false);
       assert.equal(state.deckB.isMaster, false);
-      assert.equal(state.deckB.isSyncActive, false);
+      assert.equal(state.deckB.isSyncActive, true);
       assert.equal(state.deckB.playbackRate, slaveRate);
     });
 
-    it('7.1b Si falla la decodificación del Master, elimina SYNC y ambos roles sin cambiar el tempo del Slave', async () => {
+    it('7.1b Si falla la decodificación de una nueva pista, conserva el Master y el SYNC actuales', async () => {
       const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
       const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
       await indexedDBStorage.saveTrack(trackA, fileA);
@@ -807,13 +850,12 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(await djStore.loadTrackToDeckA(corruptTrack), false);
 
       const state = djStore.getSnapshot();
-      assert.equal(state.deckA.errorCode, 'decode_failed');
-      assert.match(state.deckA.errorMessage ?? '', /Corrupt audio data/);
-      assert.equal(state.syncMasterDeck, null);
-      assert.equal(state.deckA.isMaster, false);
+      assert.equal(state.deckA.track?.id, trackA.id);
+      assert.equal(state.syncMasterDeck, 'A');
+      assert.equal(state.deckA.isMaster, true);
       assert.equal(state.deckA.isSyncActive, false);
       assert.equal(state.deckB.isMaster, false);
-      assert.equal(state.deckB.isSyncActive, false);
+      assert.equal(state.deckB.isSyncActive, true);
       assert.equal(state.deckB.playbackRate, slaveRate);
     });
 
@@ -852,10 +894,12 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(djStore.getSnapshot().deckA.playbackState, 'paused');
       assert.equal(djStore.getSnapshot().deckB.playbackState, 'playing', 'Esclavo B continúa reproduciendo');
       assert.equal(djStore.getSnapshot().deckB.playbackRate, 1.0, 'Velocidad de B intacta');
+      assertSyncRoleInvariant(djStore.getSnapshot());
 
       // Detener el Master A
       djStore.stopDeckA();
       assert.equal(djStore.getSnapshot().deckA.playbackState, 'stopped');
+      assertSyncRoleInvariant(djStore.getSnapshot());
       assert.equal(djStore.getSnapshot().deckB.playbackState, 'playing', 'Esclavo B sigue reproduciendo ininterrumpidamente');
     });
 

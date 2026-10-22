@@ -261,6 +261,26 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     );
   });
 
+  it('9.1 Rechaza BPM efectivo explícito inválido en cualquiera de los decks sin proponer una posición', () => {
+    const invalidValues = [0, -120, NaN, Infinity];
+
+    for (const effectiveBpm of invalidValues) {
+      const masterResult = calculateBarSyncPlan({
+        master: createValidMasterInput({ effectiveBpm }),
+        slave: createValidSlaveInput(),
+      });
+      assert.equal(masterResult.status, 'rejected_limits');
+      assert.equal(masterResult.targetPosition, null);
+
+      const slaveResult = calculateBarSyncPlan({
+        master: createValidMasterInput(),
+        slave: createValidSlaveInput({ effectiveBpm }),
+      });
+      assert.equal(slaveResult.status, 'rejected_limits');
+      assert.equal(slaveResult.targetPosition, null);
+    }
+  });
+
   // 10. Posiciones y duraciones inválidas
   it('10. Rechaza con rejected_limits si las posiciones o duraciones son no finitas o exceden límites', () => {
     // A. Duración negativa

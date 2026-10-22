@@ -239,7 +239,7 @@ describe('useDJStore — Coordinación y Transporte Real para Deck A', () => {
       dateAdded: Date.now(),
     };
 
-    await djStore.loadTrackToDeckA(ghostTrack);
+    assert.equal(await djStore.loadTrackToDeckA(ghostTrack), false);
     const snap = djStore.getSnapshot();
     assert.equal(snap.deckA.playbackState, 'error');
     assert.equal(snap.deckA.errorCode, 'file_missing');

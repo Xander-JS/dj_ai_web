@@ -518,6 +518,100 @@ describe('Fase 23.2 — Hot Cues y CUE Principal con CUP', () => {
     djStore.stopTimeLoop();
   });
 
+  it('9.1a Soltar CUP mientras resume sigue pendiente cancela el inicio tardío', async () => {
+    const file = createTestAudioFile('track_cup_delayed_resume.mp3');
+    const track = createTrackFromFile(file, 180.0);
+    await indexedDBStorage.saveTrack(track, file);
+    await djStore.loadTrackToDeckA(track);
+    await djStore.setMainCue('A', 22.0);
+    djStore.seekDeckA(22.0);
+
+    const originalResume = audioEngine.resume;
+    let resolveResume!: () => void;
+    audioEngine.resume = () => new Promise<void>((resolve) => { resolveResume = resolve; });
+    try {
+      const pendingDown = djStore.handleCueDown('A');
+      assert.equal(djStore.getSnapshot().deckA.isCupPlaying, true);
+      djStore.handleCueUp('A');
+      resolveResume();
+      await pendingDown;
+      const state = djStore.getSnapshot().deckA;
+      assert.equal(state.isCupPlaying, false);
+      assert.equal(state.playbackState, 'paused');
+      assert.equal(state.currentTime, 22.0);
+    } finally {
+      audioEngine.resume = originalResume;
+    }
+  });
+
+  it('4.2 Un fallo de persistencia no presenta un Hot Cue como guardado', async () => {
+    const file = createTestAudioFile('track_cue_persist_failure.mp3');
+    const track = createTrackFromFile(file, 180.0);
+    await indexedDBStorage.saveTrack(track, file);
+    await djStore.loadTrackToDeckA(track);
+    const originalUpdate = indexedDBStorage.updateTrackCues;
+    indexedDBStorage.updateTrackCues = async () => false;
+    try {
+      assert.equal(await djStore.setHotCue('A', 1, 12.0), false);
+      assert.equal(djStore.getSnapshot().deckA.hotCues.length, 0);
+    } finally {
+      indexedDBStorage.updateTrackCues = originalUpdate;
+    }
+  });
+
+  it('4.2a Una transacción abortada no deja los CUEs optimistas en la caché de almacenamiento', async () => {
+    const file = createTestAudioFile('track_cue_cache_abort.mp3');
+    const track = createTrackFromFile(file, 180.0);
+    await indexedDBStorage.saveTrack(track, file);
+    assert.deepEqual((await indexedDBStorage.getTrackCues(track.id))?.hotCues, []);
+
+    const request = {} as IDBRequest;
+    const fakeStore = {
+      get: () => request,
+      put: () => undefined,
+    };
+    const fakeTransaction = {
+      objectStore: () => fakeStore,
+      oncomplete: null as IDBTransaction['oncomplete'],
+      onerror: null as IDBTransaction['onerror'],
+      onabort: null as IDBTransaction['onabort'],
+    };
+    const originalInit = indexedDBStorage.init;
+    indexedDBStorage.init = async () => ({
+      transaction: () => fakeTransaction,
+    } as unknown as IDBDatabase);
+    try {
+      const pendingUpdate = indexedDBStorage.updateTrackCues(track.id, {
+        hotCues: [{ id: 1, position: 12, trackId: track.id, color: '#ff3b30', createdAt: 1 }],
+      });
+      await Promise.resolve();
+      request.onsuccess?.({ target: { result: { id: track.id, hotCues: [] } } } as unknown as Event);
+      fakeTransaction.onerror?.(new Event('error'));
+      assert.equal(await pendingUpdate, false);
+      assert.deepEqual((await indexedDBStorage.getTrackCues(track.id))?.hotCues, []);
+    } finally {
+      indexedDBStorage.init = originalInit;
+    }
+  });
+
+  it('4.3 Al restaurar, descarta CUEs persistidos fuera de duración o con slot/pista inválidos', async () => {
+    const file = createTestAudioFile('track_invalid_persisted_cues.mp3');
+    const track = createTrackFromFile(file, 180.0);
+    await indexedDBStorage.saveTrack(track, file);
+    await indexedDBStorage.updateTrackCues(track.id, {
+      mainCue: 181,
+      hotCues: [
+        { id: 1, position: 181, trackId: track.id, color: '#fff', createdAt: 1 },
+        { id: 9, position: 10, trackId: track.id, color: '#fff', createdAt: 1 },
+        { id: 2, position: 10, trackId: 'another-track', color: '#fff', createdAt: 1 },
+      ],
+    });
+    assert.equal(await djStore.loadTrackToDeckA(track), true);
+    const state = djStore.getSnapshot().deckA;
+    assert.equal(state.mainCue, null);
+    assert.deepEqual(state.hotCues, []);
+  });
+
   it('9.2 Latch con PLAY: Presionar PLAY mientras se sostiene CUE enclava la reproducción permanente', async () => {
     const file = createTestAudioFile('track_cup_latch.mp3');
     const track = createTrackFromFile(file, 180.0);

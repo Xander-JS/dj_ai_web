@@ -60,6 +60,7 @@ class MockAudioBufferSourceNode extends MockAudioNode {
 }
 
 class MockAudioContext {
+  public static shouldFailDecode = false;
   public state: AudioContextState = 'running';
   public currentTime = 10.0;
   public sampleRate = 44100;
@@ -78,6 +79,7 @@ class MockAudioContext {
     return new MockAudioBufferSourceNode();
   }
   public async decodeAudioData(): Promise<AudioBuffer> {
+    if (MockAudioContext.shouldFailDecode) throw new Error('Corrupt audio data');
     return {
       duration: 180.0,
       length: 180 * 44100,
@@ -121,6 +123,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
   let originalWindow: unknown;
 
   beforeEach(async () => {
+    MockAudioContext.shouldFailDecode = false;
     originalAudioContext = (globalThis as unknown as { AudioContext: unknown }).AudioContext;
     originalWindow = (globalThis as unknown as { window: unknown }).window;
 
@@ -199,6 +202,42 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       const state = djStore.getSnapshot();
       assert.equal(state.syncMasterDeck, 'B', 'Deck B debe ser el Master');
       assert.equal(state.deckB.isMaster, true);
+      assert.equal(state.deckA.isSyncActive, true);
+    });
+
+    it('1.2a Solo Deck A reproduciendo: A sigue siendo Master al pulsar SYNC en A', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+      await djStore.playDeckA();
+
+      assert.equal(djStore.syncDeck('A'), true);
+      const state = djStore.getSnapshot();
+      assert.equal(state.syncMasterDeck, 'A');
+      assert.equal(state.deckA.isMaster, true);
+      assert.equal(state.deckA.isSyncActive, false);
+      assert.equal(state.deckB.isMaster, false);
+      assert.equal(state.deckB.isSyncActive, true);
+    });
+
+    it('1.2b Solo Deck B reproduciendo: B sigue siendo Master al pulsar SYNC en B', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+      await djStore.playDeckB();
+
+      assert.equal(djStore.syncDeck('B'), true);
+      const state = djStore.getSnapshot();
+      assert.equal(state.syncMasterDeck, 'B');
+      assert.equal(state.deckB.isMaster, true);
+      assert.equal(state.deckB.isSyncActive, false);
+      assert.equal(state.deckA.isMaster, false);
       assert.equal(state.deckA.isSyncActive, true);
     });
 
@@ -289,6 +328,29 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(result, false);
       assert.equal(djStore.getSnapshot().deckB.isSyncActive, false);
       assert.equal(djStore.getSnapshot().deckB.errorCode, 'sync_failed');
+    });
+
+    it('2.4 Rechaza si el Master seleccionado por reproducción no tiene BPM válido y no altera tempos ni roles', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
+      trackA.analysis = { status: 'unsupported' };
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+      await djStore.playDeckA();
+      const before = djStore.getSnapshot();
+
+      assert.equal(djStore.syncDeck('A'), false);
+      const after = djStore.getSnapshot();
+      assert.equal(after.syncMasterDeck, null);
+      assert.equal(after.deckA.isMaster, false);
+      assert.equal(after.deckA.isSyncActive, false);
+      assert.equal(after.deckB.isMaster, false);
+      assert.equal(after.deckB.isSyncActive, false);
+      assert.equal(after.deckA.playbackRate, before.deckA.playbackRate);
+      assert.equal(after.deckB.playbackRate, before.deckB.playbackRate);
+      assert.equal(after.deckB.errorCode, 'sync_failed');
     });
   });
 
@@ -449,7 +511,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
 
       // Pitch Bend UP en Esclavo (+3.5%)
       djStore.pitchBend('B', 'up');
-      assert.equal(djStore.getSnapshot().deckB.pitchBend, 3.5);
+      assert.ok(Math.abs(djStore.getSnapshot().deckB.pitchBend - 3.5039) < 0.001, 'El estado debe reflejar el porcentaje efectivo tras cuantizar playbackRate');
       const effectiveUp = audioEngine.getDeckPlaybackRate('B');
       // 1.0417 * 1.035 = 1.0782 (dentro de 1.08)
       assert.ok(effectiveUp > rateNominal && effectiveUp <= 1.08);
@@ -491,7 +553,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
 
       // Aplicar Pitch Bend UP (+3.5%) sobre el límite superior
       djStore.pitchBend('B', 'up');
-      assert.equal(djStore.getSnapshot().deckB.pitchBend, 3.5);
+      assert.equal(djStore.getSnapshot().deckB.pitchBend, 0, 'El bend queda completamente limitado en el tope superior');
       // El motor debe acotar estrictamente a 1.0800 sin overflow
       assert.equal(audioEngine.getDeckPlaybackRate('B'), 1.08);
 
@@ -516,7 +578,7 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
 
       // Aplicar Pitch Bend DOWN (-3.5%) sobre el límite inferior
       djStore.pitchBend('B', 'down');
-      assert.equal(djStore.getSnapshot().deckB.pitchBend, -3.5);
+      assert.equal(djStore.getSnapshot().deckB.pitchBend, 0, 'El bend queda completamente limitado en el tope inferior');
       // El motor debe acotar estrictamente a 0.9200 sin underflow
       assert.equal(audioEngine.getDeckPlaybackRate('B'), 0.92);
 
@@ -703,6 +765,56 @@ describe('Fase 23.4: Etapa 3 — Sincronización de Tempo y Gestión Maestro/Esc
       assert.equal(state.deckA.isMaster, false);
       assert.equal(state.deckB.isSyncActive, false, 'El Esclavo se desacopla');
       assert.equal(state.deckB.playbackRate, 1.0, 'Mantiene su velocidad sin saltos');
+    });
+
+    it('7.1a Si falla el blob del Master, elimina SYNC y ambos roles sin cambiar el tempo del Slave', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+      djStore.syncDeck('B');
+      const slaveRate = djStore.getSnapshot().deckB.playbackRate;
+
+      const missingTrack = createTrackFromFile(createTestAudioFile('missing.mp3'), 180);
+      missingTrack.source = { type: 'indexeddb', indexedDbKey: 'missing-blob-id' };
+      assert.equal(await djStore.loadTrackToDeckA(missingTrack), false);
+
+      const state = djStore.getSnapshot();
+      assert.equal(state.deckA.errorCode, 'file_missing');
+      assert.equal(state.syncMasterDeck, null);
+      assert.equal(state.deckA.isMaster, false);
+      assert.equal(state.deckA.isSyncActive, false);
+      assert.equal(state.deckB.isMaster, false);
+      assert.equal(state.deckB.isSyncActive, false);
+      assert.equal(state.deckB.playbackRate, slaveRate);
+    });
+
+    it('7.1b Si falla la decodificación del Master, elimina SYNC y ambos roles sin cambiar el tempo del Slave', async () => {
+      const { track: trackA, file: fileA } = createAnalyzedTrack('trackA.mp3', 124.0);
+      const { track: trackB, file: fileB } = createAnalyzedTrack('trackB.mp3', 124.0);
+      await indexedDBStorage.saveTrack(trackA, fileA);
+      await indexedDBStorage.saveTrack(trackB, fileB);
+      await djStore.loadTrackToDeckA(trackA);
+      await djStore.loadTrackToDeckB(trackB);
+      djStore.syncDeck('B');
+      const slaveRate = djStore.getSnapshot().deckB.playbackRate;
+
+      MockAudioContext.shouldFailDecode = true;
+      const { track: corruptTrack, file: corruptFile } = createAnalyzedTrack('corrupt.mp3', 124.0);
+      await indexedDBStorage.saveTrack(corruptTrack, corruptFile);
+      assert.equal(await djStore.loadTrackToDeckA(corruptTrack), false);
+
+      const state = djStore.getSnapshot();
+      assert.equal(state.deckA.errorCode, 'decode_failed');
+      assert.match(state.deckA.errorMessage ?? '', /Corrupt audio data/);
+      assert.equal(state.syncMasterDeck, null);
+      assert.equal(state.deckA.isMaster, false);
+      assert.equal(state.deckA.isSyncActive, false);
+      assert.equal(state.deckB.isMaster, false);
+      assert.equal(state.deckB.isSyncActive, false);
+      assert.equal(state.deckB.playbackRate, slaveRate);
     });
 
     it('7.2 Independencia absoluta cuando SYNC está desactivado', async () => {

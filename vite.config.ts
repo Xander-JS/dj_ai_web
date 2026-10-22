@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer, type PreviewServer } from 'vite';
+import { createUnscoredMockRecommendations } from './src/services/ai/geminiRecommendationService.ts';
 
 interface DevApiCandidateTrack {
   id: string;
@@ -55,6 +56,9 @@ interface GeminiApiResponse {
  * de producción (en producción se debe emplear un API Gateway, Cloudflare Worker o Edge Function).
  */
 function geminiDevApiPlugin(apiKey?: string): Plugin {
+  const redactDiagnostic = (value: string) => apiKey
+    ? value.replaceAll(apiKey, '[REDACTED_API_KEY]').slice(0, 300)
+    : value.slice(0, 300);
   const handler = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const url = req.url ? req.url.split('?')[0] : '';
     if (url !== '/api/ai/recommendations') {
@@ -107,26 +111,9 @@ function geminiDevApiPlugin(apiKey?: string): Plugin {
         return;
       }
 
-      // Generador de respuestas simuladas (Mock) identificadas explícitamente
+      // El cliente calcula el score con los mismos datos verificados para todos los candidatos.
       const generateMockRecs = () => {
-        const sorted = [...candidateTracks].slice(0, 3).map((candidate, idx) => {
-          const bpmDiff = Math.abs((candidate.bpm || 120) - (referenceTrack.bpm || 120));
-          const score = Math.max(70, Math.min(98, 95 - bpmDiff * 2 - idx * 5));
-          return {
-            trackId: candidate.id,
-            title: candidate.title,
-            artist: candidate.artist,
-            bpm: candidate.bpm,
-            key: candidate.key,
-            camelot: candidate.camelot,
-            energy: candidate.energy,
-            compatibilityScore: score,
-            justification: `[SIMULACIÓN] Armonía compatible (${candidate.camelot || candidate.key || 'N/A'}) y tempo cercano a ${referenceTrack.bpm || 120} BPM.`,
-            transitionSuggestion: '[SIMULACIÓN] Realiza una mezcla gradual de graves durante el drop y alinea compases en el compás 16.',
-            isMock: true,
-          };
-        });
-        return sorted;
+        return createUnscoredMockRecommendations(candidateTracks);
       };
 
       // Si se solicita mock forzado o no hay clave disponible
@@ -158,18 +145,34 @@ function geminiDevApiPlugin(apiKey?: string): Plugin {
         );
 
         const systemPrompt = `You are an expert DJ harmonic mixing and track transition AI assistant for SYSTEM DJ.
-Your task is to analyze a reference track currently loaded/playing on a DJ deck, and recommend up to 3 candidate tracks from the user's library for the best musical transition.
+Your task is to analyze a reference track currently playing on a DJ deck, and recommend up to 3 candidate tracks from the user's library for the best musical transition.
 
-Consider:
-1. Tempo / BPM: Ideal tempo matching or small pitch adjustment (±4-8%), or half-time/double-time transitions.
-2. Harmonic Compatibility: Using the Camelot Wheel (exact match e.g. 8A -> 8A; adjacent hours e.g. 8A -> 7A or 9A; relative major/minor e.g. 8A -> 8B; energy boost +1/2 semitones or mood shift).
-3. Energy Flow: Maintaining energy, smooth build up, or controlled cooldown.
+CRITICAL TECHNICAL CONSTRAINTS:
+1. Tempo / Pitch Limits: SYSTEM DJ's pitch faders are strictly limited to ±8.0% range.
+   - Pitch Shift Calculation & Sign:
+     Calculate required pitch adjustment on the candidate track to match reference BPM as:
+     pitchShift% = ((referenceBpm - candidateBpm) / candidateBpm) * 100.
+     If reference BPM > candidate BPM, candidate must be accelerated (positive sign '+', e.g. 129.4 vs 128 BPM is +1.1%, NOT negative).
+     If reference BPM < candidate BPM, candidate must be slowed down (negative sign '-').
+     Never invert the sign or calculate relative to reference denominator in pitch explanations.
+   - Half-time / Double-time Strict Mathematical Validation:
+     A track is ONLY mathematically half-time if |((referenceBpm - candidateBpm / 2) / (candidateBpm / 2)) * 100| <= 8.0%.
+     A track is ONLY mathematically double-time if |((referenceBpm - candidateBpm * 2) / (candidateBpm * 2)) * 100| <= 8.0%.
+     NEVER claim or recommend a candidate as half-time or double-time unless this mathematical formula holds. For example, 105 BPM vs 129.4 BPM requires -18.86% difference (adjustment +23.2%) and is NOT half-time. Do not recommend candidates outside ±8% when compatible candidates exist in the library.
+   - If candidate BPM requires a pitch adjustment greater than ±8% (and is NOT a valid half-time/double-time match within ±8%), it CANNOT be beatmatched normally. Never claim a >8% BPM difference is "manageable" or "small".
+2. Camelot Wheel Harmonic Rules:
+   - Relative Major/Minor: Shares the SAME NUMBER and changes the letter (e.g. 12A's relative is 12B, NOT 8A; 8A's relative is 8B). Never claim different numbers with the same letter are relative keys!
+   - Adjacent Keys: Shares the SAME LETTER and differs by ±1 hour on the wheel (e.g. 12A is adjacent to 11A and 1A).
+   - If keys are not identical, relative, or adjacent, they are harmonically incompatible or energy jumps.
+3. Metadata Integrity:
+   - Never invent "Unknown Artist" or "Untitled Track".
+   - Use the exact candidate trackId from the candidate list.
 
 Reference Track:
 ${JSON.stringify({
   id: referenceTrack.id,
-  title: referenceTrack.title || 'Untitled Track',
-  artist: referenceTrack.artist || 'Unknown Artist',
+  title: referenceTrack.title || '',
+  artist: referenceTrack.artist || '',
   bpm: referenceTrack.bpm ?? 'Unknown',
   key: referenceTrack.key ?? 'Unknown',
   camelot: referenceTrack.camelot ?? 'Unknown',
@@ -180,8 +183,8 @@ Candidate Tracks (Library):
 ${JSON.stringify(
   candidateTracks.map((c) => ({
     id: c.id,
-    title: c.title || 'Untitled Track',
-    artist: c.artist || 'Unknown Artist',
+    title: c.title || '',
+    artist: c.artist || '',
     bpm: c.bpm ?? 'Unknown',
     key: c.key ?? 'Unknown',
     camelot: c.camelot ?? 'Unknown',
@@ -230,9 +233,7 @@ Only return candidates from the provided list. Do not invent tracks or track IDs
 
         if (!apiResponse.ok) {
           const errText = await apiResponse.text().catch(() => '');
-          const sanitizedDetails = apiKey
-            ? errText.replaceAll(apiKey, '[REDACTED_API_KEY]').slice(0, 300)
-            : errText.slice(0, 300);
+          const sanitizedDetails = redactDiagnostic(errText);
 
           const status = apiResponse.status;
           let errorCode = 'server_error';
@@ -281,7 +282,7 @@ Only return candidates from the provided list. Do not invent tracks or track IDs
         try {
           parsed = JSON.parse(rawContent);
         } catch {
-          console.error('[GeminiDevAPI Error]: Failed to parse JSON response from Gemini:', rawContent.slice(0, 200));
+          console.error('[GeminiDevAPI Error]: Failed to parse JSON response from Gemini:', redactDiagnostic(rawContent));
           res.statusCode = 502;
           res.end(JSON.stringify({
             success: false,
@@ -345,14 +346,15 @@ Only return candidates from the provided list. Do not invent tracks or track IDs
           ? 'Network connection error while contacting Gemini API'
           : 'Internal server error while processing AI recommendation';
 
-        console.error('[GeminiDevAPI Error]:', error?.message || String(err));
+        const sanitizedError = redactDiagnostic(error?.message || String(err));
+        console.error('[GeminiDevAPI Error]:', sanitizedError);
 
         res.statusCode = isAbort ? 504 : isNetwork ? 503 : 500;
         res.end(JSON.stringify({
           success: false,
           errorCode,
           error: errorMsg,
-          details: error?.message || String(err),
+          details: sanitizedError,
           isMock: false
         }));
       }

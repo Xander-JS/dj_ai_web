@@ -1035,7 +1035,7 @@ export const Deck: React.FC<DeckProps> = ({
                 ? t('dj.bar_sync_cancelled_tooltip', 'Preparación cancelada manualmente.')
                 : barSyncStatus?.startsWith('rejected_')
                 ? `BAR SYNC RECHAZADO: ${barSync?.reason || 'Condiciones incompatibles'}`
-                : t('dj.bar_sync_tooltip', 'Preparar compás en frontera de downbeat confirmada (BAR SYNC V1)')
+                : t('dj.bar_sync_tooltip', 'Preparar el Slave en la fase de compás confirmada del Master (BAR SYNC V1)')
             }
             aria-label={t('dj.bar_sync', 'BAR SYNC')}
             data-testid={`deck-${deckName.toLowerCase()}-barsync`}
@@ -1057,9 +1057,18 @@ export const Deck: React.FC<DeckProps> = ({
             className="btn btn-dj btn-dj-cue"
             onPointerDown={handleCueButtonDown}
             onPointerUp={handleCueButtonUp}
-            onPointerCancel={() => handleCueUp(deckName)}
+            onPointerCancel={() => {
+              isCuePressedRef.current = false;
+              handleCueUp(deckName);
+            }}
             onKeyDown={handleCueKeyDown}
             onKeyUp={handleCueKeyUp}
+            onBlur={() => {
+              if (isCuePressedRef.current) {
+                isCuePressedRef.current = false;
+                cancelCup(deckName);
+              }
+            }}
             title={t('dj.cue_pro_title')}
             aria-label={t('dj.cue')}
             disabled={!hasTrack || isLoading}

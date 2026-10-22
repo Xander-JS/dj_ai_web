@@ -17,6 +17,7 @@ export interface TrackAnalysis {
   energy?: number;                   // Escala de intensidad/energía (0 a 10)
   waveformPeaks?: number[];          // Muestras normalizadas (0.0 a 1.0) para renderizado rápido
   bpmConfidence?: number;            // Nivel de certeza/confianza métrica (0.0 a 1.0)
+  isAmbiguous?: boolean;             // El detector no encontró una referencia métrica confiable
   keyConfidence?: number;            // Nivel de correlación/certeza tonal (0.0 a 1.0)
   firstBeatTime?: number | null;     // Marca temporal en segundos del primer transitorio de beat
   analysisError?: string;

@@ -455,6 +455,8 @@ describe('Fase 22 — Suite 5: Orquestador Completo (audioAnalyzer.ts)', () => {
 
     assert.equal(analysis.status, 'analyzed');
     assert.equal(analysis.bpm, 124);
+    assert.ok(Array.isArray(analysis.alternateBpm), 'El análisis de pista conserva las hipótesis BPM del detector');
+    assert.ok(analysis.alternateBpm!.length > 0);
     assert.equal(analysis.key, 'C');
     assert.equal(analysis.camelot, '8B');
     assert.ok(typeof analysis.energy === 'number' && analysis.energy >= 5 && analysis.energy <= 8);

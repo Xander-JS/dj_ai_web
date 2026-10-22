@@ -627,21 +627,21 @@ export class IndexedDBStorage {
     id: string,
     cues: { mainCue?: number | null; hotCues?: HotCue[] }
   ): Promise<boolean> {
-    // 1. Actualizar en memoria si existe
     const memRecord = this.memoryStore.get(id);
-    if (memRecord) {
-      if (cues.mainCue !== undefined) memRecord.mainCue = cues.mainCue;
-      if (cues.hotCues !== undefined) memRecord.hotCues = [...cues.hotCues];
-    }
-
     const wasMemoryOnly = this.memoryOnlyIds.has(id);
     if (wasMemoryOnly) {
-      return Boolean(memRecord);
+      if (!memRecord) return false;
+      if (cues.mainCue !== undefined) memRecord.mainCue = cues.mainCue;
+      if (cues.hotCues !== undefined) memRecord.hotCues = [...cues.hotCues];
+      return true;
     }
 
     const db = await this.init();
     if (!db) {
-      return Boolean(memRecord);
+      if (!memRecord) return false;
+      if (cues.mainCue !== undefined) memRecord.mainCue = cues.mainCue;
+      if (cues.hotCues !== undefined) memRecord.hotCues = [...cues.hotCues];
+      return true;
     }
 
     return new Promise<boolean>((resolve) => {
@@ -663,7 +663,14 @@ export class IndexedDBStorage {
         };
 
         getRequest.onerror = () => resolve(false);
-        tx.oncomplete = () => resolve(true);
+        tx.oncomplete = () => {
+          const cached = this.memoryStore.get(id);
+          if (cached) {
+            if (cues.mainCue !== undefined) cached.mainCue = cues.mainCue;
+            if (cues.hotCues !== undefined) cached.hotCues = [...cues.hotCues];
+          }
+          resolve(true);
+        };
         tx.onerror = (event) => {
           console.warn('[IndexedDBStorage] Error al persistir CUEs de pista:', event);
           resolve(false);

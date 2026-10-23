@@ -246,11 +246,15 @@ export function geminiDevApiPlugin(apiKey?: string): Plugin {
     },
   };
 }
+  export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, process.cwd(), '');
+    const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   return {
     plugins: [react(), geminiDevApiPlugin(apiKey)],
+    server: {
+      port: 5173,
+      strictPort: true, // Si el 5173 está ocupado, arroja error en vez de saltar al 5174, 5175...
+    },
   };
 });

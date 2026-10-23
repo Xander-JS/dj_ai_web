@@ -1,7 +1,7 @@
 /**
  * SYSTEM DJ — Local IndexedDB Storage Service
  * Persistencia local en cliente para pistas de audio y metadatos sin subir archivos a servidores.
- * Base de datos: SystemDJ_Storage | Almacenes: tracks, playlists
+ * Base de datos: SystemDJ_Storage | Almacenes: tracks, playlists, recorded_sessions
  */
 
 import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../../types/track.ts';
@@ -9,6 +9,13 @@ import type { Playlist } from '../../types/playlist.ts';
 import { computeFileHash, getVerifiedBlobHash } from '../../utils/cryptoHash.ts';
 import { isDownbeatConfirmed, createSuggestedDownbeat } from '../../utils/downbeat.ts';
 import { normalizeTrackAnalysis } from '../../utils/trackAnalysis.ts';
+import {
+  MAX_STORED_SESSIONS,
+  planSessionHistoryInsert,
+  sortSessionsNewestFirst,
+  type SaveSessionResult,
+  type StoredSessionRecord,
+} from '../../session/SessionHistory.ts';
 
 export interface StoredTrackRecord {
   id: string;
@@ -35,10 +42,12 @@ export interface StoredTrackRecord {
 
 
 const DB_NAME = 'SystemDJ_Storage';
-// v1: tracks | v2: playlists (las migraciones solo crean almacenes ausentes, sin tocar datos)
-const DB_VERSION = 2;
+// v1: tracks | v2: playlists | v3: recorded_sessions
+// (las migraciones solo crean almacenes ausentes, sin tocar datos)
+const DB_VERSION = 3;
 const STORE_NAME = 'tracks';
 const PLAYLIST_STORE_NAME = 'playlists';
+const SESSION_STORE_NAME = 'recorded_sessions';
 
 /**
  * Resultado explícito de un guardado. `persisted: false` significa que la pista
@@ -60,6 +69,8 @@ export class IndexedDBStorage {
   private memoryOnlyIds: Set<string> = new Set();
   // Respaldo en memoria de playlists cuando IndexedDB no está disponible
   private memoryPlaylists: Map<string, Playlist> = new Map();
+  // Respaldo en memoria del historial de sesiones grabadas
+  private memorySessions: Map<string, StoredSessionRecord> = new Map();
 
   /**
    * Indica si una pista existe solo en memoria (no sobrevivirá a una recarga).
@@ -101,6 +112,10 @@ export class IndexedDBStorage {
           if (!db.objectStoreNames.contains(PLAYLIST_STORE_NAME)) {
             const playlistStore = db.createObjectStore(PLAYLIST_STORE_NAME, { keyPath: 'id' });
             playlistStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(SESSION_STORE_NAME)) {
+            const sessionStore = db.createObjectStore(SESSION_STORE_NAME, { keyPath: 'id' });
+            sessionStore.createIndex('savedAt', 'savedAt', { unique: false });
           }
         };
 
@@ -500,21 +515,47 @@ export class IndexedDBStorage {
   }
 
   /**
+   * Elimina solo las pistas; las playlists y las sesiones grabadas se conservan intactas.
+   */
+  public async clearTracks(): Promise<void> {
+    this.memoryStore.clear();
+    this.memoryOnlyIds.clear();
+
+    const db = await this.init();
+    if (!db) return;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+        tx.oncomplete = () => resolve();
+        const onFailure = () => reject(new Error('No se pudieron eliminar las pistas', { cause: tx.error }));
+        tx.onabort = onFailure;
+        tx.onerror = onFailure;
+      } catch (err) {
+        reject(new Error(`Error en transacción de borrado de pistas: ${err instanceof Error ? err.message : String(err)}`, { cause: err }));
+      }
+    });
+  }
+
+  /**
    * Elimina todos los registros de la biblioteca local.
    */
   public async clearAll(): Promise<void> {
     this.memoryStore.clear();
     this.memoryOnlyIds.clear();
     this.memoryPlaylists.clear();
+    this.memorySessions.clear();
 
     const db = await this.init();
     if (!db) return;
 
     return new Promise((resolve) => {
       try {
-        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME], 'readwrite');
+        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME, SESSION_STORE_NAME], 'readwrite');
         tx.objectStore(STORE_NAME).clear();
         tx.objectStore(PLAYLIST_STORE_NAME).clear();
+        tx.objectStore(SESSION_STORE_NAME).clear();
         tx.oncomplete = () => resolve();
         tx.onabort = () => resolve();
         tx.onerror = () => resolve();
@@ -1037,6 +1078,78 @@ export class IndexedDBStorage {
         tx.onerror = onFailure;
       } catch (err) {
         reject(new Error(`Error en transacción de eliminación de playlist: ${err instanceof Error ? err.message : String(err)}`, { cause: err }));
+      }
+    });
+  }
+
+  /**
+   * Guarda una sesión grabada (metadatos + audio) aplicando la política FIFO:
+   * como máximo MAX_STORED_SESSIONS registros; al guardar una nueva con el historial lleno
+   * se eliminan las más antiguas en la misma transacción y se devuelven en `evicted`.
+   */
+  public async saveRecordedSession(
+    record: StoredSessionRecord,
+    limit: number = MAX_STORED_SESSIONS,
+  ): Promise<SaveSessionResult> {
+    const saveInMemory = (): StoredSessionRecord[] => {
+      const plan = planSessionHistoryInsert(Array.from(this.memorySessions.values()), record, limit);
+      for (const evicted of plan.evicted) this.memorySessions.delete(evicted.id);
+      this.memorySessions.set(plan.record.id, plan.record);
+      return plan.evicted;
+    };
+
+    const db = await this.init();
+    if (!db) {
+      return { persisted: false, evicted: saveInMemory(), reason: 'unsupported' };
+    }
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(SESSION_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(SESSION_STORE_NAME);
+        let evicted: StoredSessionRecord[] = [];
+        const getAllRequest = store.getAll();
+
+        getAllRequest.onsuccess = () => {
+          const plan = planSessionHistoryInsert(getAllRequest.result as StoredSessionRecord[], record, limit);
+          evicted = plan.evicted;
+          for (const old of plan.evicted) store.delete(old.id);
+          store.put(plan.record);
+        };
+
+        tx.oncomplete = () => {
+          for (const old of evicted) this.memorySessions.delete(old.id);
+          resolve({ persisted: true, evicted });
+        };
+        const onFailure = () => {
+          const reason = tx.error?.name === 'QuotaExceededError' ? 'quota' : 'error';
+          console.warn(`[IndexedDBStorage] No se pudo persistir la sesión ${record.id}:`, tx.error);
+          resolve({ persisted: false, evicted: [], reason });
+        };
+        tx.onabort = onFailure;
+        tx.onerror = onFailure;
+      } catch (err) {
+        console.warn('[IndexedDBStorage] Error en transacción de sesión grabada:', err);
+        resolve({ persisted: false, evicted: [], reason: 'error' });
+      }
+    });
+  }
+
+  /**
+   * Devuelve las sesiones grabadas almacenadas, de la más reciente a la más antigua.
+   */
+  public async getRecordedSessions(): Promise<StoredSessionRecord[]> {
+    const fromMemory = () => sortSessionsNewestFirst(Array.from(this.memorySessions.values()));
+    const db = await this.init();
+    if (!db) return fromMemory();
+
+    return new Promise((resolve) => {
+      try {
+        const request = db.transaction(SESSION_STORE_NAME, 'readonly').objectStore(SESSION_STORE_NAME).getAll();
+        request.onsuccess = () => resolve(sortSessionsNewestFirst(request.result as StoredSessionRecord[]));
+        request.onerror = () => resolve(fromMemory());
+      } catch {
+        resolve(fromMemory());
       }
     });
   }

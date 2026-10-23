@@ -49,6 +49,15 @@
   --size-lg: 3rem;    /* 48px */
   --size-xl: 3.5rem;  /* 56px */
 
+  /* LAYOUT (Shell regions; reduced in the tablet breakpoint below) */
+  --layout-header-height: 4rem;    /* 64px */
+  --layout-sidebar-width: 15.625rem; /* 250px */
+  --layout-player-height: 5.625rem;  /* 90px */
+  --layout-gutter: var(--space-4);
+
+  /* TOUCH */
+  --touch-target-min: var(--size-md); /* 40px */
+
   /* BORDER RADIUS */
   --radius-none: 0;
   --radius-sm: 0.25rem; /* 4px */
@@ -73,6 +82,23 @@
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Tablet (1024x768 landscape down to 768x1024 portrait): compact shell */
+@media (max-width: 1024px) {
+  :root {
+    --layout-header-height: var(--size-xl);
+    --layout-sidebar-width: calc(var(--size-xl) + var(--space-4));
+    --layout-player-height: calc(var(--size-xl) + var(--space-4));
+    --layout-gutter: var(--space-3);
+  }
+}
+
+/* Coarse pointers (touch screens) get larger hit areas */
+@media (pointer: coarse) {
+  :root {
+    --touch-target-min: var(--size-lg); /* 48px */
+  }
 }
 
 /* ==========================================================================
@@ -155,6 +181,7 @@
 html, body {
   height: 100%;
   width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -190,6 +217,8 @@ button {
   border: none;
   cursor: pointer;
   color: inherit;
+  /* Removes double-tap zoom delay so taps register immediately */
+  touch-action: manipulation;
 }
 
 /* Base Root Layout */

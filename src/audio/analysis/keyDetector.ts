@@ -34,6 +34,24 @@ export interface KeyDetectionResult {
   isAmbiguous: boolean;          // Verdadero si la correlación es difusa o hay empate
 }
 
+export interface KeyDetectorOptions {
+  maxFrames?: number;            // Ventanas FFT distribuidas a lo largo de la pista (por defecto 32)
+  minCorrelation?: number;       // Correlación K-S mínima para una tonalidad concluyente (por defecto 0.50)
+  minMargin?: number;            // Margen mínimo frente al segundo candidato (por defecto 0.05)
+  minConfidence?: number;        // Confianza mínima para no considerarse ambigua (por defecto 0.30)
+}
+
+/**
+ * Umbrales permisivos para la segunda pasada: 4x más ventanas cromáticas sobre toda la
+ * pista y criterios de correlación/margen relajados. La fórmula de confianza se mantiene.
+ */
+export const RELAXED_KEY_OPTIONS: Readonly<KeyDetectorOptions> = {
+  maxFrames: 128,
+  minCorrelation: 0.40,
+  minMargin: 0.02,
+  minConfidence: 0.15,
+};
+
 /**
  * Implementación in-place optimizada de la Transformada Rápida de Fourier (Radix-2 FFT).
  * Solo para tamaños potencia de 2 (ej. 2048, 4096).
@@ -128,7 +146,8 @@ function pearsonCorrelation(x: number[], y: number[]): number {
  */
 export function extractChromaProfile(
   pcm: Float32Array,
-  sampleRate: number
+  sampleRate: number,
+  maxFrames = 32
 ): { chroma: number[]; isFlatOrSilent: boolean } {
   const chroma = new Array(12).fill(0);
   const totalLength = pcm ? pcm.length : 0;
@@ -163,7 +182,7 @@ export function extractChromaProfile(
   // Calculamos ventanas representativas distribuidas a lo largo de la señal
   const hopSize = 2048;
   const numPossibleFrames = Math.max(1, Math.floor((analysisPcm.length - fftSize) / hopSize));
-  const maxFramesToAnalyze = Math.min(32, numPossibleFrames);
+  const maxFramesToAnalyze = Math.min(Math.max(1, maxFrames), numPossibleFrames);
   const frameStride = Math.max(1, Math.floor(numPossibleFrames / maxFramesToAnalyze));
 
   const realBuffer = new Float64Array(fftSize);
@@ -255,9 +274,13 @@ export function extractChromaProfile(
  */
 export function detectKey(
   pcm: Float32Array,
-  sampleRate: number
+  sampleRate: number,
+  options: KeyDetectorOptions = {}
 ): KeyDetectionResult {
-  const { chroma, isFlatOrSilent } = extractChromaProfile(pcm, sampleRate);
+  const minCorrelation = options.minCorrelation ?? 0.50;
+  const minMargin = options.minMargin ?? 0.05;
+  const minConfidence = options.minConfidence ?? 0.30;
+  const { chroma, isFlatOrSilent } = extractChromaProfile(pcm, sampleRate, options.maxFrames ?? 32);
 
   if (isFlatOrSilent) {
     return {
@@ -315,8 +338,8 @@ export function detectKey(
   // Criterios de calidad y ambigüedad rigurosos:
   // 1. Correlación mínima para ser musicalmente concluyente: >= 0.50 (el ruido aleatorio puede rondar 0.30-0.45)
   // 2. Margen de separación respecto al segundo candidato: si es menor a 0.05 con correlación moderada, es ambiguo
-  const isTooLow = maxCorr < 0.50;
-  const isNarrowMargin = margin < 0.05 && maxCorr < 0.70;
+  const isTooLow = maxCorr < minCorrelation;
+  const isNarrowMargin = margin < minMargin && maxCorr < 0.70;
 
   // Cálculo de confianza normalizado (0.0 a 1.0)
   // Combina la correlación absoluta con el margen discriminante
@@ -327,7 +350,7 @@ export function detectKey(
     confidence = Math.min(1.0, Math.max(0.1, corrFactor * 0.65 + marginFactor * 0.35));
   }
 
-  const isAmbiguous = isTooLow || isNarrowMargin || confidence < 0.30;
+  const isAmbiguous = isTooLow || isNarrowMargin || confidence < minConfidence;
 
   // Si es estrictamente ambiguo o sin evidencia suficiente, no se presenta como certeza
   if (isAmbiguous) {

@@ -227,17 +227,100 @@ describe('OfflineSessionRenderer — deterministic planning and graph scheduling
     await assert.rejects(renderSessionOffline(regressive, resolver), { code: 'INVALID_TIMELINE' });
   });
 
-  test('rejects micro-slew events instead of flattening time-varying playback speed', async () => {
+  test('accepts live-recorded edge cases that previously failed validation', async () => {
+    const fake = offlineFactory();
+    const unknownDuration = { ...trackA, durationSeconds: 0 };
+    const s = session([
+      // Snapshot stamped a fraction of a millisecond late by an older recorder.
+      event(0, 0.4, { type: 'session.initial-state', state: { ...initialState, decks: { ...initialState.decks, A: { ...initialState.decks.A, track: unknownDuration, playbackState: 'playing', trackPositionSeconds: 19 } } } }),
+      // Seek clamped to the exact end of the buffer, then the track ends.
+      event(1, 300, { type: 'transport.seek', deckId: 'A', trackPositionSeconds: 20, playbackState: 'playing' }),
+      event(2, 310, { type: 'transport.ended', deckId: 'A', trackPositionSeconds: 0 }),
+      event(3, 400, { type: 'transport.play', deckId: 'A', trackPositionSeconds: 5, effectivePlaybackRate: 1 }),
+    ]);
+    const result = await renderSessionOffline(s, resolver, { createOfflineContext: fake.createOfflineContext });
+    assert.equal(result.buffer.duration, 1);
+    assert.deepEqual(fake.sources.map((source) => source.starts[0]), [[0, 19], [0.4, 5]]);
+    assert.deepEqual(fake.sources.map((source) => source.stops[0]), [0.3, 1]);
+  });
+
+  test('replays a micro-slew profile as playbackRate ramps on the active segment', async () => {
+    const fake = offlineFactory();
+    const playingA = { ...initialState, decks: { ...initialState.decks, A: { ...initialState.decks.A, playbackState: 'playing' as const } } };
+    const s = session([
+      event(0, 0, { type: 'session.initial-state', state: playingA }),
+      event(1, 100, { type: 'deck.micro-slew', deckId: 'A', baseRate: 1, peakRate: 1.04, rampDurationSeconds: 0.2, plateauDurationSeconds: 0.1, targetDisplacementSeconds: 0.01 }),
+    ]);
+    await renderSessionOffline(s, resolver, { createOfflineContext: fake.createOfflineContext });
+    assert.equal(fake.sources.length, 1);
+    const calls = fake.sources[0].playbackRate.calls.map(({ method, value, time }) => [method, value, Number(time.toFixed(6))]);
+    assert.deepEqual(calls, [
+      ['set', 1, 0],
+      ['set', 1, 0.1], ['ramp', 1.04, 0.3],
+      ['set', 1.04, 0.3], ['ramp', 1.04, 0.4],
+      ['set', 1.04, 0.4], ['ramp', 1, 0.6],
+    ]);
+  });
+
+  test('cancels the pending slew ramp when a rate change interrupts it', async () => {
+    const fake = offlineFactory();
+    const playingA = { ...initialState, decks: { ...initialState.decks, A: { ...initialState.decks.A, playbackState: 'playing' as const } } };
+    const s = session([
+      event(0, 0, { type: 'session.initial-state', state: playingA }),
+      event(1, 100, { type: 'deck.micro-slew', deckId: 'A', baseRate: 1, peakRate: 1.04, rampDurationSeconds: 0.2, plateauDurationSeconds: 0, targetDisplacementSeconds: 0.004 }),
+      event(2, 200, { type: 'deck.playback-rate', deckId: 'A', effectiveRate: 1.02, rampDurationMs: 0, cause: 'pitch' }),
+    ]);
+    await renderSessionOffline(s, resolver, { createOfflineContext: fake.createOfflineContext });
+    const calls = fake.sources[0].playbackRate.calls;
+    assert.deepEqual(calls.at(-2), { method: 'cancel', value: 0, time: 0.2 });
+    assert.deepEqual(calls.at(-1), { method: 'set', value: 1.02, time: 0.2 });
+  });
+
+  test('tolerates a profile-less micro-slew marker recorded at capture start', async () => {
+    const fake = offlineFactory();
+    const s = session([
+      event(0, 0, { type: 'session.initial-state', state: { ...initialState, decks: { ...initialState.decks, A: { ...initialState.decks.A, playbackState: 'playing' } } } }),
+      event(1, 0, { type: 'deck.micro-slew', deckId: 'A' }),
+    ]);
+    await renderSessionOffline(s, resolver, { createOfflineContext: fake.createOfflineContext });
+    assert.deepEqual(fake.sources[0].playbackRate.calls, [{ method: 'set', value: 1, time: 0 }]);
+  });
+
+  test('rejects micro-slew profiles with out-of-range rates', async () => {
     const s = session([
       event(0, 0, { type: 'session.initial-state', state: initialState }),
-      event(1, 10, { type: 'deck.micro-slew', deckId: 'A', baseRate: 1, peakRate: 1.04, rampDurationSeconds: 0.2, plateauDurationSeconds: 0.1, targetDisplacementSeconds: 0.01 }),
+      event(1, 10, { type: 'deck.micro-slew', deckId: 'A', baseRate: 1, peakRate: 1.5, rampDurationSeconds: 0.2, plateauDurationSeconds: 0.1 }),
     ]);
     await assert.rejects(renderSessionOffline(s, resolver), (error: unknown) => {
       assert.ok(error instanceof SessionRenderError);
-      assert.equal(error.code, 'UNSUPPORTED_EVENT');
-      assert.match(error.message, /micro-slew/);
+      assert.equal(error.code, 'INVALID_TIMELINE');
       return true;
     });
+  });
+
+  test('reports measured render progress through suspend checkpoints', async () => {
+    const fake = offlineFactory();
+    const context = fake.createOfflineContext() as unknown as Record<string, unknown>;
+    const pending: Array<{ time: number; resolve: () => void }> = [];
+    context.suspend = (time: number) => new Promise<void>((resolve) => pending.push({ time, resolve }));
+    context.resume = () => Promise.resolve();
+    const originalStart = context.startRendering as () => Promise<AudioBuffer>;
+    context.startRendering = async () => {
+      for (const checkpoint of [...pending].sort((a, b) => a.time - b.time)) {
+        checkpoint.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      return originalStart();
+    };
+    const fractions: number[] = [];
+    await renderSessionOffline(session([event(0, 0, { type: 'session.initial-state', state: initialState })]), resolver, {
+      createOfflineContext: () => context as unknown as OfflineAudioContext,
+      onProgress: (fraction) => fractions.push(fraction),
+    });
+    assert.ok(pending.length > 1);
+    assert.ok(pending.every(({ time }) => Number.isInteger(Math.round(time * 48_000 / 128 * 1e6) / 1e6)));
+    assert.equal(fractions.at(-1), 1);
+    for (let index = 1; index < fractions.length; index += 1) assert.ok(fractions[index] > fractions[index - 1]);
   });
 
   test('does not change the recorded state object or source buffers during rendering', async () => {

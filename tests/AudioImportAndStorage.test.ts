@@ -105,6 +105,39 @@ describe('audioImportService — política actual de importación', () => {
     assert.equal(tracks[0].analysis.status, 'pending');
   });
 
+  test('with requireDecodable, rejects an undecodable file without persisting it', async () => {
+    const file = createMockFile('remote.mp3', 32, 'audio/mpeg');
+    const result = await importAudioFiles([file], {
+      hasDuplicate: (name, size) => storage.hasDuplicate(name, size),
+      decodeAudioData: async () => { throw new Error('decode rejected'); },
+      computeFileHash: async () => 'test-hash',
+      saveTrack: (track, source) => storage.saveTrack(track, source),
+      duplicateWarning: (name) => `duplicate: ${name}`,
+    }, { requireDecodable: true });
+
+    assert.equal(result.successCount, 0);
+    assert.equal(result.errors.length, 1);
+    assert.deepEqual(result.importedTracks, []);
+    assert.equal((await storage.getAllTracks()).length, 0);
+  });
+
+  test('returns the persisted tracks so callers can trigger their analysis', async () => {
+    const file = createMockFile('remote.mp3', 32, 'audio/mpeg');
+    const result = await importAudioFiles([file], {
+      hasDuplicate: async () => false,
+      decodeAudioData: async () => ({ duration: 12.5 }) as AudioBuffer,
+      computeFileHash: async () => undefined,
+      saveTrack: (track, source) => storage.saveTrack(track, source),
+      duplicateWarning: (name) => `duplicate: ${name}`,
+    }, { requireDecodable: true });
+
+    const [stored] = await storage.getAllTracks();
+    assert.equal(result.importedTracks.length, 1);
+    assert.equal(result.importedTracks[0].id, stored.id);
+    assert.equal(stored.duration, 12.5);
+    assert.ok(await storage.getTrackBlob(stored.id));
+  });
+
   test('rejects empty and unsupported files before attempting decode or persistence', async () => {
     const files = [
       createMockFile('empty.wav', 0, 'audio/wav'),

@@ -860,7 +860,7 @@ describe('AudioEngineService — Pruebas del Grafo DSP, Curvas y Medición Real'
     assert.equal(limiter.ratio.value, 20.0, 'Ratio debe configurarse en 20:1');
     assert.equal(limiter.knee.value, 0.0, 'Knee debe ser 0');
     assert.equal(limiter.attack.value, 0.001, 'Attack debe ser 1 ms');
-    assert.equal(limiter.release.value, 0.050, 'Release debe ser 50 ms');
+    assert.equal(limiter.release.value, 0.2, 'Release debe ser 200 ms para no modular ciclos de bajo');
   });
 
   test('setMasterVolume() ajusta la ganancia del nodo master y aísla el valor', async () => {

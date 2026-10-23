@@ -16,8 +16,8 @@
 }
 
 .player-cover {
-  width: 56px;
-  height: 56px;
+  width: var(--size-xl);
+  height: var(--size-xl);
   background-color: var(--color-primary-500);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
@@ -138,4 +138,29 @@
 .player-heart-icon.liked {
   color: var(--color-primary-500);
   fill: var(--color-primary-500);
+}
+
+/* Tablet: compact player so the shell row fits --layout-player-height */
+@media (max-width: 1024px) {
+  .player-bar-container {
+    gap: var(--space-4);
+  }
+
+  .player-cover {
+    width: var(--size-md);
+    height: var(--size-md);
+  }
+
+  .player-main-controls {
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .player-buttons {
+    gap: var(--space-2);
+  }
+
+  .player-volume-container {
+    width: var(--space-16);
+  }
 }

@@ -1,14 +1,24 @@
 .mixer-page-container {
-  display: flex;
+  display: grid;
+  grid-template-areas: "deck-a mixer deck-b";
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
-  padding: var(--space-4);
-  gap: var(--space-4);
+  padding: var(--layout-gutter);
+  gap: var(--layout-gutter);
   background-color: var(--bg-base);
 }
 
 .deck-container {
-  flex: 2;
-  min-width: 400px;
+  min-width: 0;
+}
+
+.deck-container-a {
+  grid-area: deck-a;
+}
+
+.deck-container-b {
+  grid-area: deck-b;
 }
 
 .mixer-console-placeholder {
@@ -24,6 +34,29 @@
 }
 
 .mixer-console-container {
-  flex: 1;
-  min-width: 300px;
+  grid-area: mixer;
+  min-width: 0;
+}
+
+/* Landscape tablet (1024x768): keep Deck A | Mixer | Deck B, sized to content.
+   The page grows past the viewport height instead of clipping the decks, and
+   .layout-main provides the contained vertical scroll. */
+@media (max-width: 1024px) {
+  .mixer-page-container {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-rows: auto;
+    height: auto;
+    min-height: 100%;
+  }
+}
+
+/* Portrait tablet (768x1024): vertical cascade Deck A / Mixer / Deck B */
+@media (max-width: 900px) {
+  .mixer-page-container {
+    grid-template-areas:
+      "deck-a"
+      "mixer"
+      "deck-b";
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

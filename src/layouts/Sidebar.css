@@ -31,3 +31,25 @@
   gap: var(--space-1);
   padding: 0 var(--space-2);
 }
+
+/* Tablet: the sidebar collapses into an icon rail; labels stay available to assistive tech */
+@media (max-width: 1024px) {
+  .sidebar-aside {
+    padding: var(--space-3) 0;
+  }
+
+  .sidebar-nav-item {
+    justify-content: center;
+    min-height: var(--touch-target-min);
+    padding: var(--space-2);
+  }
+
+  .sidebar-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

@@ -1,5 +1,7 @@
 .library-table-container {
   flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -122,4 +124,12 @@
 .track-actions-container {
   display: flex;
   gap: var(--space-1);
+}
+
+/* Tablet: denser rows so more tracks fit above the fold */
+@media (max-width: 1024px) {
+  .library-table th,
+  .library-table td {
+    padding: var(--space-2) var(--space-3);
+  }
 }

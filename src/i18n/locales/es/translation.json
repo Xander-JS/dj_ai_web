@@ -94,6 +94,27 @@
     "badge_local": "LOCAL",
     "import_btn": "Importar archivos",
     "importing": "Importando pistas...",
+    "import_youtube_btn": "Importar desde YouTube",
+    "youtube": {
+      "title": "Importar desde YouTube",
+      "description": "Pega un enlace de YouTube (máx. 10 minutos). El audio se descarga solo en memoria.",
+      "url_label": "URL del video",
+      "submit": "Importar audio",
+      "status": {
+        "downloading": "Descargando...",
+        "importing": "Decodificando y guardando...",
+        "success": "Completado",
+        "error": "Error"
+      },
+      "errors": {
+        "invalid_url": "La URL no es un enlace válido de YouTube.",
+        "rejected": "No se pudo importar el video.",
+        "service_unreachable": "El servicio de audio no responde. Verifica que esté en ejecución en localhost:8000.",
+        "aborted": "Importación cancelada.",
+        "server": "El servicio de audio falló al extraer el audio.",
+        "import_failed": "No se pudo añadir el audio a la biblioteca."
+      }
+    },
     "drag_drop_title": "Arrastra tus canciones MP3 o WAV aquí",
     "drag_drop_subtitle": "O haz clic para seleccionar archivos desde tu dispositivo",
     "col_title": "Título",

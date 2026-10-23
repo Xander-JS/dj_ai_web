@@ -94,6 +94,27 @@
     "badge_local": "LOCAL",
     "import_btn": "Import Files",
     "importing": "Importing tracks...",
+    "import_youtube_btn": "Import from YouTube",
+    "youtube": {
+      "title": "Import from YouTube",
+      "description": "Paste a YouTube link (max. 10 minutes). The audio is downloaded into memory only.",
+      "url_label": "Video URL",
+      "submit": "Import audio",
+      "status": {
+        "downloading": "Downloading...",
+        "importing": "Decoding and saving...",
+        "success": "Completed",
+        "error": "Error"
+      },
+      "errors": {
+        "invalid_url": "The URL is not a valid YouTube link.",
+        "rejected": "The video could not be imported.",
+        "service_unreachable": "The audio service is not responding. Make sure it is running at localhost:8000.",
+        "aborted": "Import cancelled.",
+        "server": "The audio service failed while extracting the audio.",
+        "import_failed": "The audio could not be added to the library."
+      }
+    },
     "drag_drop_title": "Drop your MP3 or WAV tracks here",
     "drag_drop_subtitle": "Or click to select files from your device",
     "col_title": "Title",

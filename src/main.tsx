@@ -5,6 +5,9 @@ import './i18n/config'
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './context/AuthContext'
+import { initSettingsEffects } from './services/settings/settingsEffects'
+
+initSettingsEffects()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -301,12 +301,16 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       assert.equal(isDownbeatConfirmed(deck.track?.downbeat, deck.track?.fileMeta?.contentHash), false);
     });
 
-    it('2.3 Selección de métrica permite 4/4 como valor inicial y 3/4 alternativo', async () => {
+    it('2.3 Selección de métrica permite 4/4 como valor inicial y 3/4 alternativo, incluyendo la unidad de nota', async () => {
       const deckSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'), 'utf-8');
       assert.ok(
-        deckSource.includes('<option value={4}>4/4</option>') &&
-          deckSource.includes('<option value={3}>3/4</option>'),
-        'El selector debe permitir elegir entre 4/4 y 3/4'
+        deckSource.includes('[[4, 4], [3, 4], [2, 4], [6, 8]]'),
+        'El selector debe ofrecer compases completos (pulsos/unidad), empezando por 4/4 y con 3/4 alternativo'
+      );
+      assert.ok(
+        deckSource.includes("const [editBeatUnit, setEditBeatUnit] = useState<BeatUnit>(4);") &&
+          deckSource.includes('beatUnit: editBeatUnit,'),
+        'La unidad de nota elegida debe enviarse al confirmar el downbeat'
       );
       assert.ok(
         deckSource.includes("const [editBeatsPerBar, setEditBeatsPerBar] = useState<number>(4);"),
@@ -339,6 +343,23 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       assert.equal(persistedTrack?.downbeat?.status, 'confirmed');
       assert.equal(persistedTrack?.downbeat?.confirmation?.position, 1.5);
       assert.equal(persistedTrack?.downbeat?.confirmation?.beatsPerBar, 3);
+    });
+
+    it('2.4b Confirmar con unidad de nota la persiste como beatUnit manual y limpiar la elimina', async () => {
+      const { track, file } = await createTrackWithRealHash('confirm_beat_unit.mp3');
+      track.analysis = { status: 'analyzed', bpm: 124.0, firstBeatTime: 0.5 };
+      await indexedDBStorage.saveTrack(track, file);
+      await djStore.loadTrackToDeckA(track);
+
+      assert.equal(await djStore.confirmDownbeat('A', { position: 0.5, beatsPerBar: 6, beatUnit: 8 }), true);
+      const confirmedUnit = { value: 8, status: 'confirmed', source: 'manual' };
+      assert.deepEqual(djStore.getSnapshot().deckA.track?.analysis.beatUnit, confirmedUnit);
+      assert.deepEqual((await indexedDBStorage.getTrackAnalysis(track.id))?.beatUnit, confirmedUnit);
+      assert.equal(djStore.getSnapshot().deckA.track?.analysis.bpm, 124.0, 'El resto del análisis se conserva');
+
+      assert.equal(await djStore.clearDownbeat('A'), true);
+      assert.equal(djStore.getSnapshot().deckA.track?.analysis.beatUnit, undefined);
+      assert.equal((await indexedDBStorage.getTrackAnalysis(track.id))?.beatUnit, undefined);
     });
 
     it('2.5 Limpiar confirmación invoca clearDownbeat y revierte al estado sugerido', async () => {

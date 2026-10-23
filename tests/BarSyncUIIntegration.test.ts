@@ -167,6 +167,8 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     };
 
     await audioEngine.initialize();
+    djStore.setPitchDeckA(50);
+    djStore.setPitchDeckB(50);
     djStore.unloadDeckA();
     djStore.unloadDeckB();
     await indexedDBStorage.clearAll();

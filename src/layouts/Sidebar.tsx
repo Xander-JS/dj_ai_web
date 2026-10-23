@@ -15,29 +15,29 @@ export const Sidebar: React.FC = () => {
     <aside className="layout-sidebar sidebar-aside">
       <nav className="sidebar-nav">
         
-        <NavLink to="/dashboard" className={getNavClass}>
+        <NavLink to="/dashboard" className={getNavClass} title={t('navigation.home')}>
           <Home size={20} />
-          <span>{t('navigation.home')}</span>
+          <span className="sidebar-nav-label">{t('navigation.home')}</span>
         </NavLink>
 
-        <NavLink to="/library" className={getNavClass}>
+        <NavLink to="/library" className={getNavClass} title={t('navigation.library')}>
           <Music size={20} />
-          <span>{t('navigation.library')}</span>
+          <span className="sidebar-nav-label">{t('navigation.library')}</span>
         </NavLink>
 
-        <NavLink to="/playlists" className={getNavClass}>
+        <NavLink to="/playlists" className={getNavClass} title={t('navigation.playlists')}>
           <ListMusic size={20} />
-          <span>{t('navigation.playlists')}</span>
+          <span className="sidebar-nav-label">{t('navigation.playlists')}</span>
         </NavLink>
 
-        <NavLink to="/mixer" className={getNavClass}>
+        <NavLink to="/mixer" className={getNavClass} title={t('navigation.mixer')}>
           <SlidersHorizontal size={20} />
-          <span>{t('navigation.mixer')}</span>
+          <span className="sidebar-nav-label">{t('navigation.mixer')}</span>
         </NavLink>
 
-        <NavLink to="/sessions" className={getNavClass}>
+        <NavLink to="/sessions" className={getNavClass} title={t('navigation.sessions')}>
           <Disc3 size={20} />
-          <span>{t('navigation.sessions')}</span>
+          <span className="sidebar-nav-label">{t('navigation.sessions')}</span>
         </NavLink>
 
       </nav>

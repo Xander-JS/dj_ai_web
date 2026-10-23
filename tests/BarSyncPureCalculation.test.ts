@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 
 import {
   calculateBarSyncPlan,
+  projectBarPhasePosition,
   type BarSyncPlanInput,
   type BarSyncDeckInput,
 } from '../src/audio/analysis/barSync.ts';
@@ -574,5 +575,22 @@ describe('Fase 23.4: Etapa C.3 — Cálculo Puro de Fase de Compás (BAR SYNC V1
     });
     assert.equal(result.status, 'rejected_limits');
     assert.equal(result.targetPosition, null);
+  });
+
+  it('25. La proyección exacta de fase no acumula redondeo en compases lejanos', () => {
+    const barPeriod = 4 * 60 / (128 * 1.0312);
+    const projection = projectBarPhasePosition({
+      masterPosition: 1.25 + 517.37 * barPeriod,
+      masterDownbeat: 1.25,
+      masterBarPeriodSec: barPeriod,
+      slaveDownbeat: 0.731,
+      slaveBarPeriodSec: barPeriod,
+      slaveReferencePosition: 300,
+      slaveDuration: 600,
+    });
+    assert.ok(projection);
+    const slavePhase = (projection.position - 0.731) / barPeriod - projection.barIndex;
+    assert.ok(Math.abs(slavePhase - 0.37) < 1e-9, `fase ${slavePhase}`);
+    assert.ok(Math.abs(projection.position - 300) <= barPeriod / 2 + 1e-9, 'elige el compás más próximo');
   });
 });

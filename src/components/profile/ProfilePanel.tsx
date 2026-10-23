@@ -20,7 +20,7 @@ export const ProfilePanel: React.FC = () => {
 
   if (!user) return null;
 
-  const displayName = profile?.full_name || profile?.username || user.email || '';
+  const displayName = profile?.dj_alias || profile?.full_name || profile?.username || user.email || '';
 
   const handleSignOut = async () => {
     try {
@@ -68,9 +68,15 @@ export const ProfilePanel: React.FC = () => {
       </div>
 
       <div className="profile-info">
-        <h1 className="profile-name">{profile?.full_name || t('profile.no_name')}</h1>
+        <h1 className="profile-name">{profile?.dj_alias || profile?.full_name || t('profile.no_name')}</h1>
         <span className="profile-username">{profile?.username ? `@${profile.username}` : t('profile.no_username')}</span>
         <dl className="profile-panel-fields">
+          {profile?.full_name && (
+            <>
+              <dt>{t('profile.full_name')}</dt>
+              <dd>{profile.full_name}</dd>
+            </>
+          )}
           <dt>{t('auth.email')}</dt>
           <dd>{user.email}</dd>
         </dl>

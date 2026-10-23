@@ -136,7 +136,7 @@ export const Header: React.FC = () => {
           <Avatar
             size="sm"
             src={profile?.avatar_url ?? undefined}
-            alt={profile?.full_name || user?.email || ''}
+            alt={profile?.dj_alias || profile?.full_name || user?.email || ''}
             fallback={user ? undefined : 'DJ'}
           />
         </div>

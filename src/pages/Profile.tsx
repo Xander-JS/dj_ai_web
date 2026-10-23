@@ -1,50 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Edit2, Award, Clock } from 'lucide-react';
+import { Award, Clock, LogIn, UserRound } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody } from '../components/ui/Card';
+import { StateView } from '../components/ui/StateView';
+import { AuthModal } from '../components/auth/AuthModal';
+import { ProfilePanel } from '../components/profile/ProfilePanel';
+import { useAuth } from '../context/AuthContext';
 import { MOCK_PROFILE } from '../mock/profile';
 import './Profile.css';
 
 export const Profile: React.FC = () => {
   const { t } = useTranslation();
+  const { user, loading } = useAuth();
+  const [authOpen, setAuthOpen] = useState(false);
 
   return (
     <div className="profile-container">
       
-      {/* Header / Main Info */}
-      <div className="profile-header-card">
-        <div className="profile-avatar-large">
-          {/* Fallback initials if no image */}
-          {MOCK_PROFILE.name.charAt(0)}
+      {user ? (
+        <ProfilePanel />
+      ) : (
+        <div className="profile-header-card">
+          <StateView
+            status="empty"
+            icon={UserRound}
+            title={loading ? t('states.loading') : t('profile.sign_in_required_title')}
+            description={t('profile.sign_in_required_desc')}
+            action={!loading && (
+              <Button onClick={() => setAuthOpen(true)}>
+                <LogIn size={16} />
+                {t('auth.sign_in')}
+              </Button>
+            )}
+          />
+          <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
         </div>
-        <div className="profile-info">
-          <h1 className="profile-name">{MOCK_PROFILE.name}</h1>
-          <span className="profile-username">{MOCK_PROFILE.username}</span>
-          <p className="profile-bio">{MOCK_PROFILE.bio}</p>
-          
-          <div className="profile-stats-bar">
-            <div className="profile-stat">
-              <span className="profile-stat-value">{MOCK_PROFILE.followers}</span>
-              <span className="profile-stat-label">{t('profile.followers')}</span>
-            </div>
-            <div className="profile-stat">
-              <span className="profile-stat-value">{MOCK_PROFILE.following}</span>
-              <span className="profile-stat-label">{t('profile.following')}</span>
-            </div>
-            <div className="profile-stat">
-              <span className="profile-stat-value">{MOCK_PROFILE.sessions}</span>
-              <span className="profile-stat-label">{t('profile.sessions')}</span>
-            </div>
-          </div>
-        </div>
-        <div>
-          <Button variant="outline">
-            <Edit2 size={16} />
-            {t('profile.edit')}
-          </Button>
-        </div>
-      </div>
+      )}
 
       <div className="profile-content-grid">
         

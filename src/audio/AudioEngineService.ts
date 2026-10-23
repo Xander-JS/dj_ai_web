@@ -55,6 +55,14 @@ function getAudioContextConstructor(): typeof AudioContext | null {
 /** Antelación de un arranque en fase: cubre la latencia del hilo principal hasta source.start(). */
 export const PHASE_LOCK_LEAD_SECONDS = 0.03;
 
+/** Frecuencia de referencia para traducir el tamaño de búfer a segundos de latencia. */
+const PREFERRED_SAMPLE_RATE = 48000;
+/** Rangos de pitch admitidos por el motor (±6 %, ±8 %, ±16 %). */
+export const SUPPORTED_PITCH_RANGES: readonly number[] = [0.06, 0.08, 0.16];
+/** Límites de la tolerancia configurable de SYNC (±4 % a ±20 %). */
+export const MIN_SYNC_RATE_LIMIT = 0.04;
+export const MAX_SYNC_RATE_LIMIT = 0.2;
+
 export class AudioEngineService implements IAudioEngineService {
   private static instance: AudioEngineService | null = null;
 
@@ -66,6 +74,12 @@ export class AudioEngineService implements IAudioEngineService {
 
   private crossfaderPosition: number = 0.5; // Centro exacto inicial
   private crossfaderCurve: CrossfaderCurve = 'constant-power';
+  /** Rango del fader de pitch (fracción); acota playbackRate a [1 - rango, 1 + rango]. */
+  private pitchRange: number = 0.08;
+  /** Tolerancia de SYNC (fracción); un Esclavo puede superar el rango del fader hasta este límite. */
+  private syncRateLimit: number = 0.08;
+  /** Tamaño de búfer preferido; se aplica como latencyHint al crear el AudioContext. */
+  private bufferSize: number | null = null;
 
   private deckGraphs: Map<DeckId, DeckAudioGraph> = new Map();
   private deckTransports: Map<DeckId, DeckTransportInternal> = new Map();
@@ -115,7 +129,7 @@ export class AudioEngineService implements IAudioEngineService {
       throw new Error('Web Audio API no está disponible en este entorno.');
     }
 
-    this.audioContext = new AudioContextClass();
+    this.audioContext = this.createContext(AudioContextClass);
 
     // Configurar etapa Master (Gain -> Analyser / Limiter -> Destination)
     this.setupMasterStage(this.audioContext);
@@ -383,7 +397,7 @@ export class AudioEngineService implements IAudioEngineService {
 
   /**
    * Modifica el factor de velocidad de reproducción (playbackRate) del deck.
-   * Respeta el rango de pitch definido en el plan: ±8% (factor 0.92 a 1.08).
+   * Respeta el rango de pitch configurado (±8 % por defecto: factor 0.92 a 1.08).
    * Tiene prioridad absoluta sobre cualquier micro-slew activo, cancelándolo inmediatamente.
    */
   public setDeckPlaybackRate(deckId: DeckId, rate: number): void {
@@ -392,8 +406,9 @@ export class AudioEngineService implements IAudioEngineService {
     const transport = this.getDeckTransport(deckId);
     const graph = this.getDeckGraph(deckId);
 
-    // Limitar estrictamente al rango ±8%: 0.92 a 1.08
-    const clampedRate = Math.max(0.92, Math.min(1.08, rate));
+    // Limitar estrictamente al rango de pitch configurado
+    const limit = this.getRateLimit();
+    const clampedRate = Math.max(1 - limit, Math.min(1 + limit, rate));
     const previousEffective = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
 
     // Si está sonando, actualizar el offset acumulado antes del cambio de ritmo
@@ -429,14 +444,50 @@ export class AudioEngineService implements IAudioEngineService {
   }
 
   /**
+   * Fija el rango del fader de pitch (0.06, 0.08 o 0.16). Los decks que ya excedan
+   * el nuevo rango se recortan en su siguiente cambio de velocidad.
+   */
+  public setPitchRange(range: number): void {
+    if (SUPPORTED_PITCH_RANGES.includes(range)) this.pitchRange = range;
+  }
+
+  public getPitchRange(): number {
+    return this.pitchRange;
+  }
+
+  /** Fija la tolerancia de SYNC, acotada a ±4–20 %. */
+  public setSyncRateLimit(limit: number): void {
+    if (!Number.isFinite(limit)) return;
+    this.syncRateLimit = Math.max(MIN_SYNC_RATE_LIMIT, Math.min(MAX_SYNC_RATE_LIMIT, limit));
+  }
+
+  public getSyncRateLimit(): number {
+    return this.syncRateLimit;
+  }
+
+  /** Cota absoluta de playbackRate: la mayor entre el rango del fader y la tolerancia de SYNC. */
+  public getRateLimit(): number {
+    return Math.max(this.pitchRange, this.syncRateLimit);
+  }
+
+  /**
+   * Fija el tamaño de búfer preferido (256, 512 o 1024 muestras). Se aplica la próxima vez
+   * que se cree el AudioContext; un contexto activo conserva su latencia.
+   */
+  public setPreferredBufferSize(size: number): void {
+    if ([256, 512, 1024].includes(size)) this.bufferSize = size;
+  }
+
+  /**
    * Calcula la velocidad de reproducción efectiva combinando el pitch base y el bend momentáneo.
-   * Acota estrictamente al rango global de ±8% (0.92 a 1.08).
+   * Acota estrictamente al rango de pitch configurado (±8 % por defecto).
    */
   public calculateEffectiveRate(baseRate: number, bendAmount: number = 0): number {
     const safeBase = typeof baseRate === 'number' && !Number.isNaN(baseRate) ? baseRate : 1.0;
     const safeBend = typeof bendAmount === 'number' && !Number.isNaN(bendAmount) ? bendAmount : 0;
     const rawRate = safeBase * (1 + safeBend);
-    const clamped = Math.max(0.92, Math.min(1.08, rawRate));
+    const limit = this.getRateLimit();
+    const clamped = Math.max(1 - limit, Math.min(1 + limit, rawRate));
     return Number(clamped.toFixed(4));
   }
 
@@ -1143,13 +1194,20 @@ export class AudioEngineService implements IAudioEngineService {
     }
   }
 
+  /** Crea el AudioContext con el latencyHint derivado del tamaño de búfer preferido. */
+  private createContext(AudioContextClass: typeof AudioContext): AudioContext {
+    return this.bufferSize
+      ? new AudioContextClass({ latencyHint: this.bufferSize / PREFERRED_SAMPLE_RATE })
+      : new AudioContextClass();
+  }
+
   private ensureInitialized(): void {
     if (!this.audioContext || this.audioContext.state === 'closed') {
       const AudioContextClass = getAudioContextConstructor();
       if (!AudioContextClass) {
         throw new Error('Web Audio API no está disponible en este entorno.');
       }
-      this.audioContext = new AudioContextClass();
+      this.audioContext = this.createContext(AudioContextClass);
       this.setupMasterStage(this.audioContext);
 
       this.deckGraphs.set('A', this.buildDeckAudioGraph('A'));

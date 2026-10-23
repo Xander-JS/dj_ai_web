@@ -5,10 +5,10 @@ import { Button } from '../components/ui/Button';
 import { Card, CardBody } from '../components/ui/Card';
 import { Progress } from '../components/ui/Progress';
 import { createSessionAudioBufferResolver } from '../session/SessionAudioBufferResolver';
-import { SessionExportBusyError, sessionExportCoordinator } from '../session/SessionExportCoordinator';
+import { sessionExportCoordinator } from '../session/SessionExportCoordinator';
 import { createSessionDownload, initiateSessionDownload, releaseSessionDownload, type SessionDownloadDescriptor } from '../session/SessionExportDownload';
-import { SessionExportCanceledError, SessionExportError, type SessionExportPhase } from '../session/SessionExporter';
-import { isExportableSession } from '../session/SessionExportUiModel';
+import { SessionExportCanceledError, type SessionExportPhase } from '../session/SessionExporter';
+import { getOverallExportPercent, getSessionExportErrorKey, isExportableSession } from '../session/SessionExportUiModel';
 import { sessionRecorder, type RecordedSession } from '../session/SessionRecorder';
 import { notificationCenter } from '../services/notifications/notificationCenter';
 import { useDJStore } from '../store/useDJStore';
@@ -113,6 +113,11 @@ export const Sessions: React.FC = () => {
     resolverRef.current = resolver;
 
     try {
+      const describeError = (error: unknown): string => {
+        // Technical detail stays in the console; the user gets a localized explanation.
+        console.warn('[Sessions] Session export failed:', error);
+        return t(`sessions.errors.${getSessionExportErrorKey(error)}`);
+      };
       const handle = sessionExportCoordinator.startExclusive({
         session: finalizedSession,
         resolveBuffer: resolver.resolve,
@@ -122,9 +127,10 @@ export const Sessions: React.FC = () => {
       }, {
         onProgress: (progress) => {
           if (!mountedRef.current || operationId !== operationIdRef.current) return;
+          const overall = getOverallExportPercent(progress);
           setStatus(phaseStatus(progress.phase));
-          setProgressPercent(progress.percent);
-          setProgressIndeterminate(progress.indeterminate);
+          setProgressPercent(overall);
+          setProgressIndeterminate(overall === null);
         },
       });
       activeHandleRef.current = handle;
@@ -133,21 +139,32 @@ export const Sessions: React.FC = () => {
       void handle.result.then((result) => {
         notificationCenter.push({ type: 'success', messageKey: 'notifications.session_exported', params: { format: format.toUpperCase() } });
         if (!mountedRef.current || operationId !== operationIdRef.current) return;
-        const descriptor = createSessionDownload(result, finalizedSession);
+        let descriptor: SessionDownloadDescriptor;
+        try {
+          descriptor = createSessionDownload(result, finalizedSession);
+        } catch (error) {
+          console.warn('[Sessions] Could not prepare the exported file:', error);
+          setStatus('error');
+          setErrorMessage(t('sessions.errors.download'));
+          return;
+        }
         downloadRef.current = descriptor;
         setDownload(descriptor);
+        setProgressPercent(100);
         setStatus('completed');
         try {
           initiateSessionDownload(descriptor);
         } catch (error) {
-          setDownloadError(error instanceof Error ? error.message : String(error));
+          console.warn('[Sessions] Automatic download was blocked:', error);
+          setDownloadError(t('sessions.errors.download'));
         }
       }).catch((error: unknown) => {
+        const message = describeError(error);
         if (!(error instanceof SessionExportCanceledError)) {
           notificationCenter.push({
             type: 'error',
             messageKey: 'notifications.session_export_failed',
-            params: { error: error instanceof Error ? error.message : String(error) },
+            params: { error: message },
           });
         }
         if (!mountedRef.current || operationId !== operationIdRef.current) return;
@@ -156,7 +173,7 @@ export const Sessions: React.FC = () => {
           return;
         }
         setStatus('error');
-        setErrorMessage(error instanceof Error ? error.message : String(error));
+        setErrorMessage(message);
       }).finally(() => {
         void resolver.dispose();
         if (resolverRef.current === resolver) resolverRef.current = null;
@@ -167,13 +184,9 @@ export const Sessions: React.FC = () => {
       void resolver.dispose();
       resolverRef.current = null;
       setHasActiveHandle(false);
-      if (error instanceof SessionExportBusyError) {
-        setStatus('error');
-        setErrorMessage(t('sessions.exportBusy'));
-      } else {
-        setStatus('error');
-        setErrorMessage(error instanceof SessionExportError ? error.message : error instanceof Error ? error.message : String(error));
-      }
+      console.warn('[Sessions] Session export could not start:', error);
+      setStatus('error');
+      setErrorMessage(t(`sessions.errors.${getSessionExportErrorKey(error)}`));
     }
   };
 
@@ -288,7 +301,7 @@ export const Sessions: React.FC = () => {
               {status === 'completed' && <CheckCircle2 size={18} aria-hidden="true" />}
               {status === 'cancelled' && <XCircle size={18} aria-hidden="true" />}
               <strong>{statusText}</strong>
-              {status === 'encoding' && progressPercent !== null && <span>{Math.round(progressPercent)}%</span>}
+              {operationActive && progressPercent !== null && <span>{Math.round(progressPercent)}%</span>}
             </div>
             {operationActive && (
               <Progress
@@ -300,10 +313,10 @@ export const Sessions: React.FC = () => {
                 aria-valuetext={progressPercent === null ? statusText : `${Math.round(progressPercent)}%`}
               />
             )}
-            {status === 'rendering' && <p className="session-muted-note">{t('sessions.renderingNote')}</p>}
+            {status === 'rendering' && progressPercent === null && <p className="session-muted-note">{t('sessions.renderingNote')}</p>}
             {exportBusy && !hasActiveHandle && <p className="session-muted-note">{t('sessions.cancelRenderWait')}</p>}
             {status === 'error' && <p className="session-error-message" role="alert">{errorMessage}</p>}
-            {downloadError && <p className="session-error-message" role="alert">{t('sessions.downloadError', { message: downloadError })}</p>}
+            {downloadError && <p className="session-error-message" role="alert">{downloadError}</p>}
             {status === 'completed' && download && (
               <div className="session-download-result">
                 <span>{t('sessions.fileReady', { filename: download.filename })}</span>

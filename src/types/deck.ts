@@ -40,7 +40,8 @@ export type BarSyncStatus =
   | 'rejected_no_downbeat'
   | 'rejected_metric_mismatch'
   | 'rejected_limits'
-  | 'rejected_confidence';
+  | 'rejected_confidence'
+  | 'rejected_tempo_mismatch';
 
 export interface BarSyncState {
   status: BarSyncStatus;

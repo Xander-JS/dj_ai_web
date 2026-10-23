@@ -15,7 +15,9 @@
     "delete": "Eliminar",
     "mix": "Mezclar",
     "view_all": "Ver todo",
-    "tracks": "pistas"
+    "tracks": "pistas",
+    "save": "Guardar",
+    "play": "Reproducir"
   },
   "dashboard": {
     "welcome": "Bienvenido de nuevo",
@@ -135,15 +137,37 @@
     "import_success": "{{count}} pista(s) importada(s) correctamente.",
     "empty_local_title": "Sin canciones locales importadas",
     "empty_local_desc": "Importa archivos de música MP3 o WAV para comenzar a reproducirlos en SYSTEM DJ.",
-    "quota_exceeded": "Espacio de almacenamiento local excedido. La pista se conservará solo en memoria durante esta sesión."
+    "quota_exceeded": "Espacio de almacenamiento local excedido. La pista se conservará solo en memoria durante esta sesión.",
+    "selected_count": "{{count}} seleccionada(s)",
+    "playlist_target": "Elige una playlist",
+    "playlist_add_btn": "Añadir a playlist",
+    "playlist_none_available": "Crea una playlist en Playlists para añadir estas pistas.",
+    "playlist_add_success": "{{count}} pista(s) añadida(s) a \"{{name}}\".",
+    "playlist_add_none": "Las pistas seleccionadas ya están en \"{{name}}\".",
+    "playlist_add_error": "No se pudo actualizar la playlist: {{error}}"
   },
   "playlists": {
     "title": "Mis Playlists",
     "create": "Nueva Playlist",
-    "empty_title": "No hay playlist seleccionada",
-    "empty_desc": "Selecciona una playlist de la izquierda o crea una nueva.",
     "tracks_count": "{{count}} pistas",
-    "total_duration": "Duración total: {{time}}"
+    "total_duration": "Duración total: {{time}}",
+    "name_placeholder": "Nombre de la playlist",
+    "create_confirm": "Crear playlist",
+    "rename": "Renombrar playlist",
+    "delete": "Eliminar playlist",
+    "delete_confirm": "¿Eliminar \"{{name}}\"? Sus pistas permanecen en tu biblioteca.",
+    "add_track": "Añadir pista",
+    "select_track": "Selecciona una pista de tu biblioteca",
+    "all_tracks_added": "Todas las pistas de la biblioteca ya están en esta playlist",
+    "move_up": "Subir",
+    "move_down": "Bajar",
+    "remove_track": "Quitar de la playlist",
+    "no_playlists_title": "Aún no hay playlists",
+    "no_playlists_desc": "Crea una playlist y llénala con pistas de tu biblioteca local.",
+    "empty_playlist_title": "Esta playlist está vacía",
+    "empty_playlist_desc": "Añade pistas con el selector superior o desde la vista Biblioteca.",
+    "no_library_title": "Tu biblioteca está vacía",
+    "no_library_desc": "Importa archivos MP3 o WAV en la Biblioteca para añadirlos a playlists."
   },
   "player": {
     "play": "Reproducir",
@@ -281,6 +305,21 @@
     "curve_lin_short": "LIN",
     "curve_cut_short": "CUT",
     "mute": "MUTE"
+  },
+  "notifications": {
+    "unread": "{{count}} notificación(es) sin leer",
+    "clear": "Limpiar",
+    "empty_title": "Sin notificaciones",
+    "empty_desc": "Aquí aparecerán importaciones, análisis y exportaciones de sesión.",
+    "import_success": "{{count}} pista(s) importada(s) correctamente.",
+    "import_errors": "{{count}} archivo(s) no se pudieron importar: {{details}}",
+    "analysis_completed": "Análisis completado para \"{{title}}\".",
+    "analysis_failed": "Falló el análisis de \"{{title}}\". {{error}}",
+    "session_exported": "Sesión exportada como {{format}}.",
+    "session_export_failed": "Falló la exportación de la sesión: {{error}}",
+    "playlist_created": "Playlist \"{{name}}\" creada.",
+    "playlist_deleted": "Playlist \"{{name}}\" eliminada.",
+    "playlist_error": "Falló la operación de playlist: {{error}}"
   },
   "states": {
     "loading": "Cargando...",

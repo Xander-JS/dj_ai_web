@@ -15,7 +15,9 @@
     "delete": "Delete",
     "mix": "Mix",
     "view_all": "View All",
-    "tracks": "tracks"
+    "tracks": "tracks",
+    "save": "Save",
+    "play": "Play"
   },
   "dashboard": {
     "welcome": "Welcome back",
@@ -135,15 +137,37 @@
     "import_success": "{{count}} track(s) imported successfully.",
     "empty_local_title": "No local tracks imported",
     "empty_local_desc": "Import MP3 or WAV music files to start playing them in SYSTEM DJ.",
-    "quota_exceeded": "Storage space quota exceeded. Track will be preserved in memory for this session only."
+    "quota_exceeded": "Storage space quota exceeded. Track will be preserved in memory for this session only.",
+    "selected_count": "{{count}} selected",
+    "playlist_target": "Choose a playlist",
+    "playlist_add_btn": "Add to playlist",
+    "playlist_none_available": "Create a playlist in Playlists to add these tracks.",
+    "playlist_add_success": "{{count}} track(s) added to \"{{name}}\".",
+    "playlist_add_none": "The selected tracks are already in \"{{name}}\".",
+    "playlist_add_error": "Could not update the playlist: {{error}}"
   },
   "playlists": {
     "title": "My Playlists",
     "create": "New Playlist",
-    "empty_title": "No playlist selected",
-    "empty_desc": "Select a playlist from the left or create a new one.",
     "tracks_count": "{{count}} tracks",
-    "total_duration": "Total time: {{time}}"
+    "total_duration": "Total time: {{time}}",
+    "name_placeholder": "Playlist name",
+    "create_confirm": "Create playlist",
+    "rename": "Rename playlist",
+    "delete": "Delete playlist",
+    "delete_confirm": "Delete \"{{name}}\"? Its tracks stay in your library.",
+    "add_track": "Add track",
+    "select_track": "Select a track from your library",
+    "all_tracks_added": "All library tracks are already in this playlist",
+    "move_up": "Move up",
+    "move_down": "Move down",
+    "remove_track": "Remove from playlist",
+    "no_playlists_title": "No playlists yet",
+    "no_playlists_desc": "Create a playlist and fill it with tracks from your local library.",
+    "empty_playlist_title": "This playlist is empty",
+    "empty_playlist_desc": "Add tracks with the selector above or from the Library view.",
+    "no_library_title": "Your library is empty",
+    "no_library_desc": "Import MP3 or WAV files in the Library to add them to playlists."
   },
   "player": {
     "play": "Play",
@@ -281,6 +305,21 @@
     "curve_lin_short": "LIN",
     "curve_cut_short": "CUT",
     "mute": "MUTE"
+  },
+  "notifications": {
+    "unread": "{{count}} unread notification(s)",
+    "clear": "Clear",
+    "empty_title": "No notifications",
+    "empty_desc": "Imports, analyses and session exports will appear here.",
+    "import_success": "{{count}} track(s) imported successfully.",
+    "import_errors": "{{count}} file(s) could not be imported: {{details}}",
+    "analysis_completed": "Analysis completed for \"{{title}}\".",
+    "analysis_failed": "Analysis failed for \"{{title}}\". {{error}}",
+    "session_exported": "Session exported as {{format}}.",
+    "session_export_failed": "Session export failed: {{error}}",
+    "playlist_created": "Playlist \"{{name}}\" created.",
+    "playlist_deleted": "Playlist \"{{name}}\" deleted.",
+    "playlist_error": "Playlist operation failed: {{error}}"
   },
   "states": {
     "loading": "Loading...",

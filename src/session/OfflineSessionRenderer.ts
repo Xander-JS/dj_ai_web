@@ -249,7 +249,8 @@ function validateInitialState(state: SessionInitialState): void {
 }
 
 function validRate(value: number): boolean {
-  return Number.isFinite(value) && value >= 0.92 && value <= 1.08;
+  // Admite el rango de pitch máximo configurable (±16 %)
+  return Number.isFinite(value) && value >= 0.84 && value <= 1.16;
 }
 
 type MicroSlewEvent = Extract<SessionEvent, { type: 'deck.micro-slew' }>;

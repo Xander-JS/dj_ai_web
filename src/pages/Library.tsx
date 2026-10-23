@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   Search, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
-  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus
+  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus,
+  Target, WandSparkles, ArrowLeftRight
 } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -13,6 +15,9 @@ import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary } from '../services/localLibraryImport';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
+import { useSeedStore } from '../store/useSeedStore';
+import { buildPlaylistFromSeeds, MAX_SEED_TRACKS } from '../engine/playlistBuilder';
+import { notificationCenter } from '../services/notifications/notificationCenter';
 import { analysisSyncManager } from '../services/analysis';
 import { playlistService, addTracksToPlaylist } from '../services/playlists/playlistService';
 import { keyToCamelot } from '../audio/analysis/camelotMapper';
@@ -120,7 +125,10 @@ export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
 export const Library: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
   const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB, analyzeTrack } = useDJStore();
+  const { seedTrackIds, toggleSeed, removeSeed, swapSeeds, clearSeeds } = useSeedStore();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -323,6 +331,7 @@ export const Library: React.FC = () => {
       });
       // deleteTrack también la retira de las playlists; avisar a las vistas suscritas
       playlistService.notifyExternalChange();
+      removeSeed(track.id);
 
       await refreshLocalTracks();
       setFeedback({
@@ -412,6 +421,53 @@ export const Library: React.FC = () => {
 
     return true;
   });
+
+  // Pistas de referencia resueltas en orden (1.ª = inicio, 2.ª = cierre); se ignoran ids ya eliminados
+  const seedTracks = seedTrackIds
+    .map((id) => localTracks.find((tr) => tr.id === id))
+    .filter((tr): tr is Track => Boolean(tr));
+
+  const handleToggleSeed = (track: Track) => {
+    const result = toggleSeed(track.id);
+    if (result.action === 'replaced') {
+      const replaced = localTracks.find((tr) => tr.id === result.replacedId);
+      setFeedback({
+        type: 'warning',
+        text: t('seed.replaced', { max: MAX_SEED_TRACKS, removed: replaced?.title ?? '', added: track.title }),
+      });
+    }
+  };
+
+  // Modo referencia: secuencia la biblioteca desde las semillas y guarda el resultado como playlist
+  const handleGenerateFromSeeds = async () => {
+    if (seedTracks.length === 0 || isGenerating) return;
+    setIsGenerating(true);
+    try {
+      const result = buildPlaylistFromSeeds({ seedTracks, candidates: localTracks });
+      if (result.trackIds.length <= seedTracks.length) {
+        setFeedback({ type: 'warning', text: t('seed.no_compatible') });
+        return;
+      }
+      const name = seedTracks.length === 2
+        ? t('seed.generated_name_pair', { start: seedTracks[0].title, end: seedTracks[1].title })
+        : t('seed.generated_name', { title: seedTracks[0].title });
+      const created = await playlistService.create(name);
+      await playlistService.update(created.id, (p) => addTracksToPlaylist(p, result.trackIds));
+      notificationCenter.push({
+        type: 'success',
+        messageKey: 'notifications.seed_mix_generated',
+        params: { name: created.name, count: result.trackIds.length },
+      });
+      navigate('/playlists');
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: t('library.playlist_add_error', { error: err instanceof Error ? err.message : String(err) }),
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   // Añade las pistas seleccionadas (en el orden de la tabla) a la playlist elegida
   const handleAddSelectedToPlaylist = async () => {
@@ -555,6 +611,50 @@ export const Library: React.FC = () => {
         </div>
       </div>
 
+      {/* Modo referencia (semillas) */}
+      {localTracks.length > 0 && (
+        <div className="library-filters" style={{ alignItems: 'center' }} role="region" aria-label={t('seed.mode_title')}>
+          <Target size={16} aria-hidden="true" />
+          <strong>{t('seed.mode_title')}</strong>
+          {seedTracks.length === 0 ? (
+            <span className="text-muted">{t('seed.mode_hint', { max: MAX_SEED_TRACKS })}</span>
+          ) : (
+            seedTracks.map((seed, index) => (
+              <Badge key={seed.id} variant="secondary" title={seed.title}>
+                {seedTracks.length === 2
+                  ? t(index === 0 ? 'seed.start_label' : 'seed.end_label', { title: seed.title })
+                  : t('seed.single_label', { title: seed.title })}
+              </Badge>
+            ))
+          )}
+          {seedTracks.length === 2 && (
+            <IconButton
+              icon={<ArrowLeftRight size={14} />}
+              size="sm"
+              variant="ghost"
+              title={t('seed.swap')}
+              aria-label={t('seed.swap')}
+              onClick={swapSeeds}
+            />
+          )}
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={seedTracks.length === 0 || isGenerating}
+            title={seedTracks.length === 0 ? t('seed.generate_disabled') : undefined}
+            onClick={handleGenerateFromSeeds}
+          >
+            <WandSparkles size={14} />
+            {isGenerating ? t('seed.generating') : t('seed.generate')}
+          </Button>
+          {seedTracks.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearSeeds}>
+              {t('seed.clear')}
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Acción sobre la selección: añadir a playlist */}
       {selectedTracks.size > 0 && (
         <div className="library-filters" style={{ alignItems: 'center' }}>
@@ -610,6 +710,7 @@ export const Library: React.FC = () => {
               const isSelected = selectedTracks.has(track.id);
               const isLoadedInDeckA = deckA.track?.title === track.title;
               const isLoadedInDeckB = deckB.track?.title === track.title;
+              const seedIndex = seedTrackIds.indexOf(track.id);
 
               return (
                 <tr key={track.id} className={clsx(isSelected && 'selected', (isLoadedInDeckA || isLoadedInDeckB) && 'prepared')}>
@@ -624,6 +725,11 @@ export const Library: React.FC = () => {
                     <div className="track-title-container">
                       <span className="track-title">{track.title}</span>
                       <Badge variant="primary">{t('library.badge_local')}</Badge>
+                      {seedIndex !== -1 && (
+                        <Badge variant="warning" title={t('seed.badge_title')}>
+                          <Target size={11} aria-hidden="true" /> {t('seed.badge', { index: seedIndex + 1 })}
+                        </Badge>
+                      )}
                       {track.type === 'video' && <Badge variant="secondary">V</Badge>}
                       {isLoadedInDeckA && (
                         <span className="deck-prepared-tag" title={t('library.load_deck_a')}>
@@ -709,6 +815,15 @@ export const Library: React.FC = () => {
                         title={t('library.load_deck_b')}
                         aria-label={t('library.load_deck_b')}
                         onClick={() => handleLoadToDeck(track, 'B')}
+                      />
+                      <IconButton
+                        icon={<Target size={15} />}
+                        size="sm"
+                        variant={seedIndex !== -1 ? 'primary' : 'ghost'}
+                        aria-pressed={seedIndex !== -1}
+                        title={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
+                        aria-label={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
+                        onClick={() => handleToggleSeed(track.rawLocalTrack)}
                       />
                       {track.status === 'analyzing' ? (
                         <IconButton 

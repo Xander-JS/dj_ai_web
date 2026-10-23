@@ -11,10 +11,12 @@ import { Card, CardBody } from '../components/ui/Card';
 import { StateView } from '../components/ui/StateView';
 import { notificationCenter } from '../services/notifications/notificationCenter';
 import { connectAnalysisNotifications } from '../services/notifications/analysisNotifications';
+import { useAuth } from '../context/AuthContext';
 
 export const Header: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const notifications = useSyncExternalStore(notificationCenter.subscribe, notificationCenter.getSnapshot);
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -131,7 +133,12 @@ export const Header: React.FC = () => {
           onClick={() => navigate('/profile')}
           title={t('navigation.profile')}
         >
-          <Avatar fallback="DJ" size="sm" />
+          <Avatar
+            size="sm"
+            src={profile?.avatar_url ?? undefined}
+            alt={profile?.full_name || user?.email || ''}
+            fallback={user ? undefined : 'DJ'}
+          />
         </div>
       </div>
     </header>

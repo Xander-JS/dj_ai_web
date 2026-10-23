@@ -88,6 +88,35 @@ describe('SessionRecorder — versioned event contract', () => {
     assert.equal(recorder.getSession()!.events[0].state.mixer.channels.B.eqDb.high, 4);
   });
 
+  test('anchors session time zero at the initial-state snapshot even when capturing it takes time', () => {
+    monotonicMs = 100;
+    const recorder = createRecorder();
+    recorder.start();
+    monotonicMs = 100.7;
+    const state = {
+      decks: {
+        A: { track: null, playbackState: 'stopped' as const, trackPositionSeconds: 0, effectivePlaybackRate: 1 },
+        B: { track: null, playbackState: 'stopped' as const, trackPositionSeconds: 0, effectivePlaybackRate: 1 },
+      },
+      mixer: {
+        channels: {
+          A: { gainLinear: 1, volumeLinear: 1, eqDb: { high: 0, mid: 0, low: 0 }, filter: 0 },
+          B: { gainLinear: 1, volumeLinear: 1, eqDb: { high: 0, mid: 0, low: 0 }, filter: 0 },
+        },
+        crossfaderPosition: 0.5,
+        crossfaderCurve: 'linear' as const,
+        masterGainLinear: 1,
+      },
+    };
+    recorder.record({ type: 'session.initial-state', state });
+    monotonicMs = 350.7;
+    recorder.record({ type: 'mixer.master-gain', gainLinear: 0.5 });
+    monotonicMs = 1100.7;
+    const session = recorder.finalize()!;
+    assert.deepEqual(session.events.map((event) => event.sessionTimeMs), [0, 250]);
+    assert.equal(session.durationMs, 1000);
+  });
+
   test('does not record when capture is inactive', () => {
     const recorder = createRecorder();
     assert.deepEqual(

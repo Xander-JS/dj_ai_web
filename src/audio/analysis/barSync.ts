@@ -26,11 +26,69 @@ import { assessTempoCompatibility } from './tempoCompatibility.ts';
 /** Tolerancia temporal por defecto para considerar que el Slave ya está alineado en el compás (5 ms). */
 export const DEFAULT_BAR_SYNC_TOLERANCE_SEC = 0.005;
 
+/**
+ * Máxima diferencia relativa de BPM efectivo entre Master y Slave para lanzar BAR SYNC.
+ * Con tempos distintos la fase alineada deriva en cada compás (a 125 BPM, un 0,5 % son
+ * ~10 ms por compás: doble golpe audible en pocos compases). 2e-4 admite el redondeo de
+ * SYNC (rate a 4 decimales) y deriva < 0,4 ms por compás.
+ */
+export const BAR_SYNC_TEMPO_TOLERANCE = 2e-4;
+
 /** Límite inferior de BPM efectivo admisible para el cálculo de compás. */
 export const MIN_EFFECTIVE_BPM = 20.0;
 
 /** Límite superior de BPM efectivo admisible para el cálculo de compás. */
 export const MAX_EFFECTIVE_BPM = 300.0;
+
+export interface BarPhaseProjectionInput {
+  /** Posición del Master (s de buffer) en el instante para el que se proyecta. */
+  readonly masterPosition: number;
+  readonly masterDownbeat: number;
+  readonly masterBarPeriodSec: number;
+  readonly slaveDownbeat: number;
+  readonly slaveBarPeriodSec: number;
+  /** Posición del Slave cerca de la cual se elige el compás equivalente. */
+  readonly slaveReferencePosition: number;
+  readonly slaveDuration: number;
+}
+
+export interface BarPhaseProjection {
+  /** Fase normalizada del Master en su compás, en [0, 1). */
+  readonly masterBarPhase: number;
+  /** Desfase del Master dentro del compás actual, en [0, T_bar,M). */
+  readonly masterBarOffsetSec: number;
+  readonly barIndex: number;
+  /** Posición exacta (sin redondeo) del Slave con la misma fase de compás. */
+  readonly position: number;
+}
+
+/**
+ * Proyección de fase de compás pura y sin redondeos: t_S = D_S + (k + φ_M) · T_bar,S,
+ * con φ_M = ((t_M − D_M) mod T_bar,M) / T_bar,M y k el compás más próximo a la referencia.
+ * Devuelve null si ningún compás cabe en [0, duración] del Slave.
+ */
+export function projectBarPhasePosition(input: BarPhaseProjectionInput): BarPhaseProjection | null {
+  const {
+    masterPosition, masterDownbeat, masterBarPeriodSec,
+    slaveDownbeat, slaveBarPeriodSec, slaveReferencePosition, slaveDuration,
+  } = input;
+  const deltaMasterSec = masterPosition - masterDownbeat;
+  const masterBarOffsetSec = ((deltaMasterSec % masterBarPeriodSec) + masterBarPeriodSec) % masterBarPeriodSec;
+  const masterBarPhase = masterBarOffsetSec / masterBarPeriodSec;
+
+  const minBarIndex = Math.ceil(-slaveDownbeat / slaveBarPeriodSec - masterBarPhase);
+  const maxBarIndex = Math.floor((slaveDuration - slaveDownbeat) / slaveBarPeriodSec - masterBarPhase);
+  if (minBarIndex > maxBarIndex) return null;
+
+  const rawIndex = Math.round((slaveReferencePosition - slaveDownbeat) / slaveBarPeriodSec - masterBarPhase);
+  const barIndex = Math.max(minBarIndex, Math.min(maxBarIndex, rawIndex));
+  return {
+    masterBarPhase,
+    masterBarOffsetSec,
+    barIndex,
+    position: slaveDownbeat + (barIndex + masterBarPhase) * slaveBarPeriodSec,
+  };
+}
 
 /**
  * Parámetros de entrada para el cálculo de compás de un deck individual.
@@ -281,25 +339,9 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
     return reject('rejected_limits', 'Periodo de compás del Master inválido');
   }
 
-  // Desplazamiento temporal respecto al tiempo 1 confirmado del Master: Δt_M = currentTime - D_M
-  const deltaMasterSec = master.currentTime - masterConfirmation.position;
-
   if (masterConfirmation.position > master.duration || slaveConfirmation.position > slave.duration) {
     return reject('rejected_limits', 'El downbeat confirmado queda fuera de la duración de su pista');
   }
-
-  // Offset en segundos dentro del compás actual mediante módulo euclídeo continuo:
-  // τ_M = ((Δt_M % T_bar,M) + T_bar,M) % T_bar,M ∈ [0, T_bar,M)
-  const masterBarOffsetSec = ((deltaMasterSec % masterBarPeriodSec) + masterBarPeriodSec) % masterBarPeriodSec;
-
-  // Fase normalizada del Master en el compás: φ_M = τ_M / T_bar,M ∈ [0.0, 1.0)
-  const masterBarPhase = masterBarOffsetSec / masterBarPeriodSec;
-
-  // Tiempo en segundos hasta el siguiente tiempo 1 (Downbeat) del Master:
-  // Si está exactamente en el tiempo 1 (τ_M === 0), la distancia al siguiente es 0 (o T_bar)
-  const timeToNextMasterDownbeatSec = masterBarOffsetSec === 0
-    ? 0
-    : Number((masterBarPeriodSec - masterBarOffsetSec).toFixed(3));
 
   // -------------------------------------------------------------------------
   // 6. Modelo Matemático y Proyección de Frontera de Compás en el Slave
@@ -314,25 +356,32 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
 
   const slaveAnchorDownbeat = slaveConfirmation.position;
 
-  // Rango de índices enteros de compás válidos dentro de la duración del archivo Slave [0, duration]:
-  // 0 <= D_S + (k + φ_M) * T_bar,S <= duration_S
-  const minBarIndex = Math.ceil(-slaveAnchorDownbeat / slaveBarPeriodSec - masterBarPhase);
-  const maxBarIndex = Math.floor((slave.duration - slaveAnchorDownbeat) / slaveBarPeriodSec - masterBarPhase);
+  // La posición equivalente en Slave preserva la fase normalizada del Master:
+  // t_S = D_S + (k + φ_M) * T_bar,S. Elegimos el k más próximo al cabezal actual.
+  const projection = projectBarPhasePosition({
+    masterPosition: master.currentTime,
+    masterDownbeat: masterConfirmation.position,
+    masterBarPeriodSec,
+    slaveDownbeat: slaveAnchorDownbeat,
+    slaveBarPeriodSec,
+    slaveReferencePosition: slave.currentTime,
+    slaveDuration: slave.duration,
+  });
 
-  if (minBarIndex > maxBarIndex) {
+  if (!projection) {
     return reject(
       'rejected_limits',
       `No existe ninguna frontera de compás válida dentro de la duración del Slave (${slave.duration}s)`
     );
   }
 
-  // La posición equivalente en Slave preserva la fase normalizada del Master:
-  // t_S = D_S + (k + φ_M) * T_bar,S. Elegimos el k más próximo al cabezal actual.
-  const rawTargetIndex = Math.round(
-    (slave.currentTime - slaveAnchorDownbeat) / slaveBarPeriodSec - masterBarPhase
-  );
-  const targetBarIndex = Math.max(minBarIndex, Math.min(maxBarIndex, rawTargetIndex));
-  const exactTargetPosition = slaveAnchorDownbeat + (targetBarIndex + masterBarPhase) * slaveBarPeriodSec;
+  const { masterBarPhase, masterBarOffsetSec, barIndex: targetBarIndex, position: exactTargetPosition } = projection;
+
+  // Tiempo en segundos hasta el siguiente tiempo 1 (Downbeat) del Master:
+  // Si está exactamente en el tiempo 1 (τ_M === 0), la distancia al siguiente es 0 (o T_bar)
+  const timeToNextMasterDownbeatSec = masterBarOffsetSec === 0
+    ? 0
+    : Number((masterBarPeriodSec - masterBarOffsetSec).toFixed(3));
   const targetPosition = Number(exactTargetPosition.toFixed(3));
 
   if (!isValidNumber(targetPosition) || targetPosition < 0 || targetPosition > slave.duration) {

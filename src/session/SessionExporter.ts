@@ -267,6 +267,8 @@ export function startSessionExport(
 
   const emit = (nextPhase: SessionExportPhase, percent: number | null, indeterminate: boolean): void => {
     if (canceled || settled) return;
+    // Percent is measured per phase, so it only has to be monotonic within one phase.
+    if (nextPhase !== phase) lastMeasuredPercent = 0;
     let bounded: number | null = null;
     if (percent !== null) {
       bounded = Math.max(lastMeasuredPercent, Math.min(100, Math.max(0, percent)));
@@ -314,6 +316,10 @@ export function startSessionExport(
     const renderResult = await render(request.session, request.resolveBuffer, {
       durationMs: request.render?.durationMs,
       sampleRate: request.render?.sampleRate,
+      onProgress: (fraction) => {
+        if (!Number.isFinite(fraction)) return;
+        emit('rendering', Math.max(0, Math.min(1, fraction)) * 100, false);
+      },
     });
     if (canceled) throw new SessionExportCanceledError('rendering');
 

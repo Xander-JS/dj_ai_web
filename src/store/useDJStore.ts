@@ -11,10 +11,11 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../types/track.ts';
+import type { BeatUnit, Track, TrackAnalysis, HotCue, TrackDownbeat } from '../types/track.ts';
 import type { DeckId, PhaseAlignmentState, BarSyncState, BarSyncStatus } from '../types/deck.ts';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
+import { PHASE_LOCK_LEAD_SECONDS } from '../audio/AudioEngineService.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
 import { analysisSyncManager } from '../services/analysis/index.ts';
 import {
@@ -30,7 +31,9 @@ import {
 } from '../audio/analysis/phaseAlignment.ts';
 import { assessTempoCompatibility } from '../audio/analysis/tempoCompatibility.ts';
 import {
+  BAR_SYNC_TEMPO_TOLERANCE,
   calculateBarSyncPlan,
+  projectBarPhasePosition,
   type BarSyncPlanResult,
   type BarSyncPlanInput,
 } from '../audio/analysis/barSync.ts';
@@ -45,6 +48,8 @@ import { normalizeTrackAnalysis } from '../utils/trackAnalysis.ts';
 export interface ConfirmDownbeatParams {
   position: number;
   beatsPerBar: number;
+  /** Note value of the beat (4 = quarter, 8 = eighth). Confirmed manually alongside the downbeat. */
+  beatUnit?: BeatUnit;
   suggestedPosition?: number | null;
   confirmedAt?: number;
 }
@@ -381,8 +386,13 @@ class DJStore {
       } catch {
         // Retain the store rate if engine telemetry is unavailable.
       }
+      // Library metadata may carry duration 0 when import-time decoding failed;
+      // the loaded deck's decoded duration is authoritative.
+      const track = deck.track
+        ? { ...toSessionTrackReference(deck.track), ...(deck.duration > 0 ? { durationSeconds: deck.duration } : {}) }
+        : null;
       return {
-        track: deck.track ? toSessionTrackReference(deck.track) : null,
+        track,
         playbackState: deck.playbackState === 'playing' || deck.playbackState === 'paused'
           ? deck.playbackState
           : 'stopped',
@@ -829,8 +839,16 @@ class DJStore {
 
     try {
       await audioEngine.resume();
-      audioEngine.playDeck(deckId, deckState.currentTime);
+      // Un Slave preparado con BAR SYNC arranca en fase con el Master en el instante real
+      // de lanzamiento; la posición preparada solo elige el compás.
+      const isBarSyncPrepared = deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned';
+      const phaseLockedOffset = isBarSyncPrepared ? this.launchBarSyncPhaseLocked(deckId, deckState) : null;
+      if (phaseLockedOffset === null) {
+        audioEngine.playDeck(deckId, deckState.currentTime);
+      }
+      const launchPosition = phaseLockedOffset ?? deckState.currentTime;
       const updates: Partial<DeckStoreState> = { playbackState: 'playing' };
+      if (phaseLockedOffset !== null) updates.currentTime = phaseLockedOffset;
       if (deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned') {
         updates.barSync = {
           status: 'completed',
@@ -847,7 +865,11 @@ class DJStore {
       this.recordSessionEvent({
         type: 'transport.play',
         deckId,
-        trackPositionSeconds: deckState.currentTime,
+        // A phase-locked launch becomes audible PHASE_LOCK_LEAD later; record the position the
+        // deck would have now so the offline replay keeps the same phase.
+        trackPositionSeconds: phaseLockedOffset !== null
+          ? Math.max(0, launchPosition - PHASE_LOCK_LEAD_SECONDS * audioEngine.getDeckPlaybackRate(deckId))
+          : launchPosition,
         effectivePlaybackRate: audioEngine.getDeckPlaybackRate(deckId),
       });
     } catch (err) {
@@ -1980,6 +2002,15 @@ class DJStore {
       return reject(plan.status, plan.reason ?? 'Cálculo de BAR SYNC rechazado');
     }
 
+    // 7b. La fase solo se mantiene con tempos iguales: sin SYNC, el compás alineado deriva
+    // desde el primer golpe y se oye como doble bombo. Se exige BPM efectivo igualado.
+    if (Math.abs(slaveEffectiveBpm / masterEffectiveBpm - 1) > BAR_SYNC_TEMPO_TOLERANCE) {
+      return reject(
+        'rejected_tempo_mismatch',
+        `El BPM efectivo del Slave (${slaveEffectiveBpm.toFixed(2)}) no coincide con el del Master (${masterEffectiveBpm.toFixed(2)}). Activa SYNC antes de BAR SYNC.`
+      );
+    }
+
     // 8. Verificación anti-carrera (comprobar que la pista, token y contentHash no hayan cambiado)
     const currentSlaveSelection = this.deckSelections[slaveDeckId];
     const currentSlaveState = this.getDeckState(slaveDeckId);
@@ -2064,6 +2095,45 @@ class DJStore {
     return plan;
   }
 
+  /**
+   * Starts a BAR SYNC-prepared slave in phase with the playing master. Returns the start
+   * offset, or null when a phase-locked launch is not possible (plain PLAY then applies).
+   */
+  private launchBarSyncPhaseLocked(slaveDeckId: DeckId, slaveState: DeckStoreState): number | null {
+    const masterDeckId: DeckId = slaveDeckId === 'A' ? 'B' : 'A';
+    const masterState = this.getDeckState(masterDeckId);
+    const masterTrack = masterState.track;
+    const slaveTrack = slaveState.track;
+    if (masterState.playbackState !== 'playing' || !masterTrack || !slaveTrack) return null;
+
+    const masterConfirmation = masterTrack.downbeat?.confirmation;
+    const slaveConfirmation = slaveTrack.downbeat?.confirmation;
+    const masterBpm = getAnalyzedBpm(masterTrack);
+    const slaveBpm = getAnalyzedBpm(slaveTrack);
+    if (!masterConfirmation || !slaveConfirmation || !masterBpm || !slaveBpm) return null;
+    if (masterConfirmation.beatsPerBar !== slaveConfirmation.beatsPerBar) return null;
+
+    // Exact bar periods (no rounding) from the rates the engine is actually playing.
+    const beatsPerBar = masterConfirmation.beatsPerBar;
+    const masterBarPeriodSec = (beatsPerBar * 60) / (masterBpm * audioEngine.getDeckPlaybackRate(masterDeckId));
+    const slaveBarPeriodSec = (beatsPerBar * 60) / (slaveBpm * audioEngine.getDeckPlaybackRate(slaveDeckId));
+    if (!Number.isFinite(masterBarPeriodSec) || !Number.isFinite(slaveBarPeriodSec)) return null;
+
+    const referencePosition = slaveState.barSync?.preparedPosition ?? slaveState.currentTime;
+    return audioEngine.playDeckPhaseLocked(slaveDeckId, masterDeckId, (masterPosition) => {
+      const projection = projectBarPhasePosition({
+        masterPosition,
+        masterDownbeat: masterConfirmation.position,
+        masterBarPeriodSec,
+        slaveDownbeat: slaveConfirmation.position,
+        slaveBarPeriodSec,
+        slaveReferencePosition: referencePosition,
+        slaveDuration: slaveState.duration,
+      });
+      return projection ? projection.position : null;
+    });
+  }
+
   public prepareBarSyncDeckA(toleranceSec?: number): BarSyncPlanResult {
     return this.prepareBarSync('A', toleranceSec);
   }
@@ -2115,10 +2185,12 @@ class DJStore {
     let beatsPerBar: number;
     let suggestedPositionOverride: number | null | undefined;
     let confirmedAtOverride: number | undefined;
+    let beatUnit: BeatUnit | undefined;
 
     if (typeof positionOrParams === 'object' && positionOrParams !== null) {
       position = positionOrParams.position;
       beatsPerBar = positionOrParams.beatsPerBar;
+      beatUnit = positionOrParams.beatUnit;
       suggestedPositionOverride = positionOrParams.suggestedPosition;
       confirmedAtOverride = positionOrParams.confirmedAt;
     } else {
@@ -2182,7 +2254,26 @@ class DJStore {
       return false;
     }
 
-    return this.applyTrackDownbeatUpdate(deckId, preTrackId, preToken, preContentHash, newDownbeat);
+    const downbeatApplied = await this.applyTrackDownbeatUpdate(deckId, preTrackId, preToken, preContentHash, newDownbeat);
+    if (!downbeatApplied || beatUnit === undefined) return downbeatApplied;
+    // BAR SYNC needs the note value too; without it a confirmed downbeat is still rejected.
+    return this.applyManualBeatUnit(deckId, preTrackId, { value: beatUnit, status: 'confirmed', source: 'manual' });
+  }
+
+  /** Persists (or with null, removes) the manually confirmed beat unit of the track loaded in the deck. */
+  private async applyManualBeatUnit(
+    deckId: DeckId,
+    trackId: string,
+    beatUnit: Extract<TrackAnalysis['beatUnit'], { status: 'confirmed' }> | null,
+  ): Promise<boolean> {
+    const track = this.getDeckState(deckId).track;
+    if (!track || track.id !== trackId) return false;
+    const current = track.analysis?.beatUnit;
+    if (beatUnit === null && current?.status !== 'confirmed') return true;
+    const analysis: TrackAnalysis = { ...track.analysis };
+    if (beatUnit) analysis.beatUnit = beatUnit;
+    else delete analysis.beatUnit;
+    return this.updateTrackAnalysis(trackId, analysis);
   }
 
   public confirmDownbeatDeckA(
@@ -2240,7 +2331,10 @@ class DJStore {
 
     const clearedDownbeat: TrackDownbeat = createSuggestedDownbeat(preTrack.downbeat?.suggestedPosition);
 
-    return this.applyTrackDownbeatUpdate(deckId, preTrackId, preToken, preContentHash, clearedDownbeat);
+    const cleared = await this.applyTrackDownbeatUpdate(deckId, preTrackId, preToken, preContentHash, clearedDownbeat);
+    if (!cleared) return false;
+    // The meter is confirmed as a unit (downbeat + beats per bar + note value); clear it as a unit.
+    return this.applyManualBeatUnit(deckId, preTrackId, null);
   }
 
   public clearDownbeatDeckA(): Promise<boolean> {

@@ -10,6 +10,7 @@ import { createSessionDownload, initiateSessionDownload, releaseSessionDownload,
 import { SessionExportCanceledError, SessionExportError, type SessionExportPhase } from '../session/SessionExporter';
 import { isExportableSession } from '../session/SessionExportUiModel';
 import { sessionRecorder, type RecordedSession } from '../session/SessionRecorder';
+import { notificationCenter } from '../services/notifications/notificationCenter';
 import { useDJStore } from '../store/useDJStore';
 import './Sessions.css';
 
@@ -130,6 +131,7 @@ export const Sessions: React.FC = () => {
       setHasActiveHandle(true);
 
       void handle.result.then((result) => {
+        notificationCenter.push({ type: 'success', messageKey: 'notifications.session_exported', params: { format: format.toUpperCase() } });
         if (!mountedRef.current || operationId !== operationIdRef.current) return;
         const descriptor = createSessionDownload(result, finalizedSession);
         downloadRef.current = descriptor;
@@ -141,6 +143,13 @@ export const Sessions: React.FC = () => {
           setDownloadError(error instanceof Error ? error.message : String(error));
         }
       }).catch((error: unknown) => {
+        if (!(error instanceof SessionExportCanceledError)) {
+          notificationCenter.push({
+            type: 'error',
+            messageKey: 'notifications.session_export_failed',
+            params: { error: error instanceof Error ? error.message : String(error) },
+          });
+        }
         if (!mountedRef.current || operationId !== operationIdRef.current) return;
         if (error instanceof SessionExportCanceledError) {
           setStatus('cancelled');

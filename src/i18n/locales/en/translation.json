@@ -17,7 +17,8 @@
     "view_all": "View All",
     "tracks": "tracks",
     "save": "Save",
-    "play": "Play"
+    "play": "Play",
+    "close": "Close"
   },
   "dashboard": {
     "welcome": "Welcome back",
@@ -377,7 +378,17 @@
     "sessions": "Recorded Sessions",
     "achievements": "Achievements",
     "history": "Activity History",
-    "edit": "Edit Profile"
+    "edit": "Edit Profile",
+    "sign_in_required_title": "Sign in to see your profile",
+    "sign_in_required_desc": "Your account stores your name and avatar. Audio always stays on your device.",
+    "change_avatar": "Change photo",
+    "uploading": "Uploading...",
+    "avatar_updated": "Profile photo updated.",
+    "avatar_error": "The photo could not be uploaded.",
+    "avatar_invalid": "Select a JPG, PNG or WebP image of up to 2 MB.",
+    "no_name": "No name",
+    "no_username": "No username",
+    "audio_local_badge": "Local-only audio"
   },
   "sessions": {
     "eyebrow": "Session tools",
@@ -462,5 +473,62 @@
     "no_compatible": "No compatible tracks found. Analyze more tracks (BPM and key) and try again.",
     "generated_name": "Mix from {{title}}",
     "generated_name_pair": "Mix {{start}} → {{end}}"
+  },
+  "landing": {
+    "badge": "100% local audio on your device",
+    "title": "Mix like a pro, right in your browser",
+    "subtitle": "SYSTEM DJ analyzes BPM and key of your local music, syncs two decks and suggests the next track with AI so your sessions keep flowing.",
+    "privacy_note": "Your account only stores your identity and profile. Audio files never leave your computer.",
+    "features_title": "Main features",
+    "features": {
+      "analysis_title": "Music analysis",
+      "analysis_desc": "BPM, Camelot key, energy and beatgrid detection on your local files.",
+      "sync_title": "Two synced decks",
+      "sync_desc": "SYNC, ALIGN and BAR SYNC, hot cues, pitch bend and a crossfader with configurable curve.",
+      "ai_title": "AI recommendations",
+      "ai_desc": "Next-track suggestions based on the harmony, tempo and energy of your mix.",
+      "export_title": "Record and export",
+      "export_desc": "Record your sessions and export them as WAV or MP3 without relying on servers."
+    }
+  },
+  "auth": {
+    "login_title": "Sign in",
+    "signup_title": "Create account",
+    "forgot_title": "Reset password",
+    "email": "Email",
+    "password": "Password",
+    "confirm_password": "Confirm password",
+    "sign_in": "Sign in",
+    "sign_up": "Sign up",
+    "sign_out": "Sign out",
+    "submitting": "Sending...",
+    "forgot_link": "Forgot your password?",
+    "to_signup": "Don't have an account? Sign up",
+    "to_login": "Back to sign in",
+    "forgot_desc": "Enter your email and we'll send you a link to reset your password.",
+    "send_reset": "Send link",
+    "reset_sent": "If an account exists for {{email}}, you will receive an email with the link.",
+    "signup_confirm_sent": "Account created. Check {{email}} to confirm your address before signing in.",
+    "not_configured_title": "Accounts unavailable",
+    "not_configured_desc": "Supabase is not configured in this environment. You can keep mixing without an account.",
+    "errors": {
+      "generic": "The operation could not be completed. Please try again.",
+      "invalid_credentials": "Incorrect email or password.",
+      "email_not_confirmed": "Confirm your email before signing in.",
+      "user_already_exists": "An account with this email already exists.",
+      "weak_password": "The password is too weak.",
+      "over_email_send_rate_limit": "Too many emails sent. Wait a few minutes.",
+      "password_short": "Password must be at least {{count}} characters.",
+      "password_mismatch": "Passwords do not match.",
+      "link_expired": "The recovery link has expired or was already used. Request a new one.",
+      "same_password": "The new password must be different from the old one."
+    },
+    "update_password_title": "New password",
+    "update_password_desc": "Choose a new password for your account.",
+    "new_password": "New password",
+    "confirm_new_password": "Confirm new password",
+    "save_password": "Save password",
+    "password_updated": "Your password has been updated successfully.",
+    "link_expired_title": "Link expired"
   }
 }

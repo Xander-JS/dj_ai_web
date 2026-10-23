@@ -17,7 +17,8 @@
     "view_all": "Ver todo",
     "tracks": "pistas",
     "save": "Guardar",
-    "play": "Reproducir"
+    "play": "Reproducir",
+    "close": "Cerrar"
   },
   "dashboard": {
     "welcome": "Bienvenido de nuevo",
@@ -377,7 +378,17 @@
     "sessions": "Sesiones grabadas",
     "achievements": "Logros",
     "history": "Historial de actividad",
-    "edit": "Editar perfil"
+    "edit": "Editar perfil",
+    "sign_in_required_title": "Inicia sesión para ver tu perfil",
+    "sign_in_required_desc": "Tu cuenta guarda tu nombre y avatar. El audio permanece siempre en tu dispositivo.",
+    "change_avatar": "Cambiar foto",
+    "uploading": "Subiendo...",
+    "avatar_updated": "Foto de perfil actualizada.",
+    "avatar_error": "No se pudo subir la foto.",
+    "avatar_invalid": "Selecciona una imagen JPG, PNG o WebP de máximo 2 MB.",
+    "no_name": "Sin nombre",
+    "no_username": "Sin nombre de usuario",
+    "audio_local_badge": "Audio solo local"
   },
   "sessions": {
     "eyebrow": "Herramientas de sesión",
@@ -462,5 +473,62 @@
     "no_compatible": "No se encontraron pistas compatibles. Analiza más pistas (BPM y tonalidad) e inténtalo de nuevo.",
     "generated_name": "Mezcla desde {{title}}",
     "generated_name_pair": "Mezcla {{start}} → {{end}}"
+  },
+  "landing": {
+    "badge": "Audio 100% local en tu dispositivo",
+    "title": "Mezcla como un profesional, directamente en el navegador",
+    "subtitle": "SYSTEM DJ analiza BPM y tonalidad de tu música local, sincroniza dos decks y te sugiere la siguiente pista con IA para que tus sesiones fluyan.",
+    "privacy_note": "Tu cuenta solo guarda tu identidad y perfil. Los archivos de audio nunca salen de tu equipo.",
+    "features_title": "Funciones principales",
+    "features": {
+      "analysis_title": "Análisis musical",
+      "analysis_desc": "Detección de BPM, tonalidad Camelot, energía y beatgrid sobre tus archivos locales.",
+      "sync_title": "Dos decks sincronizados",
+      "sync_desc": "SYNC, ALIGN y BAR SYNC, hot cues, pitch bend y crossfader con curva configurable.",
+      "ai_title": "Recomendaciones con IA",
+      "ai_desc": "Sugerencias de la siguiente pista según armonía, tempo y energía de la mezcla.",
+      "export_title": "Graba y exporta",
+      "export_desc": "Graba tus sesiones y expórtalas en WAV o MP3 sin depender de servidores."
+    }
+  },
+  "auth": {
+    "login_title": "Iniciar sesión",
+    "signup_title": "Crear cuenta",
+    "forgot_title": "Recuperar contraseña",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "confirm_password": "Confirmar contraseña",
+    "sign_in": "Iniciar sesión",
+    "sign_up": "Registrarse",
+    "sign_out": "Cerrar sesión",
+    "submitting": "Enviando...",
+    "forgot_link": "¿Olvidaste tu contraseña?",
+    "to_signup": "¿No tienes cuenta? Regístrate",
+    "to_login": "Volver a iniciar sesión",
+    "forgot_desc": "Introduce tu correo y te enviaremos un enlace para restablecer la contraseña.",
+    "send_reset": "Enviar enlace",
+    "reset_sent": "Si existe una cuenta para {{email}}, recibirás un correo con el enlace.",
+    "signup_confirm_sent": "Cuenta creada. Revisa {{email}} para confirmar tu correo antes de iniciar sesión.",
+    "not_configured_title": "Cuentas no disponibles",
+    "not_configured_desc": "Supabase no está configurado en este entorno. Puedes seguir mezclando sin cuenta.",
+    "errors": {
+      "generic": "No se pudo completar la operación. Inténtalo de nuevo.",
+      "invalid_credentials": "Correo o contraseña incorrectos.",
+      "email_not_confirmed": "Confirma tu correo antes de iniciar sesión.",
+      "user_already_exists": "Ya existe una cuenta con este correo.",
+      "weak_password": "La contraseña es demasiado débil.",
+      "over_email_send_rate_limit": "Demasiados correos enviados. Espera unos minutos.",
+      "password_short": "La contraseña debe tener al menos {{count}} caracteres.",
+      "password_mismatch": "Las contraseñas no coinciden.",
+      "link_expired": "El enlace de recuperación ha caducado o ya se usó. Solicita uno nuevo.",
+      "same_password": "La nueva contraseña debe ser distinta de la anterior."
+    },
+    "update_password_title": "Nueva contraseña",
+    "update_password_desc": "Elige una nueva contraseña para tu cuenta.",
+    "new_password": "Nueva contraseña",
+    "confirm_new_password": "Confirmar nueva contraseña",
+    "save_password": "Guardar contraseña",
+    "password_updated": "Tu contraseña se ha actualizado correctamente.",
+    "link_expired_title": "Enlace caducado"
   }
 }

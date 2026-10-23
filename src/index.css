@@ -94,6 +94,21 @@
   }
 }
 
+/* Compact density (Settings → Appearance): tighter spacing and control sizes */
+[data-density='compact'] {
+  --space-2: 0.375rem;
+  --space-3: 0.5rem;
+  --space-4: 0.75rem;
+  --space-5: 1rem;
+  --space-6: 1.125rem;
+  --space-8: 1.5rem;
+  --size-sm: 1.75rem;
+  --size-md: 2.25rem;
+  --size-lg: 2.75rem;
+  --layout-header-height: 3.5rem;
+  --layout-player-height: 5rem;
+}
+
 /* Coarse pointers (touch screens) get larger hit areas */
 @media (pointer: coarse) {
   :root {

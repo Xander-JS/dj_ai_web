@@ -27,6 +27,8 @@ export interface AnalysisWorkerStartMessage {
   requestId: string;
   trackId: string;
   pcm: Float32Array;
+  /** Canales adicionales (1..n) del AudioBuffer; los picos de forma de onda abarcan todos. */
+  extraChannels?: Float32Array[];
   sampleRate: number;
   options?: AudioAnalysisOptions;
 }
@@ -72,6 +74,7 @@ export interface AnalysisQueueItem {
   requestId: string;
   trackId: string;
   pcm: Float32Array;
+  extraChannels?: Float32Array[];
   sampleRate: number;
   options?: AudioAnalysisOptions;
   status: AnalysisStatus;

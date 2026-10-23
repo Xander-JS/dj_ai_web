@@ -17,6 +17,8 @@
   border-radius: var(--radius-full);
   outline: none;
   transition: all var(--transition-fast);
+  /* Horizontal drags move the thumb; vertical swipes still scroll the page */
+  touch-action: pan-y;
 }
 
 .slider-input:hover {
@@ -62,4 +64,33 @@
   width: 4px;
   height: 100%;
   min-height: 100px;
+  /* Faders own every touch gesture that starts on them */
+  touch-action: none;
+}
+
+/* Touch screens: taller hit area while the painted track stays 4px */
+@media (pointer: coarse) {
+  .slider-input:not(.slider-vertical) {
+    /* Thumb (24px) plus margin; 48px rows would make the 5-band EQ strips too tall */
+    height: var(--size-sm);
+    background: linear-gradient(var(--border-base), var(--border-base)) center / 100% 4px no-repeat;
+  }
+
+  .slider-input:not(.slider-vertical):hover {
+    background: linear-gradient(var(--border-strong), var(--border-strong)) center / 100% 4px no-repeat;
+  }
+
+  .slider-input::-webkit-slider-thumb {
+    width: var(--size-xs);
+    height: var(--size-xs);
+  }
+
+  .slider-input::-moz-range-thumb {
+    width: var(--size-xs);
+    height: var(--size-xs);
+  }
+
+  .slider-vertical {
+    width: var(--touch-target-min);
+  }
 }

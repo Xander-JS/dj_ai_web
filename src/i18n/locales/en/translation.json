@@ -319,7 +319,8 @@
     "session_export_failed": "Session export failed: {{error}}",
     "playlist_created": "Playlist \"{{name}}\" created.",
     "playlist_deleted": "Playlist \"{{name}}\" deleted.",
-    "playlist_error": "Playlist operation failed: {{error}}"
+    "playlist_error": "Playlist operation failed: {{error}}",
+    "seed_mix_generated": "Mix \"{{name}}\" generated with {{count}} tracks."
   },
   "states": {
     "loading": "Loading...",
@@ -406,5 +407,25 @@
       "cancelled": "Export canceled",
       "error": "Export error"
     }
+  },
+  "seed": {
+    "mode_title": "Reference mode",
+    "mode_hint": "Mark up to {{max}} reference (seed) tracks with the target button to build a mix around them.",
+    "mark": "Mark as reference track",
+    "unmark": "Remove reference track",
+    "badge": "Reference {{index}}",
+    "badge_title": "Reference (seed) track used to build the mix",
+    "single_label": "Seed: {{title}}",
+    "start_label": "Start: {{title}}",
+    "end_label": "End: {{title}}",
+    "swap": "Swap start and end tracks",
+    "generate": "Generate mix from reference",
+    "generating": "Generating…",
+    "generate_disabled": "Mark at least one reference track first",
+    "clear": "Clear references",
+    "replaced": "Only {{max}} reference tracks allowed: \"{{removed}}\" was replaced by \"{{added}}\".",
+    "no_compatible": "No compatible tracks found. Analyze more tracks (BPM and key) and try again.",
+    "generated_name": "Mix from {{title}}",
+    "generated_name_pair": "Mix {{start}} → {{end}}"
   }
 }

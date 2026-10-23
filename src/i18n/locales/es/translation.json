@@ -319,7 +319,8 @@
     "session_export_failed": "Falló la exportación de la sesión: {{error}}",
     "playlist_created": "Playlist \"{{name}}\" creada.",
     "playlist_deleted": "Playlist \"{{name}}\" eliminada.",
-    "playlist_error": "Falló la operación de playlist: {{error}}"
+    "playlist_error": "Falló la operación de playlist: {{error}}",
+    "seed_mix_generated": "Mezcla \"{{name}}\" generada con {{count}} pistas."
   },
   "states": {
     "loading": "Cargando...",
@@ -406,5 +407,25 @@
       "cancelled": "Exportación cancelada",
       "error": "Error de exportación"
     }
+  },
+  "seed": {
+    "mode_title": "Modo referencia",
+    "mode_hint": "Marca hasta {{max}} pistas de referencia (semillas) con el botón de diana para construir una mezcla a partir de ellas.",
+    "mark": "Marcar como pista de referencia",
+    "unmark": "Quitar pista de referencia",
+    "badge": "Referencia {{index}}",
+    "badge_title": "Pista de referencia (semilla) usada para construir la mezcla",
+    "single_label": "Semilla: {{title}}",
+    "start_label": "Inicio: {{title}}",
+    "end_label": "Cierre: {{title}}",
+    "swap": "Intercambiar pistas de inicio y cierre",
+    "generate": "Generar mezcla desde referencia",
+    "generating": "Generando…",
+    "generate_disabled": "Marca primero al menos una pista de referencia",
+    "clear": "Quitar referencias",
+    "replaced": "Solo se permiten {{max}} pistas de referencia: \"{{removed}}\" se reemplazó por \"{{added}}\".",
+    "no_compatible": "No se encontraron pistas compatibles. Analiza más pistas (BPM y tonalidad) e inténtalo de nuevo.",
+    "generated_name": "Mezcla desde {{title}}",
+    "generated_name_pair": "Mezcla {{start}} → {{end}}"
   }
 }

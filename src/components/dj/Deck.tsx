@@ -993,7 +993,7 @@ export const Deck: React.FC<DeckProps> = ({
             }
             data-testid={`deck-${deckName.toLowerCase()}-sync`}
           >
-            {isMaster ? 'MASTER' : t('dj.sync')}
+            {isMaster ? t('dj.master') : t('dj.sync')}
           </button>
           <button
             type="button"

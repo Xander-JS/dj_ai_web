@@ -5,14 +5,16 @@ import {
   Search, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
   Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus,
-  Target, WandSparkles, ArrowLeftRight
+  Target, WandSparkles, ArrowLeftRight, Link2
 } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
+import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { importFilesToLocalLibrary } from '../services/localLibraryImport';
+import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
+import type { ExtractedAudio } from '../services/youtubeService';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
 import { useSeedStore } from '../store/useSeedStore';
@@ -144,6 +146,7 @@ export const Library: React.FC = () => {
   } | null>(null);
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
+  const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [targetPlaylistId, setTargetPlaylistId] = useState('');
@@ -239,6 +242,24 @@ export const Library: React.FC = () => {
         text: errors.join(' | '),
       });
     }
+  };
+
+  // Importación desde YouTube: mismo flujo que un archivo local y análisis automático en segundo plano
+  const handleYouTubeAudio = async ({ blob, filename }: ExtractedAudio): Promise<YouTubeImportResult> => {
+    const { successCount, errors, importedTracks } = await importRemoteAudioToLocalLibrary(
+      blob,
+      filename,
+      (name) => t('library.duplicate_warning', { name }),
+    );
+    await refreshLocalTracks();
+
+    if (successCount === 0) {
+      return { ok: false, error: errors.join(' | ') || undefined };
+    }
+
+    setFeedback({ type: 'success', text: t('library.import_success', { count: successCount }) });
+    importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
+    return { ok: true };
   };
 
   // Drag and drop handlers
@@ -532,6 +553,10 @@ export const Library: React.FC = () => {
             >
               <FolderPlus size={18} />
               {isImporting ? t('library.importing') : t('library.import_btn')}
+            </Button>
+            <Button variant="outline" onClick={() => setYoutubeModalOpen(true)}>
+              <Link2 size={18} />
+              {t('library.import_youtube_btn')}
             </Button>
           </div>
         </div>
@@ -885,6 +910,12 @@ export const Library: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      <YouTubeImportModal
+        open={youtubeModalOpen}
+        onClose={() => setYoutubeModalOpen(false)}
+        onAudioReceived={handleYouTubeAudio}
+      />
 
       {/* Modal de confirmación para eliminar pista local */}
       {deleteConfirmTrack && (

@@ -9,8 +9,13 @@ import { Target } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 import type { AnalysisStatus } from '../../types/track';
 import { isDownbeatConfirmed } from '../../utils/downbeat';
+import { formatMeter, getBarSyncReadiness, getDeckMeter } from '../../utils/barSyncReadiness';
+import type { BeatUnit } from '../../types/track';
 import '../ui/Badge.css';
 import './Deck.css';
+
+/** Meters offered by the downbeat editor as [beatsPerBar, beatUnit]. */
+const METER_OPTIONS: ReadonlyArray<readonly [number, BeatUnit]> = [[4, 4], [3, 4], [2, 4], [6, 8]];
 
 export interface DeckProps {
   deckName: 'A' | 'B';
@@ -58,6 +63,7 @@ export const Deck: React.FC<DeckProps> = ({
   const [isPreparingBarSync, setIsPreparingBarSync] = useState(false);
   const [editDownbeatPos, setEditDownbeatPos] = useState<string>('0.000');
   const [editBeatsPerBar, setEditBeatsPerBar] = useState<number>(4);
+  const [editBeatUnit, setEditBeatUnit] = useState<BeatUnit>(4);
   const [isSavingDownbeat, setIsSavingDownbeat] = useState<boolean>(false);
   const [downbeatError, setDownbeatError] = useState<string | null>(null);
   const isCuePressedRef = useRef(false);
@@ -97,6 +103,13 @@ export const Deck: React.FC<DeckProps> = ({
   const currentPitch = deck.pitch;
   const isMaster = deck.isMaster || syncMasterDeck === deckName;
   const isSyncActive = deck.isSyncActive;
+  const otherDeckName: 'A' | 'B' = deckName === 'A' ? 'B' : 'A';
+  const otherDeck = deckName === 'A' ? deckB : deckA;
+  const isOtherMaster = otherDeck.isMaster || syncMasterDeck === otherDeckName;
+  // Rol explícito: MASTER marca el tempo; SLAVE sigue el BPM del Master con SYNC activo.
+  const syncRole: 'master' | 'slave' | null = isMaster ? 'master' : isSyncActive ? 'slave' : null;
+  const pitchPercentLabel = `${deck.playbackRate >= 1 ? '+' : ''}${((deck.playbackRate - 1) * 100).toFixed(2)}%`;
+  const masterBpmLabel = otherDeck.calculatedBpm !== null ? otherDeck.calculatedBpm.toFixed(1) : '—';
   const phaseAlignment = deck.phaseAlignment;
   const isPhaseActive = phaseAlignment?.status === 'active';
   const hasProvisionalGrid = isAnalyzed && typeof analysis?.firstBeatTime === 'number' && typeof analysis?.bpm === 'number';
@@ -120,6 +133,16 @@ export const Deck: React.FC<DeckProps> = ({
   const isBarSyncArmed = barSyncStatus === 'armed';
   const isBarSyncAligned = barSyncStatus === 'already_aligned';
   const isDownbeatManuallyConfirmed = hasTrack && isDownbeatConfirmed(track?.downbeat, track?.fileMeta?.contentHash);
+  const meter = getDeckMeter(track);
+  const meterLabel = formatMeter(meter);
+  const isMeterConfirmed = meter.downbeatConfirmed && meter.beatUnit !== null;
+  const barSyncReadiness = getBarSyncReadiness(
+    { track: track ?? null, playbackState: deck.playbackState, isMaster, effectiveBpm: deck.calculatedBpm },
+    { track: otherDeck.track ?? null, playbackState: otherDeck.playbackState, isMaster: isOtherMaster, effectiveBpm: otherDeck.calculatedBpm },
+  );
+  const barSyncBlockMessage = barSyncReadiness.ready
+    ? null
+    : t(`dj.bar_sync_block_${barSyncReadiness.reason}`, { master: otherDeckName, ...barSyncReadiness.values });
   const hasValidHash = Boolean(
     track?.fileMeta?.contentHash &&
     typeof track.fileMeta.contentHash === 'string' &&
@@ -131,7 +154,8 @@ export const Deck: React.FC<DeckProps> = ({
 
   const barSyncReasonKey = barSyncStatus === 'rejected_state' || barSyncStatus === 'rejected_unconfirmed' ||
     barSyncStatus === 'rejected_no_downbeat' || barSyncStatus === 'rejected_metric_mismatch' ||
-    barSyncStatus === 'rejected_limits' || barSyncStatus === 'rejected_confidence'
+    barSyncStatus === 'rejected_limits' || barSyncStatus === 'rejected_confidence' ||
+    barSyncStatus === 'rejected_tempo_mismatch'
     ? `dj.bar_sync_reason_${barSyncStatus}`
     : 'dj.bar_sync_reason_generic';
 
@@ -386,9 +410,11 @@ export const Deck: React.FC<DeckProps> = ({
     if (!hasTrack || !track) {
       setEditDownbeatPos('0.000');
       setEditBeatsPerBar(4);
+      setEditBeatUnit(4);
     } else if (isDownbeatManuallyConfirmed && track.downbeat?.confirmation) {
       setEditDownbeatPos(track.downbeat.confirmation.position.toFixed(3));
       setEditBeatsPerBar(track.downbeat.confirmation.beatsPerBar);
+      setEditBeatUnit(meter.beatUnit ?? 4);
     } else {
       if (hasSuggested && typeof suggestedPos === 'number') {
         setEditDownbeatPos(suggestedPos.toFixed(3));
@@ -396,6 +422,7 @@ export const Deck: React.FC<DeckProps> = ({
         setEditDownbeatPos('0.000');
       }
       setEditBeatsPerBar(4);
+      setEditBeatUnit(4);
     }
   }
 
@@ -428,6 +455,7 @@ export const Deck: React.FC<DeckProps> = ({
       const success = await confirmDownbeat(deckName, {
         position: parsedPos,
         beatsPerBar: editBeatsPerBar,
+        beatUnit: editBeatUnit,
         suggestedPosition: hasSuggested && typeof suggestedPos === 'number' ? suggestedPos : null,
       });
       if (!success) {
@@ -489,6 +517,22 @@ export const Deck: React.FC<DeckProps> = ({
               >
                 <Target size={13} aria-hidden="true" fill={isSeed ? 'currentColor' : 'none'} />
               </button>
+            )}
+            {syncRole && (
+              <Badge
+                variant={syncRole === 'master' ? 'primary' : 'success'}
+                className={clsx('deck-role-badge', 'deck-tooltip-trigger', `deck-role-${syncRole}`)}
+                data-tooltip={syncRole === 'master'
+                  ? t('dj.role_master_tooltip')
+                  : t('dj.role_slave_tooltip', { master: otherDeckName, bpm: masterBpmLabel, pitch: pitchPercentLabel })}
+                tabIndex={0}
+                role="status"
+                data-testid={`deck-${deckName.toLowerCase()}-role-badge`}
+              >
+                {syncRole === 'master'
+                  ? t('dj.role_master')
+                  : t('dj.role_slave', { master: otherDeckName })}
+              </Badge>
             )}
             {isSeed && (
               <Badge variant="warning" title={t('seed.badge_title')} data-testid={`deck-seed-badge-${deckName.toLowerCase()}`}>
@@ -605,10 +649,23 @@ export const Deck: React.FC<DeckProps> = ({
             {isDownbeatManuallyConfirmed && (
               <span
                 className="status-badge deck-downbeat-badge"
-                title={`${t('dj.bar_sync_badge_downbeat_title', 'Downbeat confirmado manualmente')}: ${track?.downbeat?.confirmation?.position.toFixed(3)}s (${track?.downbeat?.confirmation?.beatsPerBar}/4)`}
+                title={`${t('dj.bar_sync_badge_downbeat_title', 'Downbeat confirmado manualmente')}: ${track?.downbeat?.confirmation?.position.toFixed(3)}s (${meterLabel ?? '?'})`}
                 data-testid={`deck-${deckName.toLowerCase()}-downbeat-badge`}
               >
-                {t('dj.bar_sync_badge_downbeat', 'DOWNBEAT ✓')}
+                {t('dj.bar_sync_badge_downbeat', 'DOWNBEAT ✓')} {meterLabel}
+              </span>
+            )}
+
+            {/* Compás pendiente: sin downbeat + unidad confirmados, BAR SYNC no puede prepararse */}
+            {hasTrack && !isMeterConfirmed && (
+              <span
+                className="status-badge deck-meter-pending-badge deck-tooltip-trigger"
+                data-tooltip={meter.downbeatConfirmed ? t('dj.meter_unit_pending_tooltip') : t('dj.meter_pending_tooltip')}
+                tabIndex={0}
+                role="note"
+                data-testid={`deck-${deckName.toLowerCase()}-meter-pending-badge`}
+              >
+                {meter.downbeatConfirmed ? t('dj.meter_unit_pending') : t('dj.meter_pending')}
               </span>
             )}
 
@@ -864,7 +921,7 @@ export const Deck: React.FC<DeckProps> = ({
                   className="downbeat-status-detail"
                   data-testid={`deck-${deckName.toLowerCase()}-downbeat-status-detail`}
                 >
-                  {track.downbeat.confirmation.position.toFixed(3)}s ({track.downbeat.confirmation.beatsPerBar}/4)
+                  {track.downbeat.confirmation.position.toFixed(3)}s ({meterLabel ?? '?'})
                 </span>
               )}
               {!isDownbeatManuallyConfirmed && hasSuggested && typeof suggestedPos === 'number' && (
@@ -946,14 +1003,20 @@ export const Deck: React.FC<DeckProps> = ({
               </label>
               <select
                 id={`deck-${deckName.toLowerCase()}-downbeat-metric-select`}
-                value={editBeatsPerBar}
-                onChange={(e) => setEditBeatsPerBar(Number(e.target.value))}
+                value={`${editBeatsPerBar}/${editBeatUnit}`}
+                onChange={(e) => {
+                  const [beats, unit] = e.target.value.split('/').map(Number);
+                  setEditBeatsPerBar(beats);
+                  setEditBeatUnit(unit as BeatUnit);
+                }}
                 disabled={!hasTrack || isLoading || isSavingDownbeat}
                 className="deck-downbeat-select"
+                title={t('dj.downbeat_metric_tooltip')}
                 data-testid={`deck-${deckName.toLowerCase()}-downbeat-metric-select`}
               >
-                <option value={4}>4/4</option>
-                <option value={3}>3/4</option>
+                {METER_OPTIONS.map(([beats, unit]) => (
+                  <option key={`${beats}/${unit}`} value={`${beats}/${unit}`}>{beats}/{unit}</option>
+                ))}
               </select>
             </div>
 
@@ -979,6 +1042,16 @@ export const Deck: React.FC<DeckProps> = ({
               {t('dj.downbeat_btn_clear')}
             </button>
           </div>
+
+          {meter.downbeatConfirmed && meter.beatUnit === null && (
+            <div
+              className="downbeat-hash-warning"
+              role="note"
+              data-testid={`deck-${deckName.toLowerCase()}-downbeat-unit-warning`}
+            >
+              {t('dj.meter_unit_pending_tooltip')}
+            </div>
+          )}
 
           {!hasValidHash && (
             <div
@@ -1014,16 +1087,17 @@ export const Deck: React.FC<DeckProps> = ({
             )}
             onClick={handleSyncToggle}
             disabled={!hasTrack || isLoading}
+            aria-pressed={isSyncActive}
             title={
               isMaster
                 ? t('dj.sync_master_tooltip')
                 : isSyncActive
-                ? t('dj.sync_active_tooltip')
-                : t('dj.sync')
+                ? t('dj.sync_active_tooltip_detail', { master: otherDeckName, bpm: masterBpmLabel, pitch: pitchPercentLabel })
+                : t('dj.sync_tooltip')
             }
             data-testid={`deck-${deckName.toLowerCase()}-sync`}
           >
-            {isMaster ? t('dj.master') : t('dj.sync')}
+            {isMaster ? t('dj.master') : isSyncActive ? t('dj.sync_on') : t('dj.sync')}
           </button>
           <button
             type="button"
@@ -1092,8 +1166,11 @@ export const Deck: React.FC<DeckProps> = ({
                 ? t('dj.bar_sync_cancelled_tooltip')
                 : barSyncStatus?.startsWith('rejected_')
                 ? t(barSyncReasonKey)
+                : barSyncBlockMessage
+                ? `${t('dj.bar_sync_tooltip')} — ${barSyncBlockMessage}`
                 : t('dj.bar_sync_tooltip')
             }
+            aria-describedby={barSyncBlockMessage || barSyncStatus.startsWith('rejected_') ? `deck-${deckName.toLowerCase()}-barsync-hint` : undefined}
             aria-label={t('dj.bar_sync')}
             data-testid={`deck-${deckName.toLowerCase()}-barsync`}
           >
@@ -1240,6 +1317,19 @@ export const Deck: React.FC<DeckProps> = ({
         </div>
 
       </div>
+
+      {/* Feedback rítmico visible: por qué BAR SYNC no puede prepararse o por qué se rechazó */}
+      {hasTrack && (barSyncBlockMessage || barSyncStatus.startsWith('rejected_')) && (
+        <p
+          id={`deck-${deckName.toLowerCase()}-barsync-hint`}
+          className={clsx('deck-sync-hint', barSyncStatus.startsWith('rejected_') && 'deck-sync-hint-rejected')}
+          role={barSyncStatus.startsWith('rejected_') ? 'alert' : 'note'}
+          data-testid={`deck-${deckName.toLowerCase()}-barsync-hint`}
+        >
+          <strong>{t('dj.bar_sync')}:</strong>{' '}
+          {barSyncStatus.startsWith('rejected_') ? t(barSyncReasonKey) : barSyncBlockMessage}
+        </p>
+      )}
 
 
     </div>

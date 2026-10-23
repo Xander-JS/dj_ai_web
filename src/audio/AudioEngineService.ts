@@ -51,6 +51,10 @@ function getAudioContextConstructor(): typeof AudioContext | null {
   return null;
 }
 
+
+/** Antelación de un arranque en fase: cubre la latencia del hilo principal hasta source.start(). */
+export const PHASE_LOCK_LEAD_SECONDS = 0.03;
+
 export class AudioEngineService implements IAudioEngineService {
   private static instance: AudioEngineService | null = null;
 
@@ -212,8 +216,10 @@ export class AudioEngineService implements IAudioEngineService {
 
   /**
    * Inicia o continúa la reproducción en el deck especificado.
+   * `when` (tiempo de AudioContext) programa un arranque con precisión de muestra;
+   * el transporte contabiliza la posición desde ese instante.
    */
-  public playDeck(deckId: DeckId, startOffsetSeconds?: number): void {
+  public playDeck(deckId: DeckId, startOffsetSeconds?: number, when?: number): void {
     this.ensureInitialized();
     const graph = this.getDeckGraph(deckId);
     const transport = this.getDeckTransport(deckId);
@@ -264,12 +270,51 @@ export class AudioEngineService implements IAudioEngineService {
       }
     };
 
+    const startAt = when !== undefined && Number.isFinite(when) && when > ctx.currentTime ? when : ctx.currentTime;
     graph.sourceNode = sourceNode;
     transport.isPlaying = true;
-    transport.startedAt = ctx.currentTime;
+    transport.startedAt = startAt;
     transport.startOffset = offset;
 
-    sourceNode.start(0, offset);
+    sourceNode.start(when !== undefined ? startAt : 0, offset);
+  }
+
+  /**
+   * Arranca `deckId` en fase con `referenceDeckId` (BAR SYNC).
+   *
+   * El arranque se programa `leadSeconds` en el futuro del reloj de audio y el offset se
+   * calcula para la posición que tendrá la referencia exactamente en ese instante. Así no
+   * influyen la latencia del hilo principal ni el tiempo transcurrido desde la preparación,
+   * y ambos decks comparten latencia de salida. Devuelve el offset usado, o null si la
+   * referencia no está sonando o `resolveOffset` no da una posición válida.
+   */
+  public playDeckPhaseLocked(
+    deckId: DeckId,
+    referenceDeckId: DeckId,
+    resolveOffset: (referencePositionAtStart: number) => number | null,
+    leadSeconds = PHASE_LOCK_LEAD_SECONDS,
+  ): number | null {
+    this.ensureInitialized();
+    const ctx = this.audioContext;
+    const graph = this.getDeckGraph(deckId);
+    const reference = this.deckTransports.get(referenceDeckId);
+    if (!ctx || !graph.buffer || !reference?.isPlaying) return null;
+
+    const when = ctx.currentTime + Math.max(0, leadSeconds);
+    const offset = resolveOffset(this.getDeckPositionAt(referenceDeckId, when));
+    if (offset === null || !Number.isFinite(offset) || offset < 0 || offset >= graph.buffer.duration) return null;
+
+    this.playDeck(deckId, offset, when);
+    return offset;
+  }
+
+  /** Posición del deck (s de buffer) en un instante del reloj de audio, a velocidad actual. */
+  public getDeckPositionAt(deckId: DeckId, contextTime: number): number {
+    const transport = this.deckTransports.get(deckId);
+    const current = this.getDeckCurrentTime(deckId);
+    if (!transport?.isPlaying || !this.audioContext) return current;
+    const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
+    return current + Math.max(0, contextTime - Math.max(this.audioContext.currentTime, transport.startedAt)) * effectiveRate;
   }
 
   /**
@@ -1069,7 +1114,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     // 3. Etapa de limitación de seguridad / compresión dinámica contra picos
     // NOTA TÉCNICA: DynamicsCompressorNode actúa como un supresor dinámico de picos
-    // y sobrecargas sostenidas (threshold -1.0 dBFS, ratio 20:1, ataque 1 ms).
+    // y sobrecargas sostenidas (threshold -1.0 dBFS, ratio 20:1, ataque 1 ms, release 200 ms).
     // No constituye un limitador brickwall garantizado con lookahead de cero muestras;
     // por ello, la protección contra distorsión se sustenta conjuntamente en una
     // estructura de ganancias calibrada (headroom nominal) y límites estrictos.
@@ -1080,7 +1125,9 @@ export class AudioEngineService implements IAudioEngineService {
         limiter.knee.setValueAtTime(0.0, now);
         limiter.ratio.setValueAtTime(20.0, now);
         limiter.attack.setValueAtTime(0.001, now);
-        limiter.release.setValueAtTime(0.050, now);
+        // 200 ms: con 50 ms la ganancia se recuperaba dentro de unos pocos ciclos de bajo
+        // (40–60 Hz ≈ 17–25 ms) y modulaba la onda del bombo sumado: golpe áspero con rebote.
+        limiter.release.setValueAtTime(0.2, now);
 
         this.limiterNode = limiter;
         this.masterGainNode.connect(this.limiterNode);

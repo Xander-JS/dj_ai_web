@@ -203,6 +203,11 @@ export class SessionRecorder {
       return { recorded: false, reason: 'invalid-timestamp' };
     }
 
+    // The initial-state snapshot defines session time zero. Capturing it takes a
+    // measurable moment after start(), so re-anchor the clock instead of stamping it late.
+    if (payload.type === 'session.initial-state' && this.active.session.events.length === 0) {
+      this.active.monotonicStartMs = monotonicNowMs;
+    }
     const sessionTimeMs = monotonicNowMs - this.active.monotonicStartMs;
     if (!Number.isFinite(sessionTimeMs) || sessionTimeMs < 0) {
       return { recorded: false, reason: 'invalid-timestamp' };

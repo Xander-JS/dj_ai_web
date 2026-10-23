@@ -24,7 +24,10 @@ export function releaseSessionDownload(
   if (descriptor) urlApi.revokeObjectURL(descriptor.url);
 }
 
-export function createSessionExportFilename(session: RecordedSession, format: 'wav' | 'mp3'): string {
+export function createSessionExportFilename(
+  session: Pick<RecordedSession, 'sessionId' | 'metadata'>,
+  format: 'wav' | 'mp3',
+): string {
   const source = session.metadata.title?.trim() || session.sessionId;
   const safeName = source
     .normalize('NFKD')

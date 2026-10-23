@@ -1,0 +1,26 @@
+/* Reutiliza .profile-header-card / .profile-info de Profile.css y los mensajes de AuthForm.css */
+
+.profile-panel-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.profile-panel-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.profile-panel-fields dt {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1024px) {
+  .profile-panel {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

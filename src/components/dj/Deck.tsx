@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
 import { Badge } from '../ui/Badge';
+import { Waveform } from './Waveform';
 import { clsx } from 'clsx';
-import { useDJStore, HOT_CUE_COLORS } from '../../store/useDJStore';
+import { useDJStore, djStore, HOT_CUE_COLORS } from '../../store/useDJStore';
 import { useSeedStore } from '../../store/useSeedStore';
+import { useSettingsStore } from '../../store/useSettingsStore';
 import { Target } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 import type { AnalysisStatus } from '../../types/track';
@@ -33,6 +35,9 @@ export const Deck: React.FC<DeckProps> = ({
   timeRemaining = '-0:00'
 }) => {
   const { t } = useTranslation();
+  const { settings } = useSettingsStore();
+  const pitchRangePercent = Math.round(settings.pitchRange * 100);
+  const syncLimitPercent = Math.round(settings.syncRange * 100);
   const { 
     deckA, 
     deckB, 
@@ -279,50 +284,47 @@ export const Deck: React.FC<DeckProps> = ({
   const isAnalyzing = analysisStatus === 'analyzing' || isTriggeringAnalysis;
   const canTriggerAnalysis = hasTrack && !isAnalyzing && (analysisStatus === 'pending' || analysisStatus === 'failed');
 
-  // Cancelar reproducción CUP ante pérdida de foco de la ventana o desmontaje
+  // Cancelar reproducción CUP ante pérdida de foco de la ventana o desmontaje.
+  // Usa djStore directamente: las acciones de useDJStore() cambian de identidad en cada render y
+  // la limpieza del efecto cancelaría la preview justo al iniciarse.
   useEffect(() => {
     const handleWindowBlur = () => {
       if (isCuePressedRef.current) {
         isCuePressedRef.current = false;
-        cancelCup(deckName);
+        djStore.cancelCup(deckName);
       }
     };
     window.addEventListener('blur', handleWindowBlur);
     return () => {
       window.removeEventListener('blur', handleWindowBlur);
-      cancelCup(deckName);
+      djStore.cancelCup(deckName);
     };
-  }, [deckName, cancelCup]);
+  }, [deckName]);
 
   const handlePlayToggle = async () => {
     if (!hasTrack || isLoading) return;
     await togglePlayDeck(deckName);
   };
 
+  // Sin pointer capture: salir del botón con el puntero debe soltar el CUE
   const handleCueButtonDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (!hasTrack || isLoading) return;
-    isCuePressedRef.current = true;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // Ignorar si el navegador no soporta pointer capture
+    if (e.pointerType === 'touch') {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // Ignorar si el navegador no soporta pointer capture
+      }
     }
+    isCuePressedRef.current = true;
     handleCueDown(deckName);
   };
 
-  const handleCueButtonUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (!hasTrack || isLoading) return;
-    if (isCuePressedRef.current) {
-      isCuePressedRef.current = false;
-      try {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        }
-      } catch {
-        // Ignorar
-      }
-      handleCueUp(deckName);
-    }
+  // Soltar CUE (pointer, mouse, touch o salida del botón): detiene y vuelve al marcador una sola vez
+  const releaseCue = () => {
+    if (!isCuePressedRef.current) return;
+    isCuePressedRef.current = false;
+    handleCueUp(deckName);
   };
 
   const handleCueKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -335,13 +337,9 @@ export const Deck: React.FC<DeckProps> = ({
   };
 
   const handleCueKeyUp = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (!hasTrack || isLoading) return;
     if (e.key === ' ' || e.key === 'Enter' || e.key === 'c' || e.key === 'C') {
       e.preventDefault();
-      if (isCuePressedRef.current) {
-        isCuePressedRef.current = false;
-        handleCueUp(deckName);
-      }
+      releaseCue();
     }
   };
 
@@ -524,7 +522,7 @@ export const Deck: React.FC<DeckProps> = ({
                 className={clsx('deck-role-badge', 'deck-tooltip-trigger', `deck-role-${syncRole}`)}
                 data-tooltip={syncRole === 'master'
                   ? t('dj.role_master_tooltip')
-                  : t('dj.role_slave_tooltip', { master: otherDeckName, bpm: masterBpmLabel, pitch: pitchPercentLabel })}
+                  : t('dj.role_slave_tooltip', { master: otherDeckName, bpm: masterBpmLabel, pitch: pitchPercentLabel, limit: syncLimitPercent })}
                 tabIndex={0}
                 role="status"
                 data-testid={`deck-${deckName.toLowerCase()}-role-badge`}
@@ -755,32 +753,12 @@ export const Deck: React.FC<DeckProps> = ({
         data-testid={`deck-${deckName.toLowerCase()}-waveform`}
       >
         {/* Renderizado de forma de onda real con picos precalculados */}
-        <svg
-          className={clsx('deck-waveform-svg', isAnalyzing && 'waveform-analyzing')}
-          viewBox="0 0 100 60"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <line x1="0" y1="30" x2="100" y2="30" className="deck-waveform-baseline" />
-          {analysis?.waveformPeaks && analysis.waveformPeaks.length > 0 && (
-            analysis.waveformPeaks.map((peak, idx) => {
-              const clampedPeak = Math.max(0, Math.min(1, peak));
-              const barHeight = Math.max(2, clampedPeak * 54);
-              const y = (60 - barHeight) / 2;
-              return (
-                <rect
-                  key={idx}
-                  x={idx}
-                  y={y}
-                  width={0.75}
-                  height={barHeight}
-                  rx={0.3}
-                  className="deck-waveform-bar"
-                />
-              );
-            })
-          )}
-        </svg>
+        <Waveform
+          peaks={analysis?.waveformPeaks}
+          durationSec={duration}
+          peaksDurationSec={analysis?.waveformDurationSec}
+          isAnalyzing={isAnalyzing}
+        />
 
         {/* Relleno de progreso transcurrido */}
         {duration > 0 && (
@@ -1092,8 +1070,8 @@ export const Deck: React.FC<DeckProps> = ({
               isMaster
                 ? t('dj.sync_master_tooltip')
                 : isSyncActive
-                ? t('dj.sync_active_tooltip_detail', { master: otherDeckName, bpm: masterBpmLabel, pitch: pitchPercentLabel })
-                : t('dj.sync_tooltip')
+                ? t('dj.sync_active_tooltip_detail', { master: otherDeckName, bpm: masterBpmLabel, pitch: pitchPercentLabel, limit: syncLimitPercent })
+                : t('dj.sync_tooltip', { limit: syncLimitPercent })
             }
             data-testid={`deck-${deckName.toLowerCase()}-sync`}
           >
@@ -1190,11 +1168,13 @@ export const Deck: React.FC<DeckProps> = ({
             type="button"
             className="btn btn-dj btn-dj-cue"
             onPointerDown={handleCueButtonDown}
-            onPointerUp={handleCueButtonUp}
-            onPointerCancel={() => {
-              isCuePressedRef.current = false;
-              handleCueUp(deckName);
-            }}
+            onPointerUp={releaseCue}
+            onPointerCancel={releaseCue}
+            onPointerLeave={releaseCue}
+            onMouseUp={releaseCue}
+            onMouseLeave={releaseCue}
+            onTouchEnd={releaseCue}
+            onTouchCancel={releaseCue}
             onKeyDown={handleCueKeyDown}
             onKeyUp={handleCueKeyUp}
             onBlur={() => {
@@ -1236,7 +1216,7 @@ export const Deck: React.FC<DeckProps> = ({
         {/* Pitch Controls: Slider + Pitch Bend Buttons */}
         <div className="deck-pitch-controls-container">
           <div className="deck-pitch-slider">
-            <span className="deck-pitch-label top">-8%</span>
+            <span className="deck-pitch-label top">-{pitchRangePercent}%</span>
             <div className="deck-pitch-slider-wrapper">
               <Slider
                 orientation="vertical"
@@ -1245,7 +1225,7 @@ export const Deck: React.FC<DeckProps> = ({
                 disabled={!hasTrack || isLoading}
               />
             </div>
-            <span className="deck-pitch-label bottom">+8%</span>
+            <span className="deck-pitch-label bottom">+{pitchRangePercent}%</span>
           </div>
 
           <div

@@ -15,7 +15,22 @@ export interface BpmDetectorOptions {
   minBpm?: number;               // Por defecto 60 BPM
   maxBpm?: number;               // Por defecto 210 BPM
   maxAnalysisDurationSec?: number; // Ventana de análisis en segundos (por defecto 30s)
+  peakThreshold?: number;          // Autocorrelación mínima para aceptar un pico candidato (por defecto 0.05)
+  minPeakCorrelation?: number;     // Correlación mínima del mejor pico para no ser ambiguo (por defecto 0.12)
+  minPeakProminence?: number;      // Prominencia mínima del mejor pico sobre el fondo (por defecto 0.06)
 }
+
+/**
+ * Umbrales permisivos para la segunda pasada: ventana más amplia (120 s) y criterios
+ * de pico/prominencia relajados. La fórmula de confianza no cambia, por lo que los
+ * resultados de ambas pasadas son comparables entre sí.
+ */
+export const RELAXED_BPM_OPTIONS: Readonly<BpmDetectorOptions> = {
+  maxAnalysisDurationSec: 120,
+  peakThreshold: 0.02,
+  minPeakCorrelation: 0.06,
+  minPeakProminence: 0.03,
+};
 
 /**
  * Filtro IIR Pasa-Bajos Biquad de 2º orden.
@@ -159,6 +174,9 @@ export function detectBpm(
   const minBpm = options.minBpm ?? 60;
   const maxBpm = options.maxBpm ?? 210;
   const maxDurationSec = options.maxAnalysisDurationSec ?? 30;
+  const peakThreshold = options.peakThreshold ?? 0.05;
+  const minPeakCorrelation = options.minPeakCorrelation ?? 0.12;
+  const minPeakProminence = options.minPeakProminence ?? 0.06;
 
   if (!pcm || pcm.length < sampleRate * 0.5) {
     return { confidence: 0, isAmbiguous: true };
@@ -265,7 +283,7 @@ export function detectBpm(
 
   for (let lag = minLag + 1; lag < maxLag; lag++) {
     const val = autoCorr[lag];
-    if (val > autoCorr[lag - 1] && val > autoCorr[lag + 1] && val > 0.05) {
+    if (val > autoCorr[lag - 1] && val > autoCorr[lag + 1] && val > peakThreshold) {
       const { preciseIndex, interpolatedValue } = parabolicInterpolation(autoCorr, lag);
       const bpm = (60 * odfRate) / preciseIndex;
 
@@ -293,19 +311,19 @@ export function detectBpm(
 
     // Soporte de segundo armónico temporal (lag * 2 -> tempo medio)
     const doubleLag = Math.round(peak.lag * 2);
-    if (doubleLag < autoCorr.length && autoCorr[doubleLag] > 0.05) {
+    if (doubleLag < autoCorr.length && autoCorr[doubleLag] > peakThreshold) {
       support += 0.5 * autoCorr[doubleLag];
     }
 
     // Soporte de tercer armónico temporal (lag * 3)
     const tripleLag = Math.round(peak.lag * 3);
-    if (tripleLag < autoCorr.length && autoCorr[tripleLag] > 0.05) {
+    if (tripleLag < autoCorr.length && autoCorr[tripleLag] > peakThreshold) {
       support += 0.25 * autoCorr[tripleLag];
     }
 
     // Soporte de sub-armónico temporal (lag / 2 -> doble tempo)
     const halfLag = Math.round(peak.lag / 2);
-    if (halfLag >= minLag && autoCorr[halfLag] > 0.05) {
+    if (halfLag >= minLag && autoCorr[halfLag] > peakThreshold) {
       support += 0.3 * autoCorr[halfLag];
     }
 
@@ -340,7 +358,7 @@ export function detectBpm(
   meanCorr /= (maxLag - minLag + 1);
 
   const peakProminence = best.rawCorr - meanCorr;
-  const isAmbiguous = best.rawCorr < 0.12 || peakProminence < 0.06;
+  const isAmbiguous = best.rawCorr < minPeakCorrelation || peakProminence < minPeakProminence;
 
   // Confianza acotada [0.0, 1.0]
   let confidence = 0;

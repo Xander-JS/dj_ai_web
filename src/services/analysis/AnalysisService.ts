@@ -81,7 +81,8 @@ export class AnalysisService {
     trackId: string,
     pcm: Float32Array,
     sampleRate: number,
-    options: AudioAnalysisOptions = {}
+    options: AudioAnalysisOptions = {},
+    extraChannels: Float32Array[] = []
   ): Promise<TrackAnalysis> {
     if (this.isDestroyed) {
       return Promise.reject(new Error('AnalysisService ha sido destruido'));
@@ -100,6 +101,7 @@ export class AnalysisService {
         requestId,
         trackId,
         pcm,
+        extraChannels,
         sampleRate,
         options,
         status: 'pending',
@@ -362,21 +364,17 @@ export class AnalysisService {
     // Si options.transferBuffer !== true, se clona una copia para transferir el clon sin desasociar el pcm original.
     try {
       // Detección preventiva de buffer desasociado o inválido
-      if ((item.pcm.buffer as { detached?: boolean }).detached === true) {
+      const allChannels = [item.pcm, ...(item.extraChannels ?? [])];
+      if (allChannels.some((channel) => (channel.buffer as { detached?: boolean }).detached === true)) {
         throw new Error('El buffer de audio está desasociado (detached ArrayBuffer)');
       }
 
-      let bufferToTransfer: ArrayBuffer;
-      let pcmToSend: Float32Array;
-
-      if (item.options?.transferBuffer) {
-        pcmToSend = item.pcm;
-        bufferToTransfer = item.pcm.buffer as ArrayBuffer;
-      } else {
-        const clone = item.pcm.slice();
-        pcmToSend = clone;
-        bufferToTransfer = clone.buffer as ArrayBuffer;
-      }
+      const channelsToSend = item.options?.transferBuffer
+        ? allChannels
+        : allChannels.map((channel) => channel.slice());
+      // Un mismo ArrayBuffer no puede listarse dos veces en la lista de transferencia
+      const buffersToTransfer = Array.from(new Set(channelsToSend.map((channel) => channel.buffer as ArrayBuffer)));
+      const [pcmToSend, ...extraToSend] = channelsToSend;
 
       worker.postMessage(
         {
@@ -384,10 +382,11 @@ export class AnalysisService {
           requestId: item.requestId,
           trackId: item.trackId,
           pcm: pcmToSend,
+          ...(extraToSend.length > 0 ? { extraChannels: extraToSend } : {}),
           sampleRate: item.sampleRate,
           options: item.options,
         },
-        [bufferToTransfer]
+        buffersToTransfer
       );
     } catch (err) {
       this.cleanupActiveTask(item.requestId, worker);

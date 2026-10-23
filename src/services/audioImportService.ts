@@ -12,6 +12,13 @@ export interface AudioImportDependencies {
 export interface AudioImportResult {
   successCount: number;
   errors: string[];
+  // Pistas persistidas en esta importación, en el orden de entrada
+  importedTracks: Track[];
+}
+
+export interface AudioImportOptions {
+  // Rechaza el archivo si el navegador no puede decodificarlo (p. ej. audio remoto)
+  requireDecodable?: boolean;
 }
 
 /** Implements the Library's existing import policy: keep a valid-looking file if
@@ -19,9 +26,11 @@ export interface AudioImportResult {
 export async function importAudioFiles(
   files: File[],
   dependencies: AudioImportDependencies,
+  options: AudioImportOptions = {},
 ): Promise<AudioImportResult> {
   let successCount = 0;
   const errors: string[] = [];
+  const importedTracks: Track[] = [];
 
   for (const file of files) {
     const validation = validateAudioFile(file);
@@ -41,6 +50,10 @@ export async function importAudioFiles(
       const audioBuffer = await dependencies.decodeAudioData(arrayBuffer);
       durationSeconds = audioBuffer.duration;
     } catch (error) {
+      if (options.requireDecodable) {
+        errors.push(`"${file.name}" no se pudo decodificar en el navegador: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
       console.warn(`[Library] No se pudo decodificar la duración previa de ${file.name}:`, error);
     }
 
@@ -58,11 +71,12 @@ export async function importAudioFiles(
         errors.push(`"${file.name}" se cargó en memoria temporal pero no se pudo persistir en IndexedDB (${result.reason || 'sin persistencia'}). Se perderá al recargar.`);
       } else {
         successCount += 1;
+        importedTracks.push(track);
       }
     } catch (error) {
       errors.push(`Error al guardar ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  return { successCount, errors };
+  return { successCount, errors, importedTracks };
 }

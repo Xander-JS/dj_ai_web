@@ -1,16 +1,26 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Download, Disc3, Radio, XCircle } from 'lucide-react';
+import { CheckCircle2, Download, Disc3, History, Radio, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody } from '../components/ui/Card';
 import { Progress } from '../components/ui/Progress';
 import { createSessionAudioBufferResolver } from '../session/SessionAudioBufferResolver';
 import { sessionExportCoordinator } from '../session/SessionExportCoordinator';
-import { createSessionDownload, initiateSessionDownload, releaseSessionDownload, type SessionDownloadDescriptor } from '../session/SessionExportDownload';
+import {
+  createSessionDownload,
+  createSessionExportFilename,
+  initiateSessionDownload,
+  releaseSessionDownload,
+  type SessionDownloadDescriptor,
+} from '../session/SessionExportDownload';
 import { SessionExportCanceledError, type SessionExportPhase } from '../session/SessionExporter';
 import { getOverallExportPercent, getSessionExportErrorKey, isExportableSession } from '../session/SessionExportUiModel';
 import { sessionRecorder, type RecordedSession } from '../session/SessionRecorder';
+import { createStoredSessionRecord, MAX_STORED_SESSIONS, type StoredSessionFormat, type StoredSessionRecord } from '../session/SessionHistory';
+import type { SessionExportResult } from '../session/SessionExporter';
 import { notificationCenter } from '../services/notifications/notificationCenter';
+import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
+import { formatDuration } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
 import './Sessions.css';
 
@@ -18,6 +28,9 @@ type SessionPageStatus = 'empty' | 'ready' | 'recording' | 'preparing' | 'render
 type ExportFormat = 'wav' | 'mp3';
 
 const MP3_BITRATES_AT_48_KHZ = [96, 128, 160, 192, 224, 256, 320];
+const STORED_FORMATS: StoredSessionFormat[] = ['wav', 'mp3'];
+// Margen antes de revocar la URL temporal para que el navegador termine de iniciar la descarga
+const STORED_DOWNLOAD_URL_TTL_MS = 60_000;
 
 function initialSessionSnapshot(): { active: boolean; session: RecordedSession | null } {
   const active = sessionRecorder.isActive;
@@ -54,9 +67,26 @@ export const Sessions: React.FC = () => {
   const downloadRef = useRef<SessionDownloadDescriptor | null>(null);
   const mountedRef = useRef(false);
   const operationIdRef = useRef(0);
+  const [storedSessions, setStoredSessions] = useState<StoredSessionRecord[]>([]);
+  const [historyNotice, setHistoryNotice] = useState('');
+
+  const loadStoredSessions = useCallback(async () => {
+    try {
+      const sessions = await indexedDBStorage.getRecordedSessions();
+      if (mountedRef.current) setStoredSessions(sessions);
+    } catch (error) {
+      console.warn('[Sessions] Could not load stored sessions:', error);
+    }
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
+    indexedDBStorage
+      .getRecordedSessions()
+      .then((sessions) => {
+        if (mountedRef.current) setStoredSessions(sessions);
+      })
+      .catch((error) => console.warn('[Sessions] Could not load stored sessions:', error));
     return () => {
       mountedRef.current = false;
       operationIdRef.current += 1;
@@ -66,6 +96,39 @@ export const Sessions: React.FC = () => {
       downloadRef.current = null;
     };
   }, []);
+
+  // Persiste la sesión exportada en el historial FIFO de IndexedDB (máx. MAX_STORED_SESSIONS)
+  const persistExportedSession = async (session: RecordedSession, result: SessionExportResult): Promise<void> => {
+    const saved = await indexedDBStorage.saveRecordedSession(createStoredSessionRecord(session, result));
+    if (saved.evicted.length > 0) {
+      notificationCenter.push({ type: 'warning', messageKey: 'notifications.session_history_limit', params: { max: MAX_STORED_SESSIONS } });
+      if (mountedRef.current) setHistoryNotice(t('notifications.session_history_limit', { max: MAX_STORED_SESSIONS }));
+    } else if (mountedRef.current) {
+      setHistoryNotice('');
+    }
+    if (!saved.persisted) {
+      notificationCenter.push({ type: 'error', messageKey: 'notifications.session_history_save_failed' });
+    }
+    await loadStoredSessions();
+  };
+
+  const handleDownloadStored = (record: StoredSessionRecord, format: StoredSessionFormat): void => {
+    const audio = record.files[format];
+    if (!audio) return;
+    const url = URL.createObjectURL(audio.blob);
+    try {
+      initiateSessionDownload({
+        url,
+        filename: createSessionExportFilename({ sessionId: record.id, metadata: { title: record.title } }, format),
+        mimeType: audio.mimeType,
+      });
+    } catch (error) {
+      console.warn('[Sessions] Stored session download was blocked:', error);
+      setDownloadError(t('sessions.errors.download'));
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), STORED_DOWNLOAD_URL_TTL_MS);
+    }
+  };
 
   const clearDownload = (): void => {
     releaseSessionDownload(downloadRef.current);
@@ -138,6 +201,10 @@ export const Sessions: React.FC = () => {
 
       void handle.result.then((result) => {
         notificationCenter.push({ type: 'success', messageKey: 'notifications.session_exported', params: { format: format.toUpperCase() } });
+        void persistExportedSession(finalizedSession, result).catch((error: unknown) => {
+          console.warn('[Sessions] Could not store the exported session:', error);
+          notificationCenter.push({ type: 'error', messageKey: 'notifications.session_history_save_failed' });
+        });
         if (!mountedRef.current || operationId !== operationIdRef.current) return;
         let descriptor: SessionDownloadDescriptor;
         try {
@@ -345,6 +412,57 @@ export const Sessions: React.FC = () => {
           </div>
 
           <p className="session-limit-note">{t('sessions.limitInfo')}</p>
+        </CardBody>
+      </Card>
+
+      <Card className="session-export-card">
+        <CardBody>
+          <div className="session-card-heading">
+            <div className="session-icon"><History size={20} aria-hidden="true" /></div>
+            <div>
+              <h2>{t('sessions.historyTitle')}</h2>
+              <p>{t('sessions.historySubtitle', { max: MAX_STORED_SESSIONS })}</p>
+            </div>
+            <span className="session-status-badge">
+              {t('sessions.historyCount', { count: storedSessions.length, max: MAX_STORED_SESSIONS })}
+            </span>
+          </div>
+
+          {historyNotice && <p className="session-muted-note" role="status">{historyNotice}</p>}
+
+          {storedSessions.length === 0 ? (
+            <div className="session-empty-state" role="status">
+              <p>{t('sessions.historyEmpty')}</p>
+            </div>
+          ) : (
+            storedSessions.map((record) => (
+              <div key={record.id} className="session-download-result" data-testid={`stored-session-${record.id}`}>
+                <span>
+                  {record.title?.trim() && <>{record.title.trim()}{' · '}</>}
+                  <strong>{new Date(record.recordedAt).toLocaleString()}</strong>
+                  {' · '}
+                  {t('sessions.historyDuration', { duration: formatDuration(record.durationMs / 1000) })}
+                  {' · '}
+                  {t('sessions.eventCount', { count: record.eventCount })}
+                </span>
+                <div className="session-capture-actions" style={{ marginTop: 0 }}>
+                  {STORED_FORMATS.filter((storedFormat) => record.files[storedFormat]).map((storedFormat) => (
+                    <Button
+                      key={storedFormat}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      aria-label={t('sessions.historyDownload', { format: storedFormat.toUpperCase() })}
+                      onClick={() => handleDownloadStored(record, storedFormat)}
+                    >
+                      <Download size={14} aria-hidden="true" />
+                      {storedFormat.toUpperCase()}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </CardBody>
       </Card>
     </section>

@@ -4,7 +4,7 @@
  * importación con IndexedDB y el motor de audio, y registra el resultado como notificación.
  */
 
-import { importAudioFiles, type AudioImportResult } from './audioImportService';
+import { importAudioFiles, type AudioImportOptions, type AudioImportResult } from './audioImportService';
 import { indexedDBStorage } from './storage/IndexedDBStorage';
 import { notificationCenter } from './notifications/notificationCenter';
 import { audioEngine } from '../audio';
@@ -13,6 +13,7 @@ import { computeFileHash } from '../utils/cryptoHash';
 export async function importFilesToLocalLibrary(
   files: File[],
   duplicateWarning: (fileName: string) => string,
+  options: AudioImportOptions = {},
 ): Promise<AudioImportResult> {
   const result = await importAudioFiles(files, {
     hasDuplicate: (name, size) => indexedDBStorage.hasDuplicate(name, size),
@@ -20,7 +21,7 @@ export async function importFilesToLocalLibrary(
     computeFileHash,
     saveTrack: (track, file) => indexedDBStorage.saveTrack(track, file),
     duplicateWarning,
-  });
+  }, options);
 
   const { successCount, errors } = result;
   if (successCount > 0) {
@@ -39,4 +40,24 @@ export async function importFilesToLocalLibrary(
   }
 
   return result;
+}
+
+// El microservicio entrega MP3; se garantiza la extensión para que la validación lo reconozca
+export function createFileFromRemoteAudio(blob: Blob, filename: string): File {
+  const name = /\.(mp3|wav)$/i.test(filename) ? filename : `${filename.replace(/\.[^/.]+$/, '') || 'audio'}.mp3`;
+  return new File([blob], name, { type: blob.type || 'audio/mpeg', lastModified: Date.now() });
+}
+
+/** Ingresa el audio extraído de YouTube por el mismo flujo que un archivo local,
+ * exigiendo que el navegador pueda decodificarlo antes de persistirlo. */
+export function importRemoteAudioToLocalLibrary(
+  blob: Blob,
+  filename: string,
+  duplicateWarning: (fileName: string) => string,
+): Promise<AudioImportResult> {
+  return importFilesToLocalLibrary(
+    [createFileFromRemoteAudio(blob, filename)],
+    duplicateWarning,
+    { requireDecodable: true },
+  );
 }

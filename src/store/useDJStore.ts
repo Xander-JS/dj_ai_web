@@ -123,7 +123,12 @@ export interface DJStoreState {
 const SEEK_END_MARGIN_SECONDS = 0.05;
 /** Frecuencia de refresco de la posición en la interfaz. */
 const TIME_UPDATE_INTERVAL_MS = 100;
-const PITCH_RANGE = 0.08;
+const DEFAULT_PITCH_RANGE = 0.08;
+/** Tolerancia predeterminada de SYNC (±8 %); configurable entre ±4 % y ±20 % desde Ajustes. */
+const DEFAULT_SYNC_RATE_LIMIT = 0.08;
+
+/** Comportamiento del botón CUE: `cdj` pausa y vuelve al marcador; `standard` vuelve sin detenerse. */
+export type CueButtonMode = 'cdj' | 'standard';
 
 const safeRequestAnimationFrame = (callback: (time: number) => void): number => {
   if (typeof requestAnimationFrame !== 'undefined') {
@@ -312,6 +317,12 @@ class DJStore {
   /** Indicador de reproducción momentánea CUP activa por deck. */
   private isCupPlaying: Record<DeckId, boolean> = { A: false, B: false };
   private cupPressTokens: Record<DeckId, number> = { A: 0, B: 0 };
+  /** Previsualización CUP mantenida desde pausa: al soltar siempre se detiene y vuelve al marcador. */
+  private cuePreviewHeld: Record<DeckId, boolean> = { A: false, B: false };
+  /** Rango activo del fader de pitch (fracción). */
+  private pitchRange = DEFAULT_PITCH_RANGE;
+  private syncRateLimit = DEFAULT_SYNC_RATE_LIMIT;
+  private cueMode: CueButtonMode = 'cdj';
 
   private constructor() {
     // Escuchar la finalización natural de la reproducción en ambos decks
@@ -832,6 +843,7 @@ class DJStore {
     }
 
     // Si estaba en reproducción momentánea CUP y se pulsa PLAY, enclavar en reproducción normal
+    this.cuePreviewHeld[deckId] = false;
     if (this.isCupPlaying[deckId]) {
       this.isCupPlaying[deckId] = false;
       this.setDeck(deckId, { isCupPlaying: false });
@@ -1142,11 +1154,18 @@ class DJStore {
     }
 
     if (deck.playbackState === 'playing') {
-      this.jumpToMainCue(deckId);
+      if (this.cueMode === 'standard') {
+        this.retriggerCue(deckId);
+      } else {
+        this.jumpToMainCue(deckId);
+      }
       return;
     }
 
+    // En pausa ambos modos previsualizan mientras se mantiene CUE (hold-to-preview);
+    // al soltar, handleCueUp detiene y vuelve al marcador
     if (this.isCupPlaying[deckId]) return;
+    this.cuePreviewHeld[deckId] = true;
     const pressToken = ++this.cupPressTokens[deckId];
     const trackId = deck.track.id;
     this.isCupPlaying[deckId] = true;
@@ -1195,15 +1214,27 @@ class DJStore {
   }
 
   /**
+   * Modo estándar en reproducción: salta al CUE y sigue sonando (re-trigger), sin preview ni parada al soltar.
+   */
+  private retriggerCue(deckId: DeckId): void {
+    this.cuePreviewHeld[deckId] = false;
+    this.seekDeck(deckId, this.getDeckState(deckId).mainCue ?? 0);
+  }
+
+  /**
    * Manejador al soltar el botón CUE (pointerup / mouseup / keyup):
    * Si CUP estaba activo, detiene la reproducción y regresa a mainCue.
    */
   public handleCueUp(deckId: DeckId): void {
-    if (!this.isCupPlaying[deckId]) return;
+    const wasPreviewHeld = this.cuePreviewHeld[deckId];
+    this.cuePreviewHeld[deckId] = false;
+    const deck = this.getDeckState(deckId);
+    // Solo una preview iniciada desde pausa se detiene al soltar, aunque un seek intermedio haya limpiado isCupPlaying
+    const mustStop = this.isCupPlaying[deckId] || (wasPreviewHeld && deck.playbackState === 'playing');
+    if (!mustStop) return;
     this.cupPressTokens[deckId] += 1;
     this.isCupPlaying[deckId] = false;
 
-    const deck = this.getDeckState(deckId);
     const targetPos = deck.mainCue ?? 0;
 
     audioEngine.pauseDeck(deckId);
@@ -1224,7 +1255,7 @@ class DJStore {
    * Cancela de forma segura cualquier reproducción CUP activa (p. ej. pérdida de foco, cambio de pista, blur).
    */
   public cancelCup(deckId: DeckId): void {
-    if (this.isCupPlaying[deckId]) {
+    if (this.isCupPlaying[deckId] || this.cuePreviewHeld[deckId]) {
       this.handleCueUp(deckId);
     }
   }
@@ -1312,14 +1343,91 @@ class DJStore {
   }
 
   /**
-   * Modifica el slider de pitch (0 a 100, 50 = centro) alterando el playbackRate real (±8%).
+   * Cambia el rango del fader de pitch (0.06, 0.08 o 0.16). Conserva la velocidad de cada deck
+   * si cabe en el nuevo rango (recortándola si no) y recoloca el fader en consecuencia.
+   */
+  public setPitchRange(range: number): void {
+    audioEngine.setPitchRange(range);
+    const applied = audioEngine.getPitchRange();
+    if (applied === this.pitchRange) return;
+    this.pitchRange = applied;
+
+    for (const deckId of ['A', 'B'] as const) {
+      const deck = this.getDeckState(deckId);
+      // Un Esclavo con SYNC activo puede seguir fuera del fader, dentro de la tolerancia de SYNC
+      const limit = deck.isSyncActive ? audioEngine.getRateLimit() : applied;
+      const rate = Number(Math.max(1 - limit, Math.min(1 + limit, deck.playbackRate)).toFixed(4));
+      if (rate !== deck.playbackRate && deck.track) {
+        try {
+          audioEngine.setDeckPlaybackRate(deckId, rate);
+        } catch {
+          // Motor aún no inicializado: la velocidad se aplica al reproducir
+        }
+      }
+      this.setDeck(deckId, {
+        pitch: Number(Math.max(0, Math.min(100, 50 + ((rate - 1.0) / applied) * 50)).toFixed(1)),
+        playbackRate: rate,
+        calculatedBpm: computeEffectiveBpm(deck.track, rate),
+      });
+    }
+  }
+
+  public getPitchRange(): number {
+    return this.pitchRange;
+  }
+
+  /**
+   * Cambia la tolerancia máxima de SYNC (±4 % a ±20 %). Si un Esclavo ya sincronizado queda
+   * fuera del nuevo límite, se desacopla y su velocidad vuelve al rango del fader.
+   */
+  public setSyncRateLimit(limit: number): void {
+    audioEngine.setSyncRateLimit(limit);
+    const applied = audioEngine.getSyncRateLimit();
+    if (applied === this.syncRateLimit) return;
+    this.syncRateLimit = applied;
+
+    const masterDeckId = this.state.syncMasterDeck;
+    if (!masterDeckId) return;
+    const slaveDeckId: DeckId = masterDeckId === 'A' ? 'B' : 'A';
+    const slave = this.getDeckState(slaveDeckId);
+    if (Math.abs(slave.playbackRate - 1) <= applied + 1e-9) return;
+
+    const faderRate = Number(Math.max(1 - this.pitchRange, Math.min(1 + this.pitchRange, slave.playbackRate)).toFixed(4));
+    try {
+      audioEngine.setDeckPlaybackRate(slaveDeckId, faderRate);
+    } catch {
+      // Motor aún no inicializado: la velocidad se aplica al reproducir
+    }
+    this.setSyncRoles(null, {
+      [slaveDeckId]: {
+        pitch: Number((50 + ((faderRate - 1.0) / this.pitchRange) * 50).toFixed(1)),
+        playbackRate: faderRate,
+        calculatedBpm: computeEffectiveBpm(slave.track, faderRate),
+      },
+    });
+  }
+
+  public getSyncRateLimit(): number {
+    return this.syncRateLimit;
+  }
+
+  public setCueMode(mode: CueButtonMode): void {
+    this.cueMode = mode;
+  }
+
+  public getCueMode(): CueButtonMode {
+    return this.cueMode;
+  }
+
+  /**
+   * Modifica el slider de pitch (0 a 100, 50 = centro) alterando el playbackRate real (±8 % por defecto, según el rango configurado).
    * Al mover manualmente el fader de un deck con SYNC activo (Esclavo), desactiva SYNC
    * de forma inmediata para restaurar el control manual sin saltos de velocidad ni discrepancias.
    * Si el deck modificado es el Master, propaga el nuevo tempo al Esclavo si está dentro de ±8%.
    */
   public setPitchDeck(deckId: DeckId, pitchValue: number): void {
     const clampedPitch = Math.max(0, Math.min(100, pitchValue));
-    const rate = Number((1.0 + ((clampedPitch - 50) / 50) * PITCH_RANGE).toFixed(4));
+    const rate = Number((1.0 + ((clampedPitch - 50) / 50) * this.pitchRange).toFixed(4));
     const deckState = this.getDeckState(deckId);
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     const otherDeck = this.getDeckState(otherDeckId);
@@ -1361,10 +1469,11 @@ class DJStore {
       if (masterBaseBpm && slaveBaseBpm) {
         const newMasterTargetBpm = masterBaseBpm * rate;
         const exactNewSlaveRate = newMasterTargetBpm / slaveBaseBpm;
-        if (exactNewSlaveRate >= 0.92 && exactNewSlaveRate <= 1.08) {
+        const syncLimit = this.syncRateLimit;
+        if (exactNewSlaveRate >= 1 - syncLimit && exactNewSlaveRate <= 1 + syncLimit) {
           const newSlaveRate = Number(exactNewSlaveRate.toFixed(4));
           const newSlavePitch = Number(
-            Math.max(0, Math.min(100, 50 + ((newSlaveRate - 1.0) / PITCH_RANGE) * 50)).toFixed(1)
+            Math.max(0, Math.min(100, 50 + ((newSlaveRate - 1.0) / this.pitchRange) * 50)).toFixed(1)
           );
           audioEngine.setDeckPlaybackRate(otherDeckId, newSlaveRate);
           this.setDeck(otherDeckId, {
@@ -1373,10 +1482,10 @@ class DJStore {
             calculatedBpm: Number((slaveBaseBpm * newSlaveRate).toFixed(1)),
           });
         } else {
-          // Desacoplar esclavo de forma segura si el Master excede el rango de pitch alcanzable (±8%)
+          // Desacoplar esclavo de forma segura si el Master excede la tolerancia de SYNC
           this.setSyncRoles(null, {
             [otherDeckId]: {
-              errorMessage: 'SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±8%).',
+              errorMessage: `SYNC desactivado: el tempo del Master excedió el rango de pitch alcanzable (±${Math.round(syncLimit * 100)}%).`,
             },
           });
         }
@@ -1557,13 +1666,14 @@ class DJStore {
     // R_req = masterTargetBpm / slaveBaseBpm
     const exactRequiredRate = masterTargetBpm / slaveBaseBpm;
 
-    // 6. Validación estricta del rango de velocidad [0.92, 1.08] (±8%)
+    // 6. Validación estricta de la tolerancia de SYNC configurada (±8 % por defecto)
     // No recortar silenciosamente; rechazar si está fuera de rango
-    if (exactRequiredRate < 0.92 || exactRequiredRate > 1.08) {
+    const syncLimit = this.syncRateLimit;
+    if (exactRequiredRate < 1 - syncLimit || exactRequiredRate > 1 + syncLimit) {
       this.setSyncFailure(
         slaveDeckId,
         'dj.sync_reject_pitch_limit',
-        `No es posible sincronizar: el tempo requerido (${masterTargetBpm.toFixed(1)} BPM) excede el rango de pitch (±8%) para la pista actual (${slaveBaseBpm.toFixed(1)} BPM).`,
+        `No es posible sincronizar: el tempo requerido (${masterTargetBpm.toFixed(1)} BPM) excede el rango de pitch (±${Math.round(syncLimit * 100)}%) para la pista actual (${slaveBaseBpm.toFixed(1)} BPM).`,
         { targetBpm: masterTargetBpm.toFixed(1), trackBpm: slaveBaseBpm.toFixed(1) }
       );
       return false;
@@ -1573,7 +1683,7 @@ class DJStore {
 
     // 7. Cálculo de la posición del fader visual correspondiente exactamente a requiredRate
     const targetPitch = Number(
-      Math.max(0, Math.min(100, 50 + ((requiredRate - 1.0) / PITCH_RANGE) * 50)).toFixed(1)
+      Math.max(0, Math.min(100, 50 + ((requiredRate - 1.0) / this.pitchRange) * 50)).toFixed(1)
     );
 
     // 8. Aplicar la velocidad al motor de audio
@@ -2760,6 +2870,59 @@ class DJStore {
         },
       },
     });
+  }
+
+  /**
+   * Restablece decks y mixer a fábrica sin descargar pistas: detiene y rebobina a 0, CUE a 0,
+   * vacía los Hot Cues en memoria (no en IndexedDB), desactiva SYNC/Master/ALIGN/BAR SYNC y
+   * deja pitch 0 %, gain unitario, EQ plano, filtro neutro, faders de canal al 100 %, CUE de
+   * auriculares apagado, crossfader centrado y master al 100 % sin mute.
+   */
+  public resetMixerControls(): void {
+    const decks = ['A', 'B'] as const;
+    for (const deckId of decks) {
+      this.cuePreviewHeld[deckId] = false;
+      this.cupPressTokens[deckId] += 1;
+      this.isCupPlaying[deckId] = false;
+      this.cancelPhaseAlignment(deckId);
+      audioEngine.setDeckPitchBend(deckId, 0);
+      if (this.getDeckState(deckId).track) this.stopDeck(deckId);
+    }
+
+    const resetDeck = (deck: DeckStoreState): DeckStoreState => ({
+      ...deck,
+      track: deck.track ? { ...deck.track, mainCue: 0, hotCues: [] } : null,
+      currentTime: 0,
+      mainCue: deck.track ? 0 : null,
+      hotCues: [],
+      pitchBend: 0,
+      isCupPlaying: false,
+      isSyncActive: false,
+      isMaster: false,
+      phaseAlignment: { status: 'idle', progressPercent: 0 },
+      barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+      ...(deck.syncFeedback ? { errorCode: null, errorMessage: null, syncFeedback: null } : {}),
+    });
+    this.setState({
+      syncMasterDeck: null,
+      deckA: resetDeck(this.state.deckA),
+      deckB: resetDeck(this.state.deckB),
+    });
+
+    for (const deckId of decks) {
+      this.setPitchDeck(deckId, 50);
+      this.setChannelGain(deckId, 50);
+      this.setChannelEq(deckId, 'high', 50);
+      this.setChannelEq(deckId, 'mid', 50);
+      this.setChannelEq(deckId, 'low', 50);
+      this.setChannelFilter(deckId, 50);
+      this.setChannelVolume(deckId, 100);
+      this.setCuePfl(deckId, false);
+    }
+    this.setCrossfader(50);
+    if (this.state.isMasterMuted) this.toggleMasterMute();
+    this.setMasterVolume(100);
+    this.checkStopTimeLoop();
   }
 
   // Aliases compatibles con MixerActions

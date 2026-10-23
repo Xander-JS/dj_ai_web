@@ -9,6 +9,9 @@ export type MusicalKeyCamelot =
 
 export type AnalysisStatus = 'pending' | 'analyzing' | 'analyzed' | 'failed' | 'unsupported';
 
+/** Campos musicales que el usuario puede corregir manualmente desde la Biblioteca. */
+export type ManualAnalysisField = 'bpm' | 'camelot' | 'energy';
+
 /** Denominador de nota permitido para la unidad métrica de una signatura. */
 export type BeatUnit = 1 | 2 | 4 | 8 | 16 | 32 | 64;
 
@@ -29,13 +32,16 @@ export interface TrackAnalysis {
   key?: string;                     // Notación estándar: 'Am', 'F#m', 'C'
   camelot?: MusicalKeyCamelot;       // Notación armónica Camelot: '8A', '11A'
   energy?: number;                   // Escala de intensidad/energía (0 a 10)
-  waveformPeaks?: number[];          // Muestras normalizadas (0.0 a 1.0) para renderizado rápido
+  waveformPeaks?: number[];          // Picos reales (máx. absoluto por bloque, todos los canales) normalizados 0.0 a 1.0
+  waveformDurationSec?: number;      // Duración exacta (s) del AudioBuffer cubierta por waveformPeaks
   bpmConfidence?: number;            // Nivel de certeza/confianza métrica (0.0 a 1.0)
   isAmbiguous?: boolean;             // El detector no encontró una referencia métrica confiable
   alternateBpm?: number[];           // Hipótesis BPM armónicas alternativas reportadas por el detector
   beatUnit?: TrackBeatUnit;          // Unidad de nota de la métrica; omitida si no hay evidencia explícita
   keyConfidence?: number;            // Nivel de correlación/certeza tonal (0.0 a 1.0)
   firstBeatTime?: number | null;     // Marca temporal en segundos del primer transitorio de beat
+  analysisPasses?: 1 | 2;            // 2 si se ejecutó la segunda pasada permisiva del analizador
+  manualFields?: ManualAnalysisField[]; // Campos fijados manualmente por el usuario (prevalecen sobre el análisis)
   analysisError?: string;
 }
 

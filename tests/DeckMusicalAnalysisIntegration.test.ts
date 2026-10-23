@@ -484,9 +484,14 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
     assert.equal(deckCode.includes('mockPitchB'), false);
     assert.equal(deckCode.includes('deck-waveform-mock'), false, 'El mock de waveform debe haberse reemplazado');
 
-    // Debe contener renderizado SVG real y botón de expulsión
-    assert.ok(deckCode.includes('deck-waveform-svg'), 'Deck.tsx debe renderizar SVG de forma de onda');
-    assert.ok(deckCode.includes('deck-waveform-bar'), 'Deck.tsx debe renderizar rects de forma de onda');
+    // Debe contener renderizado SVG real (componente Waveform) y botón de expulsión
+    const waveformCode = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/Waveform.tsx'),
+      'utf-8'
+    );
+    assert.ok(deckCode.includes('<Waveform'), 'Deck.tsx debe renderizar el componente Waveform');
+    assert.ok(waveformCode.includes('deck-waveform-svg'), 'Waveform.tsx debe renderizar SVG de forma de onda');
+    assert.ok(waveformCode.includes('deck-waveform-bar'), 'Waveform.tsx debe renderizar rects de forma de onda');
     assert.ok(deckCode.includes('deck-eject-btn'), 'Deck.tsx debe incluir botón de expulsión');
 
     // Deck.css debe definir los tokens y estilos correspondientes

@@ -5,11 +5,17 @@
  */
 
 import type { Track, TrackAnalysis } from '../../types/track.ts';
+import { waveformBucketsForDuration } from '../../audio/analysis/audioAnalyzer.ts';
 import { AnalysisService, analysisService } from './AnalysisService.ts';
 import { IndexedDBStorage, indexedDBStorage } from '../storage/IndexedDBStorage.ts';
 import { audioEngine } from '../../audio/index.ts';
 import { computeFileHash } from '../../utils/cryptoHash.ts';
-import { normalizeTrackAnalysis } from '../../utils/trackAnalysis.ts';
+import {
+  applyManualAnalysisEdits,
+  normalizeTrackAnalysis,
+  preserveManualAnalysisFields,
+  type ManualAnalysisEdits,
+} from '../../utils/trackAnalysis.ts';
 
 export type AudioDecoder = (arrayBuffer: ArrayBuffer) => Promise<AudioBuffer>;
 
@@ -105,6 +111,8 @@ export class AnalysisSyncManager {
   ): Promise<TrackAnalysis> {
     const trackId = track.id;
     track.analysis = normalizeTrackAnalysis(track.analysis);
+    // Correcciones manuales vigentes; se descartan si el contenido físico de la pista cambió
+    let manualSource: TrackAnalysis | null = track.analysis.manualFields?.length ? track.analysis : null;
 
     // Registrar nuevo token activo inmediatamente para indicar isAnalyzing y descartar desfasados
     const currentToken = (this.activeTokens.get(trackId) ?? 0) + 1;
@@ -154,6 +162,7 @@ export class AnalysisSyncManager {
         const storedAnalysisPending = storedTrack ? !isAnalysisValid(storedTrack.analysis) : false;
 
         if (fileChanged || storedAnalysisPending) {
+          if (fileChanged) manualSource = null;
           await this.invalidateAnalysis(trackId);
           options = { ...options, force: true };
         } else {
@@ -174,6 +183,7 @@ export class AnalysisSyncManager {
           const fileChanged = checkFileChanged(storedTrack);
 
           if (fileChanged) {
+            manualSource = null;
             await this.invalidateAnalysis(trackId);
             options = { ...options, force: true };
           } else if (isAnalysisValid(storedTrack.analysis)) {
@@ -237,9 +247,11 @@ export class AnalysisSyncManager {
       });
     }
 
-    // 6. Decodificar audio a PCM Float32Array
+    // 6. Decodificar audio a PCM Float32Array (todos los canales)
     let pcm: Float32Array;
+    const extraChannels: Float32Array[] = [];
     let sampleRate: number;
+    let durationSec: number;
     try {
       const arrayBuffer = await audioBlob.arrayBuffer();
       if (this.activeTokens.get(trackId) !== currentToken) {
@@ -250,6 +262,13 @@ export class AnalysisSyncManager {
       const audioBuffer = await this.decodeAudio(arrayBuffer);
       pcm = audioBuffer.getChannelData(0);
       sampleRate = audioBuffer.sampleRate;
+      const channelCount = Number.isInteger(audioBuffer.numberOfChannels) ? audioBuffer.numberOfChannels : 1;
+      for (let channel = 1; channel < channelCount; channel++) {
+        extraChannels.push(audioBuffer.getChannelData(channel));
+      }
+      durationSec = Number.isFinite(audioBuffer.duration) && audioBuffer.duration > 0
+        ? audioBuffer.duration
+        : pcm.length / sampleRate;
     } catch (decodeErr) {
       const failureResult: TrackAnalysis = {
         status: 'failed',
@@ -265,9 +284,11 @@ export class AnalysisSyncManager {
     try {
       const rawResult = await this.service.queueAnalysis(trackId, pcm, sampleRate, {
         transferBuffer: false,
-      });
+        waveformBuckets: waveformBucketsForDuration(durationSec),
+      }, extraChannels);
+      const result = manualSource ? preserveManualAnalysisFields(rawResult, manualSource) : rawResult;
 
-      return await this.handleAnalysisCompletion(trackId, currentToken, rawResult, track, contentHash, {
+      return await this.handleAnalysisCompletion(trackId, currentToken, result, track, contentHash, {
         deckId: options.deckId,
         selectionToken: options.selectionToken,
       });
@@ -335,6 +356,28 @@ export class AnalysisSyncManager {
     });
 
     return result;
+  }
+
+  /**
+   * Aplica correcciones manuales de BPM, tonalidad Camelot y energía, las persiste en
+   * IndexedDB y notifica a Biblioteca y Decks. Devuelve null si la pista no existe o si
+   * el contenido cambió durante la escritura.
+   */
+  public async updateManualAnalysis(trackId: string, edits: ManualAnalysisEdits): Promise<TrackAnalysis | null> {
+    if (this.isAnalyzing(trackId)) {
+      throw new Error('No se puede editar una pista mientras se analiza');
+    }
+
+    const stored = await this.storage.getTrack(trackId);
+    if (!stored) return null;
+
+    const next = applyManualAnalysisEdits(stored.analysis, edits);
+    const contentHash = stored.fileMeta?.contentHash;
+    const persisted = await this.storage.updateTrackAnalysis(trackId, next, contentHash);
+    if (!persisted) return null;
+
+    this.notifyListeners(trackId, next, { contentHash });
+    return next;
   }
 
   /**

@@ -5,14 +5,17 @@ import {
   Search, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
   Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus,
-  Target, WandSparkles, ArrowLeftRight
+  Target, WandSparkles, ArrowLeftRight, Link2, Pencil, Check
 } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
+import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { importFilesToLocalLibrary } from '../services/localLibraryImport';
+import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
+import { settingsStore } from '../store/useSettingsStore';
+import type { ExtractedAudio } from '../services/youtubeService';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
 import { useSeedStore } from '../store/useSeedStore';
@@ -20,8 +23,17 @@ import { buildPlaylistFromSeeds, MAX_SEED_TRACKS } from '../engine/playlistBuild
 import { notificationCenter } from '../services/notifications/notificationCenter';
 import { analysisSyncManager } from '../services/analysis';
 import { playlistService, addTracksToPlaylist } from '../services/playlists/playlistService';
-import { keyToCamelot } from '../audio/analysis/camelotMapper';
-import type { Track, AnalysisStatus, MusicalKeyCamelot } from '../types/track';
+import { camelotToKey, keyToCamelot } from '../audio/analysis/camelotMapper';
+import {
+  CAMELOT_KEYS,
+  MANUAL_BPM_MAX,
+  MANUAL_BPM_MIN,
+  MANUAL_ENERGY_MAX,
+  MANUAL_ENERGY_MIN,
+  validateManualAnalysisEdits,
+  type ManualAnalysisEdits,
+} from '../utils/trackAnalysis';
+import type { Track, AnalysisStatus, ManualAnalysisField, MusicalKeyCamelot } from '../types/track';
 import type { Playlist } from '../types/playlist';
 import '../components/ui/Table.css';
 import './Library.css';
@@ -38,6 +50,7 @@ export interface UnifiedRowTrack {
   key?: string;
   camelot?: MusicalKeyCamelot;
   energy?: number;
+  manualFields: ManualAnalysisField[];
   status: AnalysisStatus;
   analysisError?: string;
   durationFormatted: string;
@@ -45,6 +58,27 @@ export interface UnifiedRowTrack {
   fileSizeFormatted?: string;
   dateAddedFormatted?: string;
   rawLocalTrack: Track;
+}
+
+interface MetadataDraft {
+  bpm: string;
+  camelot: string;
+  energy: string;
+}
+
+/** Convierte el borrador de la fila en ediciones; los campos sin cambios no se marcan como manuales. */
+function draftToManualEdits(draft: MetadataDraft, initial: MetadataDraft): ManualAnalysisEdits {
+  const edits: ManualAnalysisEdits = {};
+  if (draft.bpm.trim() !== initial.bpm) {
+    edits.bpm = draft.bpm.trim() === '' ? null : Number(draft.bpm);
+  }
+  if (draft.camelot !== initial.camelot) {
+    edits.camelot = draft.camelot === '' ? null : (draft.camelot as MusicalKeyCamelot);
+  }
+  if (draft.energy.trim() !== initial.energy) {
+    edits.energy = draft.energy.trim() === '' ? null : Number(draft.energy);
+  }
+  return edits;
 }
 
 export interface AnalysisStatusBadgeProps {
@@ -144,9 +178,16 @@ export const Library: React.FC = () => {
   } | null>(null);
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
+  const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [targetPlaylistId, setTargetPlaylistId] = useState('');
+
+  // Edición manual en línea de BPM, tonalidad Camelot y energía
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
+  const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({ bpm: '', camelot: '', energy: '' });
+  const [initialMetadataDraft, setInitialMetadataDraft] = useState<MetadataDraft>({ bpm: '', camelot: '', energy: '' });
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false);
 
   // Playlists locales disponibles como destino para las pistas seleccionadas
   useEffect(() => {
@@ -212,13 +253,16 @@ export const Library: React.FC = () => {
     setFeedback(null);
 
     const files = Array.from(fileList);
-    const { successCount, errors } = await importFilesToLocalLibrary(
+    const { successCount, errors, importedTracks } = await importFilesToLocalLibrary(
       files,
       (name) => t('library.duplicate_warning', { name }),
     );
 
     await refreshLocalTracks();
     setIsImporting(false);
+    if (settingsStore.getSnapshot().autoAnalyzeOnImport) {
+      importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
+    }
 
     if (successCount > 0 && errors.length === 0) {
       setFeedback({
@@ -239,6 +283,26 @@ export const Library: React.FC = () => {
         text: errors.join(' | '),
       });
     }
+  };
+
+  // Importación desde YouTube: mismo flujo que un archivo local y análisis automático (si está activado en Ajustes)
+  const handleYouTubeAudio = async ({ blob, filename }: ExtractedAudio): Promise<YouTubeImportResult> => {
+    const { successCount, errors, importedTracks } = await importRemoteAudioToLocalLibrary(
+      blob,
+      filename,
+      (name) => t('library.duplicate_warning', { name }),
+    );
+    await refreshLocalTracks();
+
+    if (successCount === 0) {
+      return { ok: false, error: errors.join(' | ') || undefined };
+    }
+
+    setFeedback({ type: 'success', text: t('library.import_success', { count: successCount }) });
+    if (settingsStore.getSnapshot().autoAnalyzeOnImport) {
+      importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
+    }
+    return { ok: true };
   };
 
   // Drag and drop handlers
@@ -350,6 +414,71 @@ export const Library: React.FC = () => {
     }
   };
 
+  const handleStartMetadataEdit = (track: UnifiedRowTrack) => {
+    const initial: MetadataDraft = {
+      bpm: track.bpm !== undefined ? String(track.bpm) : '',
+      camelot: track.camelot ?? '',
+      energy: track.energy !== undefined ? String(track.energy) : '',
+    };
+    setInitialMetadataDraft(initial);
+    setMetadataDraft(initial);
+    setEditingTrackId(track.id);
+  };
+
+  const handleCancelMetadataEdit = () => {
+    setEditingTrackId(null);
+  };
+
+  const handleSaveMetadataEdit = async (track: UnifiedRowTrack) => {
+    const edits = draftToManualEdits(metadataDraft, initialMetadataDraft);
+    if (Object.keys(edits).length === 0) {
+      setEditingTrackId(null);
+      return;
+    }
+
+    const invalid = validateManualAnalysisEdits(edits);
+    if (invalid) {
+      const text = invalid === 'bpm'
+        ? t('library.manual_invalid_bpm', { min: MANUAL_BPM_MIN, max: MANUAL_BPM_MAX })
+        : invalid === 'energy'
+          ? t('library.manual_invalid_energy', { min: MANUAL_ENERGY_MIN, max: MANUAL_ENERGY_MAX })
+          : t('library.manual_invalid_camelot');
+      setFeedback({ type: 'error', text });
+      return;
+    }
+
+    setIsSavingMetadata(true);
+    try {
+      // El gestor persiste en IndexedDB y notifica a la Biblioteca y a los Decks suscritos
+      const updated = await analysisSyncManager.updateManualAnalysis(track.id, edits);
+      if (!updated) {
+        throw new Error(t('states.error_desc'));
+      }
+      setEditingTrackId(null);
+      setFeedback({ type: 'success', text: t('library.manual_saved', { title: track.title }) });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: t('library.manual_save_error', {
+          title: track.title,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      });
+    } finally {
+      setIsSavingMetadata(false);
+    }
+  };
+
+  const handleMetadataKeyDown = (event: React.KeyboardEvent, track: UnifiedRowTrack) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void handleSaveMetadataEdit(track);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      handleCancelMetadataEdit();
+    }
+  };
+
   // Carga real de pista en Deck A o Deck B
   const handleLoadToDeck = async (unifiedTrack: UnifiedRowTrack, deckId: 'A' | 'B') => {
     try {
@@ -382,18 +511,20 @@ export const Library: React.FC = () => {
 
   // Filas de la tabla: solo pistas importadas y procesadas localmente (IndexedDB)
   const unifiedTracks: UnifiedRowTrack[] = localTracks.map((lt): UnifiedRowTrack => {
-      const isAnalyzed = lt.analysis?.status === 'analyzed';
+      // 'unsupported' puede conservar energía real o valores corregidos manualmente
+      const hasMetrics = lt.analysis?.status === 'analyzed' || lt.analysis?.status === 'unsupported';
       return {
         id: lt.id,
         title: lt.title,
         artist: lt.artist || t('dj.unknown_artist'),
         album: lt.fileMeta?.fileName || '-',
-        bpm: isAnalyzed ? lt.analysis.bpm : undefined,
-        key: isAnalyzed ? lt.analysis.key : undefined,
-        camelot: isAnalyzed
+        bpm: hasMetrics ? lt.analysis.bpm : undefined,
+        key: hasMetrics ? lt.analysis.key : undefined,
+        camelot: hasMetrics
           ? lt.analysis.camelot || (lt.analysis.key ? keyToCamelot(lt.analysis.key) || undefined : undefined)
           : undefined,
-        energy: isAnalyzed ? lt.analysis.energy : undefined,
+        energy: hasMetrics ? lt.analysis.energy : undefined,
+        manualFields: lt.analysis?.manualFields ?? [],
         status: lt.analysis?.status || 'pending',
         analysisError: lt.analysis?.analysisError,
         durationFormatted: lt.durationFormatted,
@@ -532,6 +663,10 @@ export const Library: React.FC = () => {
             >
               <FolderPlus size={18} />
               {isImporting ? t('library.importing') : t('library.import_btn')}
+            </Button>
+            <Button variant="outline" onClick={() => setYoutubeModalOpen(true)}>
+              <Link2 size={18} />
+              {t('library.import_youtube_btn')}
             </Button>
           </div>
         </div>
@@ -711,6 +846,7 @@ export const Library: React.FC = () => {
               const isLoadedInDeckA = deckA.track?.title === track.title;
               const isLoadedInDeckB = deckB.track?.title === track.title;
               const seedIndex = seedTrackIds.indexOf(track.id);
+              const isEditing = editingTrackId === track.id;
 
               return (
                 <tr key={track.id} className={clsx(isSelected && 'selected', (isLoadedInDeckA || isLoadedInDeckB) && 'prepared')}>
@@ -755,15 +891,53 @@ export const Library: React.FC = () => {
                     )}
                   </td>
                   <td>
-                    {track.status === 'analyzed' && track.bpm !== undefined && track.bpm > 0 ? (
-                      <span className="track-bpm-value">{track.bpm % 1 === 0 ? track.bpm : track.bpm.toFixed(1)}</span>
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={MANUAL_BPM_MIN}
+                        max={MANUAL_BPM_MAX}
+                        step={0.1}
+                        value={metadataDraft.bpm}
+                        aria-label={t('library.manual_bpm_label')}
+                        disabled={isSavingMetadata}
+                        onChange={(e) => setMetadataDraft((d) => ({ ...d, bpm: e.target.value }))}
+                        onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                        autoFocus
+                      />
+                    ) : track.bpm !== undefined && track.bpm > 0 ? (
+                      <span
+                        className="track-bpm-value"
+                        title={track.manualFields.includes('bpm') ? t('library.manual_value_title') : undefined}
+                      >
+                        {track.bpm % 1 === 0 ? track.bpm : track.bpm.toFixed(1)}
+                      </span>
                     ) : (
                       <span className="text-muted">—</span>
                     )}
                   </td>
                   <td>
-                    {track.status === 'analyzed' && track.key ? (
-                      <div className="track-key-group">
+                    {isEditing ? (
+                      <select
+                        className="input-field"
+                        value={metadataDraft.camelot}
+                        aria-label={t('library.manual_key_label')}
+                        disabled={isSavingMetadata}
+                        onChange={(e) => setMetadataDraft((d) => ({ ...d, camelot: e.target.value }))}
+                        onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                      >
+                        <option value="">{t('library.manual_key_none')}</option>
+                        {CAMELOT_KEYS.map((camelot) => (
+                          <option key={camelot} value={camelot}>
+                            {camelot} · {camelotToKey(camelot)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : track.key ? (
+                      <div
+                        className="track-key-group"
+                        title={track.manualFields.includes('camelot') ? t('library.manual_value_title') : undefined}
+                      >
                         <span className="track-key-name">{track.key}</span>
                         {track.camelot && (
                           <Badge variant="outline" className="track-camelot-badge">
@@ -776,8 +950,26 @@ export const Library: React.FC = () => {
                     )}
                   </td>
                   <td>
-                    {track.status === 'analyzed' && typeof track.energy === 'number' ? (
-                      <div className="energy-bar-container" title={t('library.energy_label', { val: track.energy })}>
+                    {isEditing ? (
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={MANUAL_ENERGY_MIN}
+                        max={MANUAL_ENERGY_MAX}
+                        step={1}
+                        value={metadataDraft.energy}
+                        aria-label={t('library.manual_energy_label')}
+                        disabled={isSavingMetadata}
+                        onChange={(e) => setMetadataDraft((d) => ({ ...d, energy: e.target.value }))}
+                        onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                      />
+                    ) : typeof track.energy === 'number' ? (
+                      <div
+                        className="energy-bar-container"
+                        title={track.manualFields.includes('energy')
+                          ? `${t('library.energy_label', { val: track.energy })} · ${t('library.manual_value_title')}`
+                          : t('library.energy_label', { val: track.energy })}
+                      >
                         <div className="energy-bar">
                           <div 
                             className="energy-bar-fill" 
@@ -825,6 +1017,38 @@ export const Library: React.FC = () => {
                         aria-label={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
                         onClick={() => handleToggleSeed(track.rawLocalTrack)}
                       />
+                      {isEditing ? (
+                        <>
+                          <IconButton
+                            icon={<Check size={15} />}
+                            size="sm"
+                            variant="primary"
+                            disabled={isSavingMetadata}
+                            title={t('library.action_save_metadata')}
+                            aria-label={t('library.action_save_metadata')}
+                            onClick={() => handleSaveMetadataEdit(track)}
+                          />
+                          <IconButton
+                            icon={<X size={15} />}
+                            size="sm"
+                            variant="ghost"
+                            disabled={isSavingMetadata}
+                            title={t('library.action_cancel_edit')}
+                            aria-label={t('library.action_cancel_edit')}
+                            onClick={handleCancelMetadataEdit}
+                          />
+                        </>
+                      ) : (
+                        <IconButton
+                          icon={<Pencil size={15} />}
+                          size="sm"
+                          variant="ghost"
+                          disabled={track.status === 'analyzing'}
+                          title={t('library.action_edit_metadata')}
+                          aria-label={t('library.action_edit_metadata')}
+                          onClick={() => handleStartMetadataEdit(track)}
+                        />
+                      )}
                       {track.status === 'analyzing' ? (
                         <IconButton 
                           icon={<Loader2 size={15} className="spin-anim" />} 
@@ -885,6 +1109,12 @@ export const Library: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      <YouTubeImportModal
+        open={youtubeModalOpen}
+        onClose={() => setYoutubeModalOpen(false)}
+        onAudioReceived={handleYouTubeAudio}
+      />
 
       {/* Modal de confirmación para eliminar pista local */}
       {deleteConfirmTrack && (

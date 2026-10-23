@@ -1,10 +1,11 @@
 /**
  * SYSTEM DJ — Local IndexedDB Storage Service
  * Persistencia local en cliente para pistas de audio y metadatos sin subir archivos a servidores.
- * Base de datos: SystemDJ_Storage | Almacén: tracks
+ * Base de datos: SystemDJ_Storage | Almacenes: tracks, playlists
  */
 
 import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../../types/track.ts';
+import type { Playlist } from '../../types/playlist.ts';
 import { computeFileHash, getVerifiedBlobHash } from '../../utils/cryptoHash.ts';
 import { isDownbeatConfirmed, createSuggestedDownbeat } from '../../utils/downbeat.ts';
 import { normalizeTrackAnalysis } from '../../utils/trackAnalysis.ts';
@@ -34,8 +35,10 @@ export interface StoredTrackRecord {
 
 
 const DB_NAME = 'SystemDJ_Storage';
-const DB_VERSION = 1;
+// v1: tracks | v2: playlists (las migraciones solo crean almacenes ausentes, sin tocar datos)
+const DB_VERSION = 2;
 const STORE_NAME = 'tracks';
+const PLAYLIST_STORE_NAME = 'playlists';
 
 /**
  * Resultado explícito de un guardado. `persisted: false` significa que la pista
@@ -55,6 +58,8 @@ export class IndexedDBStorage {
   private memoryStore: Map<string, StoredTrackRecord> = new Map();
   // Identificadores de pistas que NO se pudieron persistir en IndexedDB
   private memoryOnlyIds: Set<string> = new Set();
+  // Respaldo en memoria de playlists cuando IndexedDB no está disponible
+  private memoryPlaylists: Map<string, Playlist> = new Map();
 
   /**
    * Indica si una pista existe solo en memoria (no sobrevivirá a una recarga).
@@ -92,6 +97,10 @@ export class IndexedDBStorage {
             const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
             store.createIndex('fileName', 'fileMeta.fileName', { unique: false });
             store.createIndex('dateAdded', 'dateAdded', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(PLAYLIST_STORE_NAME)) {
+            const playlistStore = db.createObjectStore(PLAYLIST_STORE_NAME, { keyPath: 'id' });
+            playlistStore.createIndex('updatedAt', 'updatedAt', { unique: false });
           }
         };
 
@@ -447,18 +456,36 @@ export class IndexedDBStorage {
 
   /**
    * Elimina una pista y su archivo de audio local.
+   * En la misma transacción retira la pista de todas las playlists que la referencian.
    */
   public async deleteTrack(id: string): Promise<void> {
     this.memoryStore.delete(id);
     const wasMemoryOnly = this.memoryOnlyIds.delete(id);
+    this.memoryPlaylists.forEach((playlist, key) => {
+      if (playlist.trackIds.includes(id)) {
+        this.memoryPlaylists.set(key, { ...playlist, trackIds: playlist.trackIds.filter((tid) => tid !== id) });
+      }
+    });
 
     const db = await this.init();
-    if (!db || wasMemoryOnly) return;
+    if (!db) return;
 
     return new Promise((resolve, reject) => {
       try {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        tx.objectStore(STORE_NAME).delete(id);
+        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME], 'readwrite');
+        if (!wasMemoryOnly) tx.objectStore(STORE_NAME).delete(id);
+
+        const playlistStore = tx.objectStore(PLAYLIST_STORE_NAME);
+        const cursorRequest = playlistStore.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const playlist = cursor.value as Playlist;
+          if (playlist.trackIds.includes(id)) {
+            cursor.update({ ...playlist, trackIds: playlist.trackIds.filter((tid) => tid !== id) });
+          }
+          cursor.continue();
+        };
 
         tx.oncomplete = () => resolve();
         const onFailure = () => {
@@ -478,14 +505,16 @@ export class IndexedDBStorage {
   public async clearAll(): Promise<void> {
     this.memoryStore.clear();
     this.memoryOnlyIds.clear();
+    this.memoryPlaylists.clear();
 
     const db = await this.init();
     if (!db) return;
 
     return new Promise((resolve) => {
       try {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME], 'readwrite');
         tx.objectStore(STORE_NAME).clear();
+        tx.objectStore(PLAYLIST_STORE_NAME).clear();
         tx.oncomplete = () => resolve();
         tx.onabort = () => resolve();
         tx.onerror = () => resolve();
@@ -935,6 +964,79 @@ export class IndexedDBStorage {
         request.onerror = () => resolve(false);
       } catch {
         resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Devuelve todas las playlists locales, de la más reciente a la más antigua.
+   */
+  public async getAllPlaylists(): Promise<Playlist[]> {
+    const sortByRecent = (list: Playlist[]) => list.sort((a, b) => b.createdAt - a.createdAt);
+    const db = await this.init();
+    if (!db) return sortByRecent(Array.from(this.memoryPlaylists.values()));
+
+    return new Promise((resolve) => {
+      try {
+        const request = db.transaction(PLAYLIST_STORE_NAME, 'readonly').objectStore(PLAYLIST_STORE_NAME).getAll();
+        request.onsuccess = () => resolve(sortByRecent(request.result as Playlist[]));
+        request.onerror = () => resolve(sortByRecent(Array.from(this.memoryPlaylists.values())));
+      } catch {
+        resolve(sortByRecent(Array.from(this.memoryPlaylists.values())));
+      }
+    });
+  }
+
+  /**
+   * Crea o reemplaza una playlist completa (nombre, orden y pistas) de forma atómica.
+   */
+  public async savePlaylist(playlist: Playlist): Promise<SaveTrackResult> {
+    const record: Playlist = { ...playlist, trackIds: [...playlist.trackIds] };
+    this.memoryPlaylists.set(record.id, record);
+
+    const db = await this.init();
+    if (!db) return { persisted: false, reason: 'unsupported' };
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(PLAYLIST_STORE_NAME, 'readwrite');
+        tx.objectStore(PLAYLIST_STORE_NAME).put(record);
+        tx.oncomplete = () => resolve({ persisted: true });
+        const onFailure = () => {
+          const reason = tx.error?.name === 'QuotaExceededError' ? 'quota' : 'error';
+          console.warn(`[IndexedDBStorage] No se pudo persistir la playlist ${record.id}:`, tx.error);
+          resolve({ persisted: false, reason });
+        };
+        tx.onabort = onFailure;
+        tx.onerror = onFailure;
+      } catch (err) {
+        console.warn('[IndexedDBStorage] Error en transacción de playlist:', err);
+        resolve({ persisted: false, reason: 'error' });
+      }
+    });
+  }
+
+  /**
+   * Elimina una playlist. Las pistas referenciadas permanecen en la biblioteca.
+   */
+  public async deletePlaylist(id: string): Promise<void> {
+    this.memoryPlaylists.delete(id);
+
+    const db = await this.init();
+    if (!db) return;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction(PLAYLIST_STORE_NAME, 'readwrite');
+        tx.objectStore(PLAYLIST_STORE_NAME).delete(id);
+        tx.oncomplete = () => resolve();
+        const onFailure = () => {
+          reject(new Error(`No se pudo eliminar la playlist con id ${id}`, { cause: tx.error }));
+        };
+        tx.onabort = onFailure;
+        tx.onerror = onFailure;
+      } catch (err) {
+        reject(new Error(`Error en transacción de eliminación de playlist: ${err instanceof Error ? err.message : String(err)}`, { cause: err }));
       }
     });
   }

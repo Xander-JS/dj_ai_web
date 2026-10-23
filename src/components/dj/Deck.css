@@ -344,6 +344,10 @@
   font-size: var(--text-sm);
   border-radius: var(--radius-md);
   text-transform: uppercase;
+  /* Press-and-hold (CUE) must not open the touch callout or select text */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .btn-dj-play {
@@ -1176,4 +1180,123 @@
 .deck-sync-hint-rejected {
   border-left-color: var(--color-error);
   color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Tablet breakpoints (Fase 3 — 1024x768 landscape, 768x1024 portrait)
+   ========================================================================== */
+
+/* Landscape tablet: decks share the row with the mixer, so everything shrinks */
+@media (max-width: 1024px) {
+  .deck-header {
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .deck-title-group {
+    flex: 1 1 10rem;
+  }
+
+  .deck-stats {
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    margin-left: auto;
+  }
+
+  .deck-stat-item {
+    min-width: var(--size-sm);
+  }
+
+  .deck-eject-btn {
+    width: var(--size-xs);
+    height: var(--size-xs);
+  }
+
+  .deck-waveform-container {
+    height: var(--size-xl);
+  }
+
+  .deck-hotcue-pad {
+    height: auto;
+    min-height: var(--touch-target-min);
+  }
+
+  .deck-controls {
+    padding: var(--space-3);
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .deck-transport {
+    gap: var(--space-1);
+  }
+
+  .btn-dj {
+    width: var(--space-16);
+    height: auto;
+    min-height: var(--touch-target-min);
+    padding: var(--space-1);
+    font-size: var(--text-xs);
+    line-height: var(--line-height-tight);
+    white-space: normal;
+  }
+
+  .deck-jog-wheel-container {
+    min-width: 0;
+  }
+
+  .deck-jog-wheel {
+    width: min(calc(var(--size-xl) * 3), 100%);
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .deck-jog-wheel-inner {
+    width: 90%;
+    height: 90%;
+  }
+
+  .deck-jog-wheel-text {
+    font-size: var(--text-xl);
+  }
+
+  .deck-pitch-bend-controls {
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 0;
+  }
+
+  .btn-pitch-bend {
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+  }
+}
+
+/* Portrait tablet: each deck spans the full width; transport becomes a bottom row */
+@media (max-width: 900px) {
+  .deck-controls {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .deck-transport {
+    order: 3;
+    flex-direction: row;
+    width: 100%;
+    gap: var(--space-2);
+  }
+
+  .deck-transport .btn-dj {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  .deck-pitch-controls-container {
+    height: auto;
+  }
+
+  .deck-pitch-bend-controls {
+    flex-direction: row;
+  }
 }

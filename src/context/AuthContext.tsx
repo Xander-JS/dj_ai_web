@@ -4,6 +4,9 @@ import { getSupabase, isSupabaseConfigured, recoveryLinkFromUrl, AVATARS_BUCKET 
 import type { ProfileRow } from '../types/database';
 import { buildAvatarPath } from '../utils/avatarFile';
 
+/** Campos editables desde Ajustes → General: full_name es el nombre real y dj_alias el alias visible. */
+export type ProfileUpdate = Partial<Pick<ProfileRow, 'username' | 'full_name' | 'dj_alias'>>;
+
 export type PasswordRecoveryState = 'idle' | 'active' | 'expired';
 
 export interface AuthContextValue {
@@ -17,6 +20,7 @@ export interface AuthContextValue {
   resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   uploadAvatar: (file: File) => Promise<void>;
+  updateProfile: (fields: ProfileUpdate) => Promise<void>;
   refreshProfile: () => Promise<void>;
   passwordRecovery: PasswordRecoveryState;
   updatePassword: (password: string) => Promise<void>;
@@ -154,6 +158,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(data as ProfileRow);
   }, [userId]);
 
+  const updateProfile = useCallback(async (fields: ProfileUpdate) => {
+    if (!userId) throw new Error('Not authenticated');
+    const client = await getSupabase();
+    const { data, error } = await client
+      .from('profiles')
+      .update(fields)
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) {
+      // 23505 = username ya en uso (restricción UNIQUE)
+      console.error('[profile] profiles update failed', error);
+      throw error;
+    }
+    setProfile(data as ProfileRow);
+  }, [userId]);
+
   const value = useMemo<AuthContextValue>(() => ({
     user,
     session,
@@ -165,11 +186,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     resetPassword,
     signOut,
     uploadAvatar,
+    updateProfile,
     refreshProfile,
     passwordRecovery,
     updatePassword,
     endPasswordRecovery,
-  }), [user, session, userId, profile, loading, signIn, signUp, resetPassword, signOut, uploadAvatar, refreshProfile, passwordRecovery, updatePassword, endPasswordRecovery]);
+  }), [user, session, userId, profile, loading, signIn, signUp, resetPassword, signOut, uploadAvatar, updateProfile, refreshProfile, passwordRecovery, updatePassword, endPasswordRecovery]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -8,7 +8,7 @@ export const Mixer: React.FC = () => {
     <div className="mixer-page-container">
       
       {/* Deck A (Conectado al motor real e IndexedDB) */}
-      <div className="deck-container">
+      <div className="deck-container deck-container-a">
         <Deck deckName="A" />
       </div>
 
@@ -18,7 +18,7 @@ export const Mixer: React.FC = () => {
       </div>
 
       {/* Deck B (Conectado al motor real e IndexedDB) */}
-      <div className="deck-container">
+      <div className="deck-container deck-container-b">
         <Deck deckName="B" />
       </div>
 

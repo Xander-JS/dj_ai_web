@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  Search, MoreHorizontal, CheckSquare, Square, 
+  Search, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
   Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle
 } from 'lucide-react';
@@ -9,7 +9,6 @@ import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
-import { MOCK_LIBRARY } from '../mock/library';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importAudioFiles } from '../services/audioImportService';
 import { computeFileHash } from '../utils/cryptoHash';
@@ -23,7 +22,7 @@ import '../components/ui/Table.css';
 import './Library.css';
 import { clsx } from 'clsx';
 
-export type FilterType = 'all' | 'local' | 'demo' | 'audio' | 'video';
+export type FilterType = 'all' | 'local' | 'audio' | 'video';
 
 export interface UnifiedRowTrack {
   id: string;
@@ -38,10 +37,9 @@ export interface UnifiedRowTrack {
   analysisError?: string;
   durationFormatted: string;
   type: 'audio' | 'video';
-  isLocal: boolean;
   fileSizeFormatted?: string;
   dateAddedFormatted?: string;
-  rawLocalTrack?: Track;
+  rawLocalTrack: Track;
 }
 
 export interface AnalysisStatusBadgeProps {
@@ -319,31 +317,7 @@ export const Library: React.FC = () => {
   // Carga real de pista en Deck A o Deck B
   const handleLoadToDeck = async (unifiedTrack: UnifiedRowTrack, deckId: 'A' | 'B') => {
     try {
-      let trackToLoad: Track;
-      if (unifiedTrack.rawLocalTrack) {
-        trackToLoad = unifiedTrack.rawLocalTrack;
-      } else {
-        // Pista de demostración
-        trackToLoad = {
-          id: unifiedTrack.id,
-          title: unifiedTrack.title,
-          artist: unifiedTrack.artist,
-          album: unifiedTrack.album,
-          duration: 30,
-          durationFormatted: unifiedTrack.durationFormatted,
-          type: unifiedTrack.type,
-          source: { type: 'blob' },
-          analysis: {
-            status: 'analyzed',
-            bpm: unifiedTrack.bpm,
-            key: unifiedTrack.key,
-            camelot: unifiedTrack.camelot,
-            energy: unifiedTrack.energy,
-          },
-          dateAdded: Date.now(),
-        };
-      }
-
+      const trackToLoad = unifiedTrack.rawLocalTrack;
       const loadFn = deckId === 'A' ? loadTrackToDeckA : loadTrackToDeckB;
       const loaded = await loadFn(trackToLoad);
       const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
@@ -370,10 +344,8 @@ export const Library: React.FC = () => {
     }
   };
 
-  // Construcción unificada de filas (Demo + Local)
-  const unifiedTracks: UnifiedRowTrack[] = [
-    // Pistas locales importadas
-    ...localTracks.map((lt): UnifiedRowTrack => {
+  // Filas de la tabla: solo pistas importadas y procesadas localmente (IndexedDB)
+  const unifiedTracks: UnifiedRowTrack[] = localTracks.map((lt): UnifiedRowTrack => {
       const isAnalyzed = lt.analysis?.status === 'analyzed';
       return {
         id: lt.id,
@@ -390,34 +362,15 @@ export const Library: React.FC = () => {
         analysisError: lt.analysis?.analysisError,
         durationFormatted: lt.durationFormatted,
         type: lt.type,
-        isLocal: true,
         fileSizeFormatted: lt.fileMeta?.fileSize ? formatBytes(lt.fileMeta.fileSize) : undefined,
         dateAddedFormatted: lt.dateAdded ? formatDate(lt.dateAdded) : undefined,
         rawLocalTrack: lt,
       };
-    }),
-    // Pistas mock de demostración
-    ...MOCK_LIBRARY.map((mt): UnifiedRowTrack => ({
-      id: `demo_${mt.id}`,
-      title: mt.title,
-      artist: mt.artist,
-      album: mt.album,
-      bpm: mt.bpm,
-      key: mt.key,
-      camelot: keyToCamelot(mt.key) || undefined,
-      energy: mt.energy,
-      status: 'analyzed',
-      durationFormatted: mt.duration,
-      type: mt.type,
-      isLocal: false,
-    })),
-  ];
+    });
 
   // Filtrado reactivo por tipo y búsqueda
   const filteredTracks = unifiedTracks.filter((track) => {
-    // Filtro por categoría
-    if (filter === 'local' && !track.isLocal) return false;
-    if (filter === 'demo' && track.isLocal) return false;
+    // Filtro por categoría ('all' y 'local' muestran la biblioteca local completa)
     if (filter === 'audio' && track.type !== 'audio') return false;
     if (filter === 'video' && track.type !== 'video') return false;
 
@@ -534,13 +487,6 @@ export const Library: React.FC = () => {
               {t('library.filter_local')} ({localTracks.length})
             </Button>
             <Button 
-              variant={filter === 'demo' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('demo')}
-            >
-              {t('library.filter_demo')}
-            </Button>
-            <Button 
               variant={filter === 'audio' ? 'primary' : 'outline'} 
               size="sm" 
               onClick={() => setFilter('audio')}
@@ -595,9 +541,7 @@ export const Library: React.FC = () => {
                   <td>
                     <div className="track-title-container">
                       <span className="track-title">{track.title}</span>
-                      <Badge variant={track.isLocal ? 'primary' : 'outline'}>
-                        {track.isLocal ? t('library.badge_local') : t('library.badge_demo')}
-                      </Badge>
+                      <Badge variant="primary">{t('library.badge_local')}</Badge>
                       {track.type === 'video' && <Badge variant="secondary">V</Badge>}
                       {isLoadedInDeckA && (
                         <span className="deck-prepared-tag" title={t('library.load_deck_a')}>
@@ -662,7 +606,7 @@ export const Library: React.FC = () => {
                     <AnalysisStatusBadge
                       status={track.status}
                       error={track.analysisError}
-                      onAnalyze={track.isLocal && track.rawLocalTrack ? () => handleAnalyzeTrack(track.rawLocalTrack!, track.status === 'analyzed') : undefined}
+                      onAnalyze={() => handleAnalyzeTrack(track.rawLocalTrack, track.status === 'analyzed')}
                     />
                   </td>
                   <td className="track-duration">{track.durationFormatted}</td>
@@ -684,49 +628,42 @@ export const Library: React.FC = () => {
                         aria-label={t('library.load_deck_b')}
                         onClick={() => handleLoadToDeck(track, 'B')}
                       />
-                      {track.isLocal && track.rawLocalTrack && (
-                        track.status === 'analyzing' ? (
-                          <IconButton 
-                            icon={<Loader2 size={15} className="spin-anim" />} 
-                            size="sm" 
-                            variant="ghost"
-                            disabled
-                            title={t('library.status_analyzing')}
-                            aria-label={t('library.status_analyzing')}
-                          />
-                        ) : track.status === 'analyzed' ? (
-                          <IconButton 
-                            icon={<RefreshCw size={15} />} 
-                            size="sm" 
-                            variant="ghost"
-                            title={t('library.action_reanalyze')}
-                            aria-label={t('library.action_reanalyze')}
-                            onClick={() => handleAnalyzeTrack(track.rawLocalTrack!, true)}
-                          />
-                        ) : (
-                          <IconButton 
-                            icon={<Sparkles size={15} />} 
-                            size="sm" 
-                            variant="ghost"
-                            title={t('library.action_analyze')}
-                            aria-label={t('library.action_analyze')}
-                            onClick={() => handleAnalyzeTrack(track.rawLocalTrack!, false)}
-                          />
-                        )
-                      )}
-                      {track.isLocal && track.rawLocalTrack && (
+                      {track.status === 'analyzing' ? (
                         <IconButton 
-                          icon={<Trash2 size={16} />} 
+                          icon={<Loader2 size={15} className="spin-anim" />} 
                           size="sm" 
                           variant="ghost"
-                          title={t('library.delete_track')}
-                          aria-label={t('library.delete_track')}
-                          onClick={() => setDeleteConfirmTrack(track.rawLocalTrack || null)}
+                          disabled
+                          title={t('library.status_analyzing')}
+                          aria-label={t('library.status_analyzing')}
+                        />
+                      ) : track.status === 'analyzed' ? (
+                        <IconButton 
+                          icon={<RefreshCw size={15} />} 
+                          size="sm" 
+                          variant="ghost"
+                          title={t('library.action_reanalyze')}
+                          aria-label={t('library.action_reanalyze')}
+                          onClick={() => handleAnalyzeTrack(track.rawLocalTrack, true)}
+                        />
+                      ) : (
+                        <IconButton 
+                          icon={<Sparkles size={15} />} 
+                          size="sm" 
+                          variant="ghost"
+                          title={t('library.action_analyze')}
+                          aria-label={t('library.action_analyze')}
+                          onClick={() => handleAnalyzeTrack(track.rawLocalTrack, false)}
                         />
                       )}
-                      {!track.isLocal && (
-                        <IconButton icon={<MoreHorizontal size={16} />} size="sm" aria-label="More" />
-                      )}
+                      <IconButton 
+                        icon={<Trash2 size={16} />} 
+                        size="sm" 
+                        variant="ghost"
+                        title={t('library.delete_track')}
+                        aria-label={t('library.delete_track')}
+                        onClick={() => setDeleteConfirmTrack(track.rawLocalTrack)}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -739,10 +676,10 @@ export const Library: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
                     <AlertCircle size={28} className="text-muted" />
                     <span style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-primary)' }}>
-                      {filter === 'local' ? t('library.empty_local_title') : t('states.empty_title')}
+                      {localTracks.length === 0 ? t('library.empty_local_title') : t('states.empty_title')}
                     </span>
                     <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                      {filter === 'local' ? t('library.empty_local_desc') : t('states.empty_desc')}
+                      {localTracks.length === 0 ? t('library.empty_local_desc') : t('states.empty_desc')}
                     </span>
                   </div>
                 </td>

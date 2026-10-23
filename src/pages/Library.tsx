@@ -3,21 +3,21 @@ import { useTranslation } from 'react-i18next';
 import { 
   Search, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
-  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle
+  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus
 } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { importAudioFiles } from '../services/audioImportService';
-import { computeFileHash } from '../utils/cryptoHash';
+import { importFilesToLocalLibrary } from '../services/localLibraryImport';
 import { formatBytes, formatDate } from '../utils/formatters';
-import { audioEngine } from '../audio';
 import { useDJStore } from '../store/useDJStore';
 import { analysisSyncManager } from '../services/analysis';
+import { playlistService, addTracksToPlaylist } from '../services/playlists/playlistService';
 import { keyToCamelot } from '../audio/analysis/camelotMapper';
 import type { Track, AnalysisStatus, MusicalKeyCamelot } from '../types/track';
+import type { Playlist } from '../types/playlist';
 import '../components/ui/Table.css';
 import './Library.css';
 import { clsx } from 'clsx';
@@ -137,6 +137,28 @@ export const Library: React.FC = () => {
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
 
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [targetPlaylistId, setTargetPlaylistId] = useState('');
+
+  // Playlists locales disponibles como destino para las pistas seleccionadas
+  useEffect(() => {
+    let isMounted = true;
+    const load = () => {
+      playlistService
+        .getAll()
+        .then((stored) => {
+          if (isMounted) setPlaylists(stored);
+        })
+        .catch((err) => console.error('[Library] Error al cargar playlists:', err));
+    };
+    load();
+    const unsubscribe = playlistService.subscribe(load);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
   // Carga inicial y suscripción reactiva en tiempo real al gestor de análisis
   useEffect(() => {
     let isMounted = true;
@@ -182,13 +204,10 @@ export const Library: React.FC = () => {
     setFeedback(null);
 
     const files = Array.from(fileList);
-    const { successCount, errors } = await importAudioFiles(files, {
-      hasDuplicate: (name, size) => indexedDBStorage.hasDuplicate(name, size),
-      decodeAudioData: (data) => audioEngine.decodeAudioData(data),
-      computeFileHash,
-      saveTrack: (track, file) => indexedDBStorage.saveTrack(track, file),
-      duplicateWarning: (name) => t('library.duplicate_warning', { name }),
-    });
+    const { successCount, errors } = await importFilesToLocalLibrary(
+      files,
+      (name) => t('library.duplicate_warning', { name }),
+    );
 
     await refreshLocalTracks();
     setIsImporting(false);
@@ -296,6 +315,14 @@ export const Library: React.FC = () => {
       
       // Remover de inmediato del estado local
       setLocalTracks((prev) => prev.filter((t) => t.id !== track.id));
+      setSelectedTracks((prev) => {
+        if (!prev.has(track.id)) return prev;
+        const next = new Set(prev);
+        next.delete(track.id);
+        return next;
+      });
+      // deleteTrack también la retira de las playlists; avisar a las vistas suscritas
+      playlistService.notifyExternalChange();
 
       await refreshLocalTracks();
       setFeedback({
@@ -385,6 +412,30 @@ export const Library: React.FC = () => {
 
     return true;
   });
+
+  // Añade las pistas seleccionadas (en el orden de la tabla) a la playlist elegida
+  const handleAddSelectedToPlaylist = async () => {
+    const playlist = playlists.find((p) => p.id === targetPlaylistId);
+    if (!playlist || selectedTracks.size === 0) return;
+    const ids = unifiedTracks.filter((tr) => selectedTracks.has(tr.id)).map((tr) => tr.id);
+    try {
+      const before = playlist.trackIds.length;
+      const updated = await playlistService.update(playlist.id, (p) => addTracksToPlaylist(p, ids));
+      const added = updated ? updated.trackIds.length - before : 0;
+      setFeedback({
+        type: added > 0 ? 'success' : 'warning',
+        text: added > 0
+          ? t('library.playlist_add_success', { count: added, name: playlist.name })
+          : t('library.playlist_add_none', { name: playlist.name }),
+      });
+      setSelectedTracks(new Set());
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: t('library.playlist_add_error', { error: err instanceof Error ? err.message : String(err) }),
+      });
+    }
+  };
 
   const toggleSelection = (id: string) => {
     const newSelected = new Set(selectedTracks);
@@ -503,6 +554,37 @@ export const Library: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Acción sobre la selección: añadir a playlist */}
+      {selectedTracks.size > 0 && (
+        <div className="library-filters" style={{ alignItems: 'center' }}>
+          <span>{t('library.selected_count', { count: selectedTracks.size })}</span>
+          {playlists.length === 0 ? (
+            <span className="text-muted">{t('library.playlist_none_available')}</span>
+          ) : (
+            <>
+              <select
+                className="input-field"
+                aria-label={t('library.playlist_target')}
+                value={targetPlaylistId}
+                onChange={(e) => setTargetPlaylistId(e.target.value)}
+              >
+                <option value="">{t('library.playlist_target')}</option>
+                {playlists.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <Button variant="primary" size="sm" disabled={!targetPlaylistId} onClick={handleAddSelectedToPlaylist}>
+                <ListPlus size={14} />
+                {t('library.playlist_add_btn')}
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setSelectedTracks(new Set())}>
+            {t('common.cancel')}
+          </Button>
+        </div>
+      )}
 
       {/* Tabla unificada */}
       <div className="library-table-container">

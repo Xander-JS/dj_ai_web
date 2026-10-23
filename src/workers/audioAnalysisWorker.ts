@@ -4,7 +4,7 @@
  * Compatible con Vite ESM Worker bundle.
  */
 
-import { analyzeAudioPcm } from '../audio/analysis/index.ts';
+import { analyzeAudioChannels } from '../audio/analysis/index.ts';
 import type {
   AnalysisWorkerInboundMessage,
   AnalysisWorkerOutboundMessage,
@@ -36,8 +36,9 @@ workerCtx.onmessage = (event: MessageEvent<AnalysisWorkerInboundMessage>) => {
     const startTime = performance.now();
 
     try {
-      // Ejecución del pipeline matemático puro reutilizando src/audio/analysis/
-      const result = analyzeAudioPcm(msg.pcm, msg.sampleRate, msg.options);
+      // Pipeline matemático puro en doble pasada sobre todos los canales decodificados
+      const channels = [msg.pcm, ...(msg.extraChannels ?? [])];
+      const result = analyzeAudioChannels(channels, msg.sampleRate, msg.options);
 
       // Si la solicitud fue cancelada durante el procesamiento, descartar resultado
       if (activeRequestId !== msg.requestId) {

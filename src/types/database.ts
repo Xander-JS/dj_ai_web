@@ -6,8 +6,8 @@
 
 export interface ProfileRow {
   id: string;                // UUID referencias auth.users(id)
-  username: string;
-  display_name: string;
+  username: string | null;
+  full_name: string | null;
   avatar_url?: string | null;
   bio?: string | null;
   created_at: string;

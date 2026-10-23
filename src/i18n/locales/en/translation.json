@@ -259,7 +259,8 @@
     "downbeat_missing_hash_explanation": "Confirmation unavailable: track lacks a valid SHA-256 cryptographic hash.",
     "downbeat_error_persist": "Failed to persist downbeat in local storage.",
     "downbeat_error_invalid_pos": "Position must be a valid number between 0 and track duration.",
-    "bar_sync_cancelled_tooltip": "Bar preparation was cancelled manually."
+    "bar_sync_cancelled_tooltip": "Bar preparation was cancelled manually.",
+    "master": "MASTER"
   },
   "mixer": {
     "channel": "CH {{num}}",

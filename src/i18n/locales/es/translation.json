@@ -259,7 +259,8 @@
     "downbeat_missing_hash_explanation": "Confirmación no disponible: la pista carece de una huella SHA-256 válida.",
     "downbeat_error_persist": "Error al persistir downbeat en almacenamiento local.",
     "downbeat_error_invalid_pos": "La posición debe ser un número válido entre 0 y la duración de la pista.",
-    "bar_sync_cancelled_tooltip": "La preparación de compás se canceló manualmente."
+    "bar_sync_cancelled_tooltip": "La preparación de compás se canceló manualmente.",
+    "master": "MASTER"
   },
   "mixer": {
     "channel": "CH {{num}}",

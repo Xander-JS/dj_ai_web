@@ -23,6 +23,9 @@ import { indexedDBStorage } from '../../services/storage/IndexedDBStorage';
 import { LatestRequest } from '../../services/ai/LatestRequest';
 import {
   getTrackRecommendations,
+  getTrackRecommendationExplanations,
+  applyRecommendationExplanations,
+  extractCandidateMetadata,
   type TrackRecommendation,
 } from '../../services/ai';
 import type { Track } from '../../types/track';
@@ -44,6 +47,7 @@ export const SmartRecommendationCard: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isMockResult, setIsMockResult] = useState<boolean>(false);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
+  const [explanationsUnavailable, setExplanationsUnavailable] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const recommendationRequest = useRef(new LatestRequest());
 
@@ -126,7 +130,9 @@ export const SmartRecommendationCard: React.FC = () => {
       setActiveRequest({ id: request.id, referenceTrack, availableTracks });
       setErrorMsg(null);
       setFeedback(null);
+      setExplanationsUnavailable(false);
 
+      let localResultsReady = false;
       try {
         const response = await getTrackRecommendations(referenceTrack, availableTracks, {
           signal: request.signal,
@@ -135,16 +141,39 @@ export const SmartRecommendationCard: React.FC = () => {
         if (!isCurrentRequest()) return;
 
         if (response.success) {
-          setRecommendationResult({
+          const localRecommendations = response.recommendations;
+          localResultsReady = true;
+          const localResult = {
             referenceTrack,
             availableTracks,
-            recommendations: response.recommendations,
+            recommendations: localRecommendations,
             insufficientCandidateCount: response.insufficientCandidateCount ?? 0,
-          });
+          };
+          // Publish local decisions immediately; Gemini can only enrich text.
+          setRecommendationResult(localResult);
           setIsMockResult(response.isMock);
           setModelUsed(response.model || null);
           if (response.warning && response.recommendations.length === 0) {
             setErrorMsg(response.warning);
+          }
+
+          if (localRecommendations.length > 0) {
+            const explanationResponse = await getTrackRecommendationExplanations(
+              extractCandidateMetadata(referenceTrack),
+              localRecommendations,
+              { signal: request.signal }
+            );
+            if (!isCurrentRequest()) return;
+
+            if (explanationResponse.success) {
+              setRecommendationResult({
+                ...localResult,
+                recommendations: applyRecommendationExplanations(localRecommendations, explanationResponse.explanations),
+              });
+              setExplanationsUnavailable(Boolean(explanationResponse.warning));
+            } else if (explanationResponse.errorCode !== 'cancelled') {
+              setExplanationsUnavailable(true);
+            }
           }
         } else {
           let userMessage = response.error || t('dashboard.error_title');
@@ -163,8 +192,12 @@ export const SmartRecommendationCard: React.FC = () => {
         }
       } catch (err: unknown) {
         if (!isCurrentRequest()) return;
-        const error = err as { name?: string };
-        setErrorMsg(t(error?.name === 'AbortError' ? 'dashboard.error_timeout' : 'dashboard.error_server'));
+        if (localResultsReady) {
+          setExplanationsUnavailable(true);
+        } else {
+          const error = err as { name?: string };
+          setErrorMsg(t(error?.name === 'AbortError' ? 'dashboard.error_timeout' : 'dashboard.error_server'));
+        }
       } finally {
         if (isCurrentRequest()) {
           setActiveRequest(null);
@@ -303,6 +336,12 @@ export const SmartRecommendationCard: React.FC = () => {
           />
         )}
 
+        {explanationsUnavailable && recommendations.length > 0 && (
+          <p className="smart-rec-evidence-note" role="status">
+            {t('dashboard.ai_explanation_unavailable')}
+          </p>
+        )}
+
         {!isLoading && errorMsg && (
           <div className="smart-rec-error-box">
             <AlertTriangle size={24} color="var(--color-warning)" />
@@ -351,7 +390,7 @@ export const SmartRecommendationCard: React.FC = () => {
         )}
 
         {/* Lista de Recomendaciones Obtenidas */}
-        {!isLoading && !errorMsg && recommendations.length > 0 && (
+        {!errorMsg && recommendations.length > 0 && (
           <div className="smart-rec-list">
             {recommendations.map((rec, index) => {
               const scoreClass =
@@ -460,8 +499,11 @@ export const SmartRecommendationCard: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Justificación comprensible del modelo */}
-                  <p className="smart-rec-justification">{rec.justification}</p>
+                  {/* Gemini text is optional; local evidence remains the fallback. */}
+                  {rec.aiExplanation && (
+                    <span className="smart-rec-gemini-tag">{t('dashboard.ai_explanation_label')}</span>
+                  )}
+                  <p className="smart-rec-justification">{rec.aiExplanation || rec.justification}</p>
 
                   {/* Sugerencia de técnica de transición */}
                   {rec.transitionSuggestion && (

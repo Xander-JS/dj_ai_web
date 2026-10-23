@@ -39,6 +39,7 @@ import {
   createSuggestedDownbeat,
   validateDownbeatForContent,
 } from '../utils/downbeat.ts';
+import { normalizeTrackAnalysis } from '../utils/trackAnalysis.ts';
 
 /** Parámetros explícitos para la confirmación manual de downbeat y métrica de compás. */
 export interface ConfirmDownbeatParams {
@@ -654,7 +655,10 @@ class DJStore {
     const token = ++this.loadTokens[deckId];
 
     // Recuperar análisis existente de IndexedDB si la pista recibida en memoria aún no lo tenía actualizado
-    let effectiveTrack = track;
+    let effectiveTrack = {
+      ...track,
+      analysis: normalizeTrackAnalysis(track.analysis),
+    };
     if (track.analysis?.status !== 'analyzed') {
       try {
         const persistedAnalysis = await indexedDBStorage.getTrackAnalysis(track.id);
@@ -1334,8 +1338,9 @@ class DJStore {
       const slaveBaseBpm = getAnalyzedBpm(otherDeck.track);
       if (masterBaseBpm && slaveBaseBpm) {
         const newMasterTargetBpm = masterBaseBpm * rate;
-        const newSlaveRate = Number((newMasterTargetBpm / slaveBaseBpm).toFixed(4));
-        if (newSlaveRate >= 0.92 && newSlaveRate <= 1.08) {
+        const exactNewSlaveRate = newMasterTargetBpm / slaveBaseBpm;
+        if (exactNewSlaveRate >= 0.92 && exactNewSlaveRate <= 1.08) {
+          const newSlaveRate = Number(exactNewSlaveRate.toFixed(4));
           const newSlavePitch = Number(
             Math.max(0, Math.min(100, 50 + ((newSlaveRate - 1.0) / PITCH_RANGE) * 50)).toFixed(1)
           );
@@ -1528,11 +1533,11 @@ class DJStore {
 
     // 5. Cálculo del factor de velocidad requerido para el Esclavo
     // R_req = masterTargetBpm / slaveBaseBpm
-    const requiredRate = Number((masterTargetBpm / slaveBaseBpm).toFixed(4));
+    const exactRequiredRate = masterTargetBpm / slaveBaseBpm;
 
     // 6. Validación estricta del rango de velocidad [0.92, 1.08] (±8%)
     // No recortar silenciosamente; rechazar si está fuera de rango
-    if (requiredRate < 0.92 || requiredRate > 1.08) {
+    if (exactRequiredRate < 0.92 || exactRequiredRate > 1.08) {
       this.setSyncFailure(
         slaveDeckId,
         'dj.sync_reject_pitch_limit',
@@ -1541,6 +1546,8 @@ class DJStore {
       );
       return false;
     }
+
+    const requiredRate = Number(exactRequiredRate.toFixed(4));
 
     // 7. Cálculo de la posición del fader visual correspondiente exactamente a requiredRate
     const targetPitch = Number(
@@ -1945,6 +1952,7 @@ class DJStore {
         currentTime: masterCurrentTime,
         duration: masterState.duration,
         bpm: masterBaseBpm,
+        analysis: masterTrack.analysis,
         playbackRate: masterState.playbackRate,
         effectiveBpm: masterEffectiveBpm,
         downbeat: masterTrack.downbeat,
@@ -1955,6 +1963,7 @@ class DJStore {
         currentTime: slaveCurrentTime,
         duration: slaveState.duration,
         bpm: slaveBaseBpm,
+        analysis: slaveTrack.analysis,
         playbackRate: slaveState.playbackRate,
         effectiveBpm: slaveEffectiveBpm,
         downbeat: slaveTrack.downbeat,

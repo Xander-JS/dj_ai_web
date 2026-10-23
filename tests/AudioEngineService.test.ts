@@ -407,6 +407,11 @@ describe('AudioEngineService — Pruebas de Ciclo de Vida y Transporte', () => {
 
     service.playDeck('A', 15.0);
     service.playDeck('B', 25.0);
+    const graphs = (service as unknown as { deckGraphs: Map<string, { sourceNode: MockAudioBufferSourceNode | null }> }).deckGraphs;
+    const sourceA = graphs.get('A')?.sourceNode;
+    const sourceB = graphs.get('B')?.sourceNode;
+    assert.ok(sourceA);
+    assert.ok(sourceB);
 
     // Descargar exclusivamente Deck B
     service.unloadDeck('B');
@@ -414,18 +419,31 @@ describe('AudioEngineService — Pruebas de Ciclo de Vida y Transporte', () => {
     assert.equal(service.getDeckDuration('B'), 0);
     assert.equal(service.getDeckCurrentTime('B'), 0);
     assert.equal(service.isDeckPlaying('B'), false);
+    assert.equal(sourceB.isStopped, true);
+    assert.deepEqual(sourceB.connectedTo, []);
 
     // Deck A continúa activo, con su buffer y reproduciendo
     assert.equal(service.getDeckDuration('A'), 160.0);
     assert.equal(service.isDeckPlaying('A'), true);
+    assert.equal(graphs.get('A')?.sourceNode, sourceA);
+    assert.equal(sourceA.isStopped, false);
   });
 
   test('Reemplazar pista en Deck B detiene y libera el AudioBufferSourceNode anterior', () => {
     const bufferB1 = { duration: 100.0 } as AudioBuffer;
     const bufferB2 = { duration: 220.0 } as AudioBuffer;
 
+    const bufferA = { duration: 120.0 } as AudioBuffer;
+    service.loadBufferToDeck('A', bufferA);
+    service.playDeck('A', 15.0);
     service.loadBufferToDeck('B', bufferB1);
     service.playDeck('B', 10.0);
+
+    const graphs = (service as unknown as { deckGraphs: Map<string, { sourceNode: MockAudioBufferSourceNode | null }> }).deckGraphs;
+    const priorSourceB = graphs.get('B')?.sourceNode;
+    const sourceA = graphs.get('A')?.sourceNode;
+    assert.ok(priorSourceB);
+    assert.ok(sourceA);
 
     assert.equal(service.isDeckPlaying('B'), true);
     assert.equal(service.getDeckDuration('B'), 100.0);
@@ -433,9 +451,15 @@ describe('AudioEngineService — Pruebas de Ciclo de Vida y Transporte', () => {
     // Cargar nuevo buffer en Deck B
     service.loadBufferToDeck('B', bufferB2);
 
+    assert.equal(priorSourceB.isStopped, true);
+    assert.deepEqual(priorSourceB.connectedTo, []);
+
     assert.equal(service.isDeckPlaying('B'), false);
     assert.equal(service.getDeckCurrentTime('B'), 0);
     assert.equal(service.getDeckDuration('B'), 220.0);
+    assert.equal(graphs.get('A')?.sourceNode, sourceA);
+    assert.equal(sourceA.isStopped, false);
+    assert.equal(service.isDeckPlaying('A'), true);
   });
 
   test('Seek en Deck B es preciso y no altera la reproducción de Deck A', () => {

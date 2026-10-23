@@ -11,7 +11,7 @@ import { IconButton } from '../components/ui/IconButton';
 import { Badge } from '../components/ui/Badge';
 import { MOCK_LIBRARY } from '../mock/library';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { validateAudioFile, createTrackFromFile } from '../utils/audioValidation';
+import { importAudioFiles } from '../services/audioImportService';
 import { computeFileHash } from '../utils/cryptoHash';
 import { formatBytes, formatDate } from '../utils/formatters';
 import { audioEngine } from '../audio';
@@ -183,57 +183,14 @@ export const Library: React.FC = () => {
     setIsImporting(true);
     setFeedback(null);
 
-    let successCount = 0;
-    const errors: string[] = [];
-
     const files = Array.from(fileList);
-
-    for (const file of files) {
-      // 1. Validar extensión y formato
-      const validation = validateAudioFile(file);
-      if (!validation.valid) {
-        errors.push(validation.error || file.name);
-        continue;
-      }
-
-      // 2. Comprobar si ya existe
-      const isDuplicate = await indexedDBStorage.hasDuplicate(file.name, file.size);
-      if (isDuplicate) {
-        errors.push(t('library.duplicate_warning', { name: file.name }));
-        continue;
-      }
-
-      // 3. Decodificar para obtener duración real
-      let durationSeconds = 0;
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer);
-        durationSeconds = audioBuffer.duration;
-      } catch (err) {
-        console.warn(`[Library] No se pudo decodificar la duración previa de ${file.name}:`, err);
-      }
-
-      // Calcular huella criptográfica SHA-256 sobre el contenido exacto
-      let contentHash: string | undefined;
-      try {
-        contentHash = await computeFileHash(file);
-      } catch (hashErr) {
-        console.warn(`[Library] No se pudo calcular el hash de ${file.name}:`, hashErr);
-      }
-
-      // 4. Crear entidad Track y persistir en IndexedDB
-      const newTrack = createTrackFromFile(file, durationSeconds, contentHash);
-      try {
-        const result = await indexedDBStorage.saveTrack(newTrack, file);
-        if (!result.persisted) {
-          errors.push(`"${file.name}" se cargó en memoria temporal pero no se pudo persistir en IndexedDB (${result.reason || 'sin persistencia'}). Se perderá al recargar.`);
-        } else {
-          successCount++;
-        }
-      } catch (saveErr) {
-        errors.push(`Error al guardar ${file.name}: ${saveErr instanceof Error ? saveErr.message : String(saveErr)}`);
-      }
-    }
+    const { successCount, errors } = await importAudioFiles(files, {
+      hasDuplicate: (name, size) => indexedDBStorage.hasDuplicate(name, size),
+      decodeAudioData: (data) => audioEngine.decodeAudioData(data),
+      computeFileHash,
+      saveTrack: (track, file) => indexedDBStorage.saveTrack(track, file),
+      duplicateWarning: (name) => t('library.duplicate_warning', { name }),
+    });
 
     await refreshLocalTracks();
     setIsImporting(false);

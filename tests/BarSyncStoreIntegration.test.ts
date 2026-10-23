@@ -152,6 +152,9 @@ function createConfiguredTrack(
     status: 'analyzed',
     bpm,
     bpmConfidence: 0.95,
+    isAmbiguous: false,
+    alternateBpm: [bpm * 0.5, bpm * 2],
+    beatUnit: { value: 4, status: 'confirmed', source: 'manual' },
     key: '8B',
     camelot: '8B',
     energy: 7.0,
@@ -372,6 +375,50 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
     assert.ok(plan.reason?.includes('Discrepancia métrica musical'));
     assert.equal(audioEngine.getDeckCurrentTime('B'), 8.2);
     assert.equal(djStore.getSnapshot().deckB.barSync.status, 'rejected_metric_mismatch');
+  });
+
+  it('7.1 BeatUnit ausente rechaza sin seek ni cambios de velocidad, SYNC o Master', async () => {
+    const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4);
+    const slaveTrack = createConfiguredTrack('slave.mp3', 120, HASH_SLAVE, 0.5, 4);
+    delete slaveTrack.analysis.beatUnit;
+
+    await djStore.loadTrackToDeck('A', masterTrack);
+    await djStore.loadTrackToDeck('B', slaveTrack);
+    await djStore.playDeck('A');
+    audioEngine.seekDeck('B', 8.2);
+    const before = djStore.getSnapshot();
+    const plan = djStore.prepareBarSync('B');
+    const after = djStore.getSnapshot();
+
+    assert.equal(plan.status, 'rejected_unconfirmed');
+    assert.equal(plan.targetPosition, null);
+    assert.match(plan.reason ?? '', /beatUnit válido confirmado manualmente/i);
+    assert.equal(audioEngine.getDeckCurrentTime('B'), 8.2);
+    assert.equal(after.deckB.playbackRate, before.deckB.playbackRate);
+    assert.equal(after.deckB.syncStatus, before.deckB.syncStatus);
+    assert.equal(after.masterDeckId, before.masterDeckId);
+    assert.equal(after.deckB.track?.analysis.bpm, before.deckB.track?.analysis.bpm);
+  });
+
+  it('7.2 Hipótesis 0.5x/2x rechazada antes del seek con estado y tempo intactos', async () => {
+    const masterTrack = createConfiguredTrack('master-140.mp3', 140, HASH_MASTER, 1.0, 4);
+    const slaveTrack = createConfiguredTrack('slave-70.mp3', 70, HASH_SLAVE, 0.5, 4);
+    await djStore.loadTrackToDeck('A', masterTrack);
+    await djStore.loadTrackToDeck('B', slaveTrack);
+    await djStore.playDeck('A');
+    audioEngine.seekDeck('B', 8.2);
+    const before = djStore.getSnapshot();
+
+    const plan = djStore.prepareBarSync('B');
+    const after = djStore.getSnapshot();
+
+    assert.equal(plan.status, 'rejected_confidence');
+    assert.equal(plan.targetPosition, null);
+    assert.equal(audioEngine.getDeckCurrentTime('B'), 8.2);
+    assert.equal(after.deckB.playbackRate, before.deckB.playbackRate);
+    assert.equal(after.deckB.track?.analysis.bpm, 70);
+    assert.equal(after.deckA.isMaster, before.deckA.isMaster);
+    assert.equal(after.deckB.isSyncActive, before.deckB.isSyncActive);
   });
 
   // 8. Fallo de posicionamiento: no declarar armed
@@ -984,7 +1031,10 @@ describe('Fase 23.4: Etapa C.8.1 — Acciones Seguras en Store para Confirmar y 
     const fileMaster = createTestAudioFile('master.mp3');
     const hashMaster = await computeFileHash(fileMaster);
     const masterTrack = createTrackFromFile(fileMaster, 300, hashMaster);
-    masterTrack.analysis = { status: 'analyzed', bpm: 120, firstBeatTime: 1.0 };
+    masterTrack.analysis = {
+      status: 'analyzed', bpm: 120, bpmConfidence: 0.95, isAmbiguous: false,
+      alternateBpm: [60, 240], beatUnit: { value: 4, status: 'confirmed', source: 'manual' }, firstBeatTime: 1.0,
+    };
     masterTrack.downbeat = createManualDownbeatConfirmation({
       position: 1.0,
       beatsPerBar: 4,
@@ -995,7 +1045,10 @@ describe('Fase 23.4: Etapa C.8.1 — Acciones Seguras en Store para Confirmar y 
     const fileSlave = createTestAudioFile('slave.mp3');
     const hashSlave = await computeFileHash(fileSlave);
     const slaveTrack = createTrackFromFile(fileSlave, 300, hashSlave);
-    slaveTrack.analysis = { status: 'analyzed', bpm: 120, firstBeatTime: 0.5 };
+    slaveTrack.analysis = {
+      status: 'analyzed', bpm: 120, bpmConfidence: 0.95, isAmbiguous: false,
+      alternateBpm: [60, 240], beatUnit: { value: 4, status: 'confirmed', source: 'manual' }, firstBeatTime: 0.5,
+    };
     slaveTrack.downbeat = createManualDownbeatConfirmation({
       position: 0.5,
       beatsPerBar: 4,

@@ -60,11 +60,24 @@ export interface TrackRecommendation {
   compatibilityScore: number | null; // null cuando no hay datos para calcular compatibilidad
   evidenceStatus: RecommendationEvidenceStatus;
   justification: string;       // Razón musical verificada (armonía, tempo, energía)
+  aiExplanation?: string;      // Texto explicativo no vinculante generado por Gemini
   transitionSuggestion: string; // Sugerencia práctica de técnica de transición
   isMock: boolean;             // Indica explícitamente si procede de simulación o de llamada real a Gemini
   isAnalysisVerified?: boolean; // Indica si BPM y tonalidad proceden del análisis local; la energía se incluye solo si es válida
   harmonicEvaluation?: HarmonicEvaluation;
   tempoEvaluation?: TempoEvaluation;
+}
+
+export interface RecommendationExplanation {
+  trackId: string;
+  text: string;
+}
+
+export interface AIExplanationResponse {
+  success: boolean;
+  explanations: RecommendationExplanation[];
+  warning?: string;
+  errorCode?: AIRecommendationErrorCode;
 }
 
 export interface TrackRecommendationRequest {
@@ -80,7 +93,9 @@ export type AIRecommendationErrorCode =
   | 'timeout'
   | 'empty_response'
   | 'invalid_response'
-  | 'server_error';
+  | 'server_error'
+  | 'missing_api_key'
+  | 'cancelled';
 
 export interface AIRecommendationResponse {
   success: boolean;
@@ -92,6 +107,5 @@ export interface AIRecommendationResponse {
   warning?: string;
   error?: string;
   errorCode?: AIRecommendationErrorCode;
-  details?: string;
 }
 

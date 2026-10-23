@@ -1,7 +1,7 @@
 /**
  * SYSTEM DJ — Gemini AI Recommendation Service
  * Servicio cliente para solicitar recomendaciones inteligentes de pistas y sugerencias de mezcla.
- * Se comunica exclusivamente con el endpoint local del servidor de desarrollo (/api/ai/recommendations)
+ * Se comunica exclusivamente con el endpoint local del servidor de desarrollo (/api/ai/explanations)
  * sin exponer jamás la API key al cliente.
  *
  * Incluye validación local determinista de tonalidad Camelot, límites de pitch fader (±8%),
@@ -14,7 +14,7 @@ import type {
   TrackCandidateMetadata,
   TrackRecommendation,
   AIRecommendationResponse,
-  AIRecommendationErrorCode,
+  AIExplanationResponse,
   HarmonicEvaluation,
   TempoEvaluation,
   RecommendationEvidenceStatus,
@@ -283,12 +283,11 @@ export function evaluateTempoCompatibility(
  * 2. Tempo fuera de ±8% pero armonía compatible -> puntuación armónica escalada al 35% máx (drop mix / corte).
  * 3. Armonía incompatible pero tempo en rango -> puntuación de tempo escalada al 35% máx (intro/outro percusivo EQ).
  * 4. Metadatos faltantes (tonalidad o BPM desconocido) -> no inventa factores no verificados, escala máx 50%.
- * 5. Ambos compatibles -> 50% tempo + 50% armonía (técnico base), ponderado 70% técnico / 30% cualitativo IA.
+ * 5. Ambos compatibles -> 50% tempo + 50% armonía (técnico base). El proveedor no participa en el score.
  */
 export function calculateValidatedScore(
   harmonic: HarmonicEvaluation,
-  tempo: TempoEvaluation,
-  rawScore?: number
+  tempo: TempoEvaluation
 ): number | null {
   // Missing metrics are handled before compatibility penalties: absence of a key
   // cannot be treated as either compatible or incompatible harmony.
@@ -310,10 +309,7 @@ export function calculateValidatedScore(
   if (tempo.relation === 'out_of_range') {
     const harmonicPotential = harmonic.harmonicScore;
     if (harmonicPotential === null) return null;
-    const cappedHarmonicScore = Math.round(harmonicPotential * 0.35); // 100 -> 35, 95 -> 33, 88 -> 31
-    return typeof rawScore === 'number'
-      ? Math.min(cappedHarmonicScore, Math.round(rawScore * 0.35))
-      : cappedHarmonicScore;
+    return Math.round(harmonicPotential * 0.35); // 100 -> 35, 95 -> 33, 88 -> 31
   }
 
   // 3. Armonía incompatible, pero tempo dentro del rango de pitch (±8%):
@@ -322,10 +318,7 @@ export function calculateValidatedScore(
   if (harmonic.relation === 'incompatible') {
     const tempoPotential = tempo.tempoScore;
     if (tempoPotential === null) return null;
-    const cappedTempoScore = Math.round(tempoPotential * 0.35); // 100 -> 35, 78 -> 27, 70 -> 25
-    return typeof rawScore === 'number'
-      ? Math.min(cappedTempoScore, Math.round(rawScore * 0.35))
-      : cappedTempoScore;
+    return Math.round(tempoPotential * 0.35); // 100 -> 35, 78 -> 27, 70 -> 25
   }
 
   // 4. Si falta la tonalidad, NO inventar puntuación armónica (evaluar solo tempo verificado, máx 50%)
@@ -335,11 +328,6 @@ export function calculateValidatedScore(
   const tempoComponent = tempo.tempoScore;
   if (harmonicComponent === null || tempoComponent === null) return null;
   const baseCalculated = Math.round(harmonicComponent * 0.5 + tempoComponent * 0.5);
-
-  if (typeof rawScore === 'number' && rawScore >= 60 && rawScore <= 100) {
-    // 70% cálculo técnico local determinista y 30% valoración cualitativa de IA
-    return Math.max(65, Math.min(99, Math.round(baseCalculated * 0.7 + rawScore * 0.3)));
-  }
 
   return Math.max(65, Math.min(99, baseCalculated));
 }
@@ -390,7 +378,7 @@ function createTechnicalTransitionSuggestion(
 
 /**
  * Generador heurístico de recomendaciones simuladas (Mock).
- * Utilizado para pruebas locales, entornos sin conexión o cuando GEMINI_API_KEY no está disponible.
+ * Utilizado para pruebas locales y entornos sin conexión.
  * Cada recomendación generada por este método queda identificada explícitamente con isMock = true
  * y respaldada por cálculos musicales verificables.
  */
@@ -439,98 +427,8 @@ export function generateMockRecommendations(
     .slice(0, 3);
 }
 
-/** Server mock payload: preserve the full candidate set and leave scoring to the client validator. */
-export function createUnscoredMockRecommendations(
-  candidates: Pick<TrackCandidateMetadata, 'id'>[]
-): Array<{ trackId: string; isMock: true }> {
-  return candidates.map(({ id }) => ({ trackId: id, isMock: true }));
-}
-
-/**
- * Valida la respuesta del endpoint y asegura que ningún ID alucinado por el modelo sea presentado.
- * Corrige localmente puntuaciones y justificaciones contradictorias respecto a la referencia.
- */
-export function validateRecommendations(
-  rawList: unknown,
-  candidates: TrackCandidateMetadata[],
-  isMock: boolean,
-  reference?: TrackCandidateMetadata
-): TrackRecommendation[] {
-  if (!Array.isArray(rawList) || !reference) return [];
-
-  const candidateMap = new Map<string, TrackCandidateMetadata>(
-    candidates.map((c) => [c.id, c])
-  );
-
-  const validated: TrackRecommendation[] = [];
-  const includedTrackIds = new Set<string>();
-
-  for (const item of rawList) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-
-    const cand = item as Record<string, unknown>;
-    const trackId = typeof cand.trackId === 'string' ? cand.trackId : '';
-
-    if (!trackId || !candidateMap.has(trackId)) {
-      // Ignorar IDs que no existen en los candidatos enviados
-      continue;
-    }
-
-    const original = candidateMap.get(trackId)!;
-    const { artist, title } = resolveTrackArtistAndTitle(original.artist, original.title);
-
-    const harmonicEval = evaluateHarmonicCompatibility(reference.camelot || reference.key, original.camelot || original.key);
-    const tempoEval = evaluateTempoCompatibility(reference.bpm, original.bpm);
-
-    const rawScore = typeof cand.compatibilityScore === 'number' &&
-      Number.isFinite(cand.compatibilityScore) && cand.compatibilityScore >= 0 && cand.compatibilityScore <= 100
-      ? Math.round(cand.compatibilityScore)
-      : undefined;
-
-    const finalScore = calculateValidatedScore(harmonicEval, tempoEval, rawScore);
-
-    // Missing both metrics is incomplete evidence, not a score of zero.
-    if (harmonicEval?.relation === 'unknown' && tempoEval?.relation === 'unknown') continue;
-    // Local mode omits zero-score candidates; remote mode must apply the same rule.
-    if (finalScore === null || finalScore <= 0) continue;
-    // The endpoint may repeat a valid candidate ID. A track must appear once;
-    // preserve the first valid response entry deterministically.
-    if (includedTrackIds.has(trackId)) continue;
-    includedTrackIds.add(trackId);
-
-    const rawJustification = typeof cand.justification === 'string' && cand.justification.trim()
-      ? cand.justification.trim()
-      : '';
-
-    const finalJustification = sanitizeJustification(rawJustification, harmonicEval, tempoEval);
-
-    validated.push({
-      trackId,
-      title,
-      artist,
-      bpm: original.bpm,
-      key: original.key,
-      camelot: original.camelot,
-      energy: original.energy,
-      compatibilityScore: finalScore,
-      evidenceStatus: getEvidenceStatus(harmonicEval, tempoEval),
-      justification: finalJustification,
-      transitionSuggestion: createTechnicalTransitionSuggestion(harmonicEval, tempoEval),
-      isMock,
-      isAnalysisVerified: original.isAnalysisVerified ?? (original.bpm !== undefined && original.key !== undefined),
-      ...(harmonicEval ? { harmonicEvaluation: harmonicEval } : {}),
-      ...(tempoEval ? { tempoEvaluation: tempoEval } : {}),
-    });
-
-  }
-
-  return validated
-    .sort((a, b) => (b.compatibilityScore ?? -1) - (a.compatibilityScore ?? -1))
-    .slice(0, 3);
-}
-
 export interface RecommendationServiceOptions {
-  /** Remote Gemini mode is opt-in; local deterministic recommendations are the MVP default. */
+  /** Compatibility option: remote mode adds explanations after local scoring only. */
   mode?: 'local' | 'remote';
   forceMock?: boolean;
   endpointUrl?: string;
@@ -550,7 +448,7 @@ export async function getTrackRecommendations(
   const {
     mode = 'local',
     forceMock = false,
-    endpointUrl = '/api/ai/recommendations',
+    endpointUrl = '/api/ai/explanations',
     timeoutMs = 15000,
     signal,
   } = options;
@@ -580,94 +478,188 @@ export async function getTrackRecommendations(
   const candMetas = validCandidates.map(extractCandidateMetadata);
   const insufficientCandidateCount = candMetas.filter((candidate) => hasInsufficientEvidence(refMeta, candidate)).length;
 
-  if (forceMock || mode === 'local') {
-    return {
-      success: true,
-      recommendations: generateMockRecommendations(refMeta, candMetas),
-      insufficientCandidateCount,
-      isMock: true,
-      model: 'local-deterministic-engine',
-    };
+  const localRecommendations = generateMockRecommendations(refMeta, candMetas);
+  const localResult: AIRecommendationResponse = {
+    success: true,
+    recommendations: localRecommendations,
+    insufficientCandidateCount,
+    isMock: true,
+    model: 'local-deterministic-engine',
+  };
+
+  if (forceMock || mode === 'local' || localRecommendations.length === 0) return localResult;
+
+  const explanationResult = await getTrackRecommendationExplanations(
+    refMeta,
+    localRecommendations,
+    { endpointUrl, timeoutMs, signal }
+  );
+  if (!explanationResult.success) {
+    return { ...localResult, warning: explanationResult.warning };
   }
 
+  const byId = new Map(explanationResult.explanations.map(({ trackId, text }) => [trackId, text]));
+  return {
+    ...localResult,
+    recommendations: localRecommendations.map((recommendation) => ({
+      ...recommendation,
+      ...(byId.has(recommendation.trackId) ? { aiExplanation: byId.get(recommendation.trackId) } : {}),
+    })),
+    warning: explanationResult.warning,
+  };
+}
+
+const MAX_EXPLANATION_LENGTH = 600;
+
+/** Keep provider output plain, bounded, and safe to render as text in React. */
+export function sanitizeRecommendationExplanation(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const sanitized = Array.from(value)
+    .filter((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return !(code < 32 && code !== 9 && code !== 10 && code !== 13) && code !== 127;
+    })
+    .join('')
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .trim()
+    .slice(0, MAX_EXPLANATION_LENGTH)
+    .trim();
+  return sanitized || null;
+}
+
+/** Enrich the already selected local list without changing membership, order, or any local field. */
+export function applyRecommendationExplanations(
+  localRecommendations: TrackRecommendation[],
+  explanations: unknown
+): TrackRecommendation[] {
+  if (!Array.isArray(explanations)) return localRecommendations;
+  const allowed = new Set(localRecommendations.map(({ trackId }) => trackId));
+  const explanationById = new Map<string, string>();
+  for (const item of explanations) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as { trackId?: unknown; text?: unknown };
+    if (typeof record.trackId !== 'string' || !allowed.has(record.trackId) || explanationById.has(record.trackId)) continue;
+    const text = sanitizeRecommendationExplanation(record.text);
+    if (text) explanationById.set(record.trackId, text);
+  }
+  return localRecommendations.map((recommendation) => {
+    const explanation = explanationById.get(recommendation.trackId);
+    return explanation ? { ...recommendation, aiExplanation: explanation } : recommendation;
+  });
+}
+
+export interface RecommendationExplanationOptions {
+  endpointUrl?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+type ExplanationTrackPayload = Pick<
+  TrackCandidateMetadata,
+  'id' | 'title' | 'artist' | 'bpm' | 'key' | 'camelot' | 'energy'
+>;
+
+/**
+ * Ask Gemini to explain already selected local results. This function never
+ * returns or changes compatibility scores, recommendation membership, or order.
+ */
+export async function getTrackRecommendationExplanations(
+  reference: TrackCandidateMetadata,
+  recommendations: TrackRecommendation[],
+  options: RecommendationExplanationOptions = {}
+): Promise<AIExplanationResponse> {
+  const { endpointUrl = '/api/ai/explanations', timeoutMs = 15000, signal } = options;
+  if (recommendations.length === 0) return { success: true, explanations: [] };
+  if (signal?.aborted) {
+    return { success: false, explanations: [], errorCode: 'cancelled' };
+  }
+
+  const allowed = new Set(recommendations.map(({ trackId }) => trackId));
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const requestSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
 
   try {
     const response = await fetch(endpointUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        referenceTrack: refMeta,
-        candidateTracks: candMetas,
-        forceMock: false,
+        referenceTrack: explanationMetadata(reference),
+        recommendations: recommendations.map(explanationMetadata),
       }),
-      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
+      signal: requestSignal,
     });
 
-    clearTimeout(timer);
-
-    const data = await response.json() as {
-      success?: boolean;
-      recommendations?: unknown;
-      isMock?: boolean;
-      error?: string;
-      errorCode?: AIRecommendationErrorCode;
-      details?: string;
-      model?: string;
-      warning?: string;
-    };
-
-    if (!response.ok || data.success !== true) {
-      const errorMsg = data?.error || `Error del servidor HTTP ${response.status}`;
-      const errorCode = data?.errorCode || (
-        response.status === 429
-          ? 'quota_exceeded'
-          : response.status === 401 || response.status === 403
-          ? 'auth_error'
-          : response.status === 504
-          ? 'timeout'
-          : 'server_error'
-      );
+    // Keep the timeout active through full body consumption, not only headers.
+    const responseText = await response.text();
+    if (!response.ok) {
       return {
         success: false,
-        errorCode,
-        recommendations: [],
-        isMock: false,
-        error: errorMsg,
-        details: data?.details,
+        explanations: [],
+        errorCode: response.status === 429 ? 'quota_exceeded' : response.status === 503 ? 'missing_api_key' : 'server_error',
+        warning: response.status === 429 ? 'quota' : response.status === 503 ? 'not_configured' : 'provider_error',
       };
     }
 
-    const isMock = data.isMock === true;
-    const validatedRecs = validateRecommendations(data.recommendations, candMetas, isMock, refMeta);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      return { success: false, explanations: [], errorCode: 'invalid_response', warning: 'invalid_response' };
+    }
 
+    if (!payload || typeof payload !== 'object' || !Array.isArray((payload as { explanations?: unknown }).explanations)) {
+      return { success: false, explanations: [], errorCode: 'invalid_response', warning: 'invalid_response' };
+    }
+
+    const explanations: AIExplanationResponse['explanations'] = [];
+    const seen = new Set<string>();
+    for (const entry of (payload as { explanations: unknown[] }).explanations) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+      const candidate = entry as { trackId?: unknown; text?: unknown };
+      if (typeof candidate.trackId !== 'string' || !allowed.has(candidate.trackId) || seen.has(candidate.trackId)) continue;
+      const text = sanitizeRecommendationExplanation(candidate.text);
+      if (!text) continue;
+      seen.add(candidate.trackId);
+      explanations.push({ trackId: candidate.trackId, text });
+    }
+
+    if (explanations.length === 0) {
+      return { success: false, explanations: [], errorCode: 'empty_response', warning: 'empty_response' };
+    }
+
+    const missingCount = recommendations.length - explanations.length;
     return {
       success: true,
-      recommendations: validatedRecs,
-      insufficientCandidateCount,
-      isMock,
-      model: data.model || (isMock ? 'mock' : 'gemini-2.5-flash'),
-      warning: data.warning,
+      explanations,
+      ...(missingCount > 0 ? { warning: 'partial_response' } : {}),
     };
-  } catch (err: unknown) {
-    clearTimeout(timer);
-    const error = err as { name?: string; message?: string };
-    const isTimeout = error?.name === 'AbortError';
-    const isNetwork = error?.name === 'TypeError' || error?.message?.includes('fetch failed');
-    const errorCode = isTimeout ? 'timeout' : isNetwork ? 'network_error' : 'server_error';
-
+  } catch {
+    if (signal?.aborted) return { success: false, explanations: [], errorCode: 'cancelled' };
     return {
       success: false,
-      errorCode,
-      recommendations: [],
-      isMock: false,
-      error: isTimeout
-        ? 'Tiempo de espera agotado al conectar con el servicio de IA (15s).'
-        : 'Fallo de conexión con el endpoint local de recomendaciones.',
-      details: error?.message || String(err),
+      explanations: [],
+      errorCode: timedOut ? 'timeout' : 'network_error',
+      warning: timedOut ? 'timeout' : 'unavailable',
     };
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+function explanationMetadata(track: TrackCandidateMetadata | TrackRecommendation): ExplanationTrackPayload {
+  const id = 'trackId' in track ? track.trackId : track.id;
+  return {
+    id,
+    title: track.title,
+    artist: track.artist,
+    ...(typeof track.bpm === 'number' ? { bpm: track.bpm } : {}),
+    ...(track.key ? { key: track.key } : {}),
+    ...(track.camelot ? { camelot: track.camelot } : {}),
+    ...(typeof track.energy === 'number' ? { energy: track.energy } : {}),
+  };
 }

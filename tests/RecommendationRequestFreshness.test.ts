@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { LatestRequest } from '../src/services/ai/LatestRequest.ts';
 
 function deferred<T>() {
@@ -38,5 +40,16 @@ describe('Recommendation request freshness', () => {
     requests.invalidate();
     assert.equal(requests.isCurrent(request.id), false);
     assert.equal(request.signal.aborted, true);
+  });
+
+  it('guards late explanation responses before applying them to the visible recommendations', () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dashboard/SmartRecommendationCard.tsx'), 'utf8');
+    const awaitIndex = source.indexOf('const explanationResponse = await getTrackRecommendationExplanations(');
+    const freshnessGuardIndex = source.indexOf('if (!isCurrentRequest()) return;', awaitIndex);
+    const applyIndex = source.indexOf('setRecommendationResult({', freshnessGuardIndex);
+
+    assert.ok(awaitIndex >= 0);
+    assert.ok(freshnessGuardIndex > awaitIndex);
+    assert.ok(applyIndex > freshnessGuardIndex);
   });
 });

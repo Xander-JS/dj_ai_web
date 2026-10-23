@@ -455,6 +455,7 @@ describe('Fase 22 — Suite 5: Orquestador Completo (audioAnalyzer.ts)', () => {
 
     assert.equal(analysis.status, 'analyzed');
     assert.equal(analysis.bpm, 124);
+    assert.equal(analysis.beatUnit, undefined, 'El detector no debe inferir la unidad métrica desde BPM o transitorios');
     assert.ok(Array.isArray(analysis.alternateBpm), 'El análisis de pista conserva las hipótesis BPM del detector');
     assert.ok(analysis.alternateBpm!.length > 0);
     assert.equal(analysis.key, 'C');

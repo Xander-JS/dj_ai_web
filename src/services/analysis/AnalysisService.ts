@@ -7,6 +7,7 @@
 import type {
   TrackAnalysis,
 } from '../../types/track.ts';
+import { normalizeTrackAnalysis } from '../../utils/trackAnalysis.ts';
 
 import type {
   AudioAnalysisOptions,
@@ -328,18 +329,19 @@ export class AnalysisService {
       this.cleanupActiveTask(item.requestId, worker);
 
       if (msg.type === 'ANALYSIS_COMPLETE') {
-        item.status = msg.result.status;
+        const result = normalizeTrackAnalysis(msg.result);
+        item.status = result.status;
         item.completedAt = Date.now();
         this.trackToLatestRequestId.delete(item.trackId);
 
         this.notifyListeners({
           trackId: item.trackId,
           requestId: item.requestId,
-          status: msg.result.status,
-          result: msg.result,
+          status: result.status,
+          result,
         });
 
-        item.resolve(msg.result);
+        item.resolve(result);
       } else if (msg.type === 'ANALYSIS_ERROR') {
         this.handleTaskFailure(item, msg.error);
       }

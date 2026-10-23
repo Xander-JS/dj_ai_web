@@ -12,14 +12,16 @@
  * 4. NO INICIA REPRODUCCIÓN: nunca arranca la reproducción automáticamente ni cuantiza un lanzamiento.
  * 5. IDENTIDAD CRIPTOGRÁFICA: Exige confirmación manual explícita (source: 'manual') vinculada
  *    al contentHash verificado tanto en el Master como en el Slave.
- * 6. COMPATIBILIDAD MÉTRICA: Exige coincidencia estricta de métrica confirmada (beatsPerBar).
- *    Rechaza métricas incompatibles (ej. 4/4 vs 3/4) con 'rejected_metric_mismatch'.
+ * 6. COMPATIBILIDAD MÉTRICA: Exige beatsPerBar y beatUnit coincidentes, ambos confirmados;
+ *    rechaza diferencias con 'rejected_metric_mismatch' y nunca infiere la unidad de nota.
  * 7. LÍMITES FÍSICOS: La posición objetivo calculada debe pertenecer rigurosamente al rango [0, duration].
  */
 
 import type { PlaybackState, BarSyncStatus } from '../../types/deck.ts';
-import type { TrackDownbeat } from '../../types/track.ts';
+import type { TrackAnalysis, TrackBeatUnit, TrackDownbeat } from '../../types/track.ts';
 import { isDownbeatConfirmed } from '../../utils/downbeat.ts';
+import { isTrackBeatUnit } from '../../utils/trackAnalysis.ts';
+import { assessTempoCompatibility } from './tempoCompatibility.ts';
 
 /** Tolerancia temporal por defecto para considerar que el Slave ya está alineado en el compás (5 ms). */
 export const DEFAULT_BAR_SYNC_TOLERANCE_SEC = 0.005;
@@ -40,8 +42,10 @@ export interface BarSyncDeckInput {
   readonly currentTime: number;
   /** Duración total de la pista cargada en segundos. */
   readonly duration: number;
-  /** BPM base analizado o configurado de la pista. */
+  /** BPM analizado original de la pista. */
   readonly bpm: number;
+  /** Full analysis evidence for BPM quality and metric unit validation. */
+  readonly analysis: TrackAnalysis;
   /** Multiplicador de velocidad efectivo aplicado (ej. 1.0 = nominal, 1.05 = +5%). */
   readonly playbackRate: number;
   /** BPM efectivo explícito opcional (si no se especifica, se calcula como bpm * playbackRate). */
@@ -138,6 +142,10 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
     );
   }
 
+  if (!master.analysis || !slave.analysis) {
+    return reject('rejected_confidence', 'Falta el análisis musical requerido en uno o ambos decks');
+  }
+
   if (slave.playbackState === 'playing') {
     return reject(
       'rejected_state',
@@ -172,7 +180,8 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   if (
     !isValidNumber(masterEffectiveBpm) ||
     masterEffectiveBpm < MIN_EFFECTIVE_BPM ||
-    masterEffectiveBpm > MAX_EFFECTIVE_BPM
+    masterEffectiveBpm > MAX_EFFECTIVE_BPM ||
+    (master.effectiveBpm !== undefined && Math.abs(masterEffectiveBpm - master.bpm * master.playbackRate) > 0.00005)
   ) {
     return reject(
       'rejected_limits',
@@ -188,7 +197,8 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   if (
     !isValidNumber(slaveEffectiveBpm) ||
     slaveEffectiveBpm < MIN_EFFECTIVE_BPM ||
-    slaveEffectiveBpm > MAX_EFFECTIVE_BPM
+    slaveEffectiveBpm > MAX_EFFECTIVE_BPM ||
+    (slave.effectiveBpm !== undefined && Math.abs(slaveEffectiveBpm - slave.bpm * slave.playbackRate) > 0.00005)
   ) {
     return reject(
       'rejected_limits',
@@ -219,13 +229,41 @@ export function calculateBarSyncPlan(input: BarSyncPlanInput): BarSyncPlanResult
   const masterConfirmation = master.downbeat!.confirmation!;
   const slaveConfirmation = slave.downbeat!.confirmation!;
 
+  const masterBeatUnit = master.analysis.beatUnit;
+  const slaveBeatUnit = slave.analysis.beatUnit;
+  const isManuallyConfirmedBeatUnit = (value: TrackBeatUnit | undefined): value is Extract<TrackBeatUnit, { status: 'confirmed' }> =>
+    isTrackBeatUnit(value) && value.status === 'confirmed' && value.source === 'manual';
+  if (!isManuallyConfirmedBeatUnit(masterBeatUnit) || !isManuallyConfirmedBeatUnit(slaveBeatUnit)) {
+    return reject(
+      'rejected_unconfirmed',
+      'Ambas pistas requieren beatUnit válido confirmado manualmente; los valores provisionales o ausentes no demuestran compatibilidad métrica'
+    );
+  }
+
+  if (master.analysis?.bpm !== master.bpm || slave.analysis?.bpm !== slave.bpm) {
+    return reject('rejected_confidence', 'El BPM del plan no coincide con el BPM de análisis de la pista');
+  }
+
+  // Reuse established analysis quality signals and 0.5x/2x conflict detection.
+  // BAR SYNC cannot select a tempo hypothesis on behalf of the user.
+  const tempoCompatibility = assessTempoCompatibility(master.analysis, slave.analysis);
+  if (tempoCompatibility.status !== 'no_harmonic_conflict') {
+    return reject(
+      'rejected_confidence',
+      tempoCompatibility.reason ?? 'Análisis de BPM insuficiente o ambiguo para BAR SYNC'
+    );
+  }
+
   // -------------------------------------------------------------------------
   // 4. Precondición de Compatibilidad de Métrica Musical ('rejected_metric_mismatch')
   // -------------------------------------------------------------------------
-  if (masterConfirmation.beatsPerBar !== slaveConfirmation.beatsPerBar) {
+  if (
+    masterConfirmation.beatsPerBar !== slaveConfirmation.beatsPerBar ||
+    masterBeatUnit.value !== slaveBeatUnit.value
+  ) {
     return reject(
       'rejected_metric_mismatch',
-      `Discrepancia métrica musical: Master es ${masterConfirmation.beatsPerBar}/X pero Slave es ${slaveConfirmation.beatsPerBar}/X`
+      `Discrepancia métrica musical: Master es ${masterConfirmation.beatsPerBar}/${masterBeatUnit.value} pero Slave es ${slaveConfirmation.beatsPerBar}/${slaveBeatUnit.value}`
     );
   }
 

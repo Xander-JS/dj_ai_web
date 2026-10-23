@@ -8,6 +8,7 @@ import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateAudioFile, createTrackFromFile } from '../src/utils/audioValidation.ts';
 import { IndexedDBStorage } from '../src/services/storage/IndexedDBStorage.ts';
+import { importAudioFiles } from '../src/services/audioImportService.ts';
 import { formatDuration, formatBytes } from '../src/utils/formatters.ts';
 
 // Helper para crear objetos File simulados
@@ -74,6 +75,55 @@ describe('audioValidation — Validación de Archivos de Audio', () => {
     assert.equal(track.analysis.key, undefined);
     assert.equal(track.fileMeta?.fileName, 'Mi_Tema_Favorito.mp3');
     assert.equal(track.fileMeta?.fileSize, 4500000);
+  });
+});
+
+describe('audioImportService — política actual de importación', () => {
+  let storage: IndexedDBStorage;
+
+  beforeEach(async () => {
+    storage = new IndexedDBStorage();
+    await storage.clearAll();
+  });
+
+  test('persists an accepted file with duration 0 when duration decoding rejects, and reports it as imported', async () => {
+    const file = createMockFile('undecodable.mp3', 32, 'audio/mpeg');
+    const result = await importAudioFiles([file], {
+      hasDuplicate: (name, size) => storage.hasDuplicate(name, size),
+      decodeAudioData: async () => { throw new Error('decode rejected'); },
+      computeFileHash: async () => 'test-hash',
+      saveTrack: (track, source) => storage.saveTrack(track, source),
+      duplicateWarning: (name) => `duplicate: ${name}`,
+    });
+
+    const tracks = await storage.getAllTracks();
+    assert.equal(result.successCount, 1);
+    assert.deepEqual(result.errors, []);
+    assert.equal(tracks.length, 1);
+    assert.equal(tracks[0].duration, 0);
+    assert.equal(tracks[0].durationFormatted, '0:00');
+    assert.equal(tracks[0].analysis.status, 'pending');
+  });
+
+  test('rejects empty and unsupported files before attempting decode or persistence', async () => {
+    const files = [
+      createMockFile('empty.wav', 0, 'audio/wav'),
+      createMockFile('document.txt', 4, 'text/plain'),
+    ];
+    let decodeCalls = 0;
+    let saveCalls = 0;
+    const result = await importAudioFiles(files, {
+      hasDuplicate: async () => false,
+      decodeAudioData: async () => { decodeCalls += 1; throw new Error('unexpected'); },
+      computeFileHash: async () => 'unused',
+      saveTrack: async () => { saveCalls += 1; return { persisted: true }; },
+      duplicateWarning: (name) => `duplicate: ${name}`,
+    });
+
+    assert.equal(result.successCount, 0);
+    assert.equal(result.errors.length, 2);
+    assert.equal(decodeCalls, 0);
+    assert.equal(saveCalls, 0);
   });
 });
 

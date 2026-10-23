@@ -7,6 +7,7 @@
 import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../../types/track.ts';
 import { computeFileHash, getVerifiedBlobHash } from '../../utils/cryptoHash.ts';
 import { isDownbeatConfirmed, createSuggestedDownbeat } from '../../utils/downbeat.ts';
+import { normalizeTrackAnalysis } from '../../utils/trackAnalysis.ts';
 
 export interface StoredTrackRecord {
   id: string;
@@ -198,8 +199,8 @@ export class IndexedDBStorage {
         existing.analysis &&
         existing.analysis.status === 'analyzed'
       ) {
-        record.analysis = existing.analysis;
-        incomingTrack.analysis = existing.analysis;
+        record.analysis = normalizeTrackAnalysis(existing.analysis);
+        incomingTrack.analysis = record.analysis;
       }
     } else {
       // Huellas distintas o falta de identidad demostrable en uno o ambos registros: invalidar datos dependientes del contenido
@@ -288,7 +289,7 @@ export class IndexedDBStorage {
         lastModified: track.fileMeta?.lastModified || Date.now(),
         ...(contentHash ? { contentHash } : {}),
       },
-      analysis: track.analysis,
+      analysis: normalizeTrackAnalysis(track.analysis),
       mainCue: track.mainCue ?? null,
       hotCues: track.hotCues ?? [],
       downbeat: initialDownbeat,
@@ -515,8 +516,9 @@ export class IndexedDBStorage {
       return false;
     }
 
+    const normalizedAnalysis = normalizeTrackAnalysis(analysis);
     if (memRecord) {
-      memRecord.analysis = analysis;
+      memRecord.analysis = normalizedAnalysis;
     }
 
     const wasMemoryOnly = this.memoryOnlyIds.has(id);
@@ -554,7 +556,7 @@ export class IndexedDBStorage {
             return;
           }
 
-          record.analysis = analysis;
+          record.analysis = normalizedAnalysis;
           store.put(record);
         };
 
@@ -588,7 +590,7 @@ export class IndexedDBStorage {
     // 1. Revisar memoria
     const memRecord = this.memoryStore.get(id);
     if (memRecord?.analysis) {
-      return memRecord.analysis;
+      return normalizeTrackAnalysis(memRecord.analysis);
     }
 
     // 2. Revisar IndexedDB
@@ -604,7 +606,7 @@ export class IndexedDBStorage {
         request.onsuccess = () => {
           const record = request.result as StoredTrackRecord | undefined;
           if (record?.analysis) {
-            resolve(record.analysis);
+            resolve(normalizeTrackAnalysis(record.analysis));
           } else if (record) {
             resolve({ status: 'pending' });
           } else {
@@ -953,7 +955,7 @@ export class IndexedDBStorage {
       },
       fileMeta: record.fileMeta,
       // Compatibilidad con pistas históricas sin metadatos de análisis
-      analysis: record.analysis || { status: 'pending' },
+      analysis: normalizeTrackAnalysis(record.analysis || { status: 'pending' }),
       mainCue: record.mainCue ?? null,
       hotCues: record.hotCues ? [...record.hotCues] : [],
       downbeat: record.downbeat ?? null,

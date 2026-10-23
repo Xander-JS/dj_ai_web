@@ -9,6 +9,20 @@ export type MusicalKeyCamelot =
 
 export type AnalysisStatus = 'pending' | 'analyzing' | 'analyzed' | 'failed' | 'unsupported';
 
+/** Denominador de nota permitido para la unidad métrica de una signatura. */
+export type BeatUnit = 1 | 2 | 4 | 8 | 16 | 32 | 64;
+
+/**
+ * Unidad métrica de nota asociada a una pista.
+ * `value` es el denominador de la signatura (por ejemplo, 4 = negra); no expresa BPM,
+ * agrupación de pulsos ni demuestra que el BPM detectado corresponda a esa figura.
+ * El análisis actual no determina este dato, por lo que solo una declaración manual
+ * puede constar como confirmada. La ausencia del campo significa dato desconocido.
+ */
+export type TrackBeatUnit =
+  | { readonly value: BeatUnit; readonly status: 'confirmed'; readonly source: 'manual' }
+  | { readonly value: BeatUnit; readonly status: 'provisional'; readonly source: 'analysis' };
+
 export interface TrackAnalysis {
   status: AnalysisStatus;
   bpm?: number;
@@ -19,6 +33,7 @@ export interface TrackAnalysis {
   bpmConfidence?: number;            // Nivel de certeza/confianza métrica (0.0 a 1.0)
   isAmbiguous?: boolean;             // El detector no encontró una referencia métrica confiable
   alternateBpm?: number[];           // Hipótesis BPM armónicas alternativas reportadas por el detector
+  beatUnit?: TrackBeatUnit;          // Unidad de nota de la métrica; omitida si no hay evidencia explícita
   keyConfidence?: number;            // Nivel de correlación/certeza tonal (0.0 a 1.0)
   firstBeatTime?: number | null;     // Marca temporal en segundos del primer transitorio de beat
   analysisError?: string;

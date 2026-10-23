@@ -8,3 +8,4 @@ export * from './mixer';
 export * from './audio';
 export * from './database';
 export * from './analysis.ts';
+export * from './playlist.ts';

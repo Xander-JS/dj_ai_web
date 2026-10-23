@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Slider } from '../ui/Slider';
+import { Badge } from '../ui/Badge';
 import { clsx } from 'clsx';
 import { useDJStore, HOT_CUE_COLORS } from '../../store/useDJStore';
+import { useSeedStore } from '../../store/useSeedStore';
+import { Target } from 'lucide-react';
 import { formatDuration } from '../../utils/formatters';
 import type { AnalysisStatus } from '../../types/track';
 import { isDownbeatConfirmed } from '../../utils/downbeat';
@@ -68,6 +71,15 @@ export const Deck: React.FC<DeckProps> = ({
   };
 
   const deck = deckName === 'A' ? deckA : deckB;
+  const { seedTrackIds, toggleSeed } = useSeedStore();
+  const loadedTrackId = deck.track?.id ?? null;
+  const seedIndex = loadedTrackId ? seedTrackIds.indexOf(loadedTrackId) : -1;
+  const isSeed = seedIndex !== -1;
+
+  const handleToggleSeed = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (loadedTrackId) toggleSeed(loadedTrackId);
+  };
   const hasTrack = Boolean(deck.track);
   const track = deck.track;
   const analysis = track?.analysis;
@@ -464,6 +476,24 @@ export const Deck: React.FC<DeckProps> = ({
               >
                 ⏏
               </button>
+            )}
+            {hasTrack && loadedTrackId && (
+              <button
+                type="button"
+                className="deck-eject-btn"
+                onClick={handleToggleSeed}
+                aria-pressed={isSeed}
+                title={isSeed ? t('seed.unmark') : t('seed.mark')}
+                aria-label={isSeed ? t('seed.unmark') : t('seed.mark')}
+                data-testid={`deck-seed-${deckName.toLowerCase()}`}
+              >
+                <Target size={13} aria-hidden="true" fill={isSeed ? 'currentColor' : 'none'} />
+              </button>
+            )}
+            {isSeed && (
+              <Badge variant="warning" title={t('seed.badge_title')} data-testid={`deck-seed-badge-${deckName.toLowerCase()}`}>
+                {t('seed.badge', { index: seedIndex + 1 })}
+              </Badge>
             )}
           </div>
 

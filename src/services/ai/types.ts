@@ -107,6 +107,5 @@ export interface AIRecommendationResponse {
   warning?: string;
   error?: string;
   errorCode?: AIRecommendationErrorCode;
-  details?: string;
 }
 

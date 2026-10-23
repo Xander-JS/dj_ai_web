@@ -14,12 +14,15 @@ export {
 export {
   detectKey,
   extractChromaProfile,
+  RELAXED_KEY_OPTIONS,
+  type KeyDetectorOptions,
   type KeyDetectionResult,
   type KeyCandidate,
 } from './keyDetector.ts';
 
 export {
   detectBpm,
+  RELAXED_BPM_OPTIONS,
   type BpmDetectionResult,
   type BpmDetectorOptions,
 } from './bpmDetector.ts';
@@ -32,7 +35,11 @@ export {
 
 export {
   analyzeAudioPcm,
+  analyzeAudioChannels,
+  downmixChannels,
   extractWaveformPeaks,
+  needsSecondAnalysisPass,
+  waveformBucketsForDuration,
   type AudioAnalysisOptions,
 } from './audioAnalyzer.ts';
 

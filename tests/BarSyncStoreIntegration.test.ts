@@ -505,7 +505,8 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
   // 11. La preparación no cambia BPM, pitch, playbackRate, SYNC ni la selección de Master
   it('11. La preparación de compás no cambia BPM, pitch, playbackRate, SYNC ni Master', async () => {
     const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4);
-    const slaveTrack = createConfiguredTrack('slave.mp3', 124, HASH_SLAVE, 0.5, 4);
+    // 117.65 BPM × 1.02 ≈ 120 BPM: tempo igualado al Master, requisito para BAR SYNC.
+    const slaveTrack = createConfiguredTrack('slave.mp3', 117.65, HASH_SLAVE, 0.5, 4);
 
     await djStore.loadTrackToDeck('A', masterTrack);
     await djStore.loadTrackToDeck('B', slaveTrack);
@@ -560,7 +561,8 @@ describe('Fase 23.4: Etapa C.4 — Integración de BAR SYNC V1 en DJStore y Tran
   // 13. PLAY/CUP siguen siendo acciones manuales independientes de BAR SYNC
   it('13. PLAY y CUP son acciones manuales independientes de BAR SYNC y conservan pitch, rate y BPM', async () => {
     const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4);
-    const slaveTrack = createConfiguredTrack('slave.mp3', 124, HASH_SLAVE, 0.5, 4);
+    // 117.65 BPM × 1.02 ≈ 120 BPM: tempo igualado al Master, requisito para BAR SYNC.
+    const slaveTrack = createConfiguredTrack('slave.mp3', 117.65, HASH_SLAVE, 0.5, 4);
 
     await djStore.loadTrackToDeck('A', masterTrack);
     await djStore.loadTrackToDeck('B', slaveTrack);
@@ -1127,5 +1129,40 @@ describe('Fase 23.4: Etapa C.8.1 — Acciones Seguras en Store para Confirmar y 
     const okClear = await djStore.clearDownbeatDeckA();
     assert.equal(okClear, true);
     assert.equal(djStore.getSnapshot().deckA.track?.downbeat?.confirmation, null);
+  });
+
+  it('17. PLAY de un Slave armado re-proyecta la fase del Master en el instante real de arranque', async () => {
+    const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4);
+    const slaveTrack = createConfiguredTrack('slave.mp3', 120, HASH_SLAVE, 0.5, 4);
+    await djStore.loadTrackToDeck('A', masterTrack);
+    await djStore.loadTrackToDeck('B', slaveTrack);
+    await djStore.playDeck('A');
+    audioEngine.seekDeck('B', 8.2);
+
+    assert.equal(djStore.prepareBarSync('B').status, 'armed');
+    assert.equal(djStore.getSnapshot().deckB.currentTime, 7.5);
+
+    await djStore.playDeck('B');
+    // El arranque se programa 30 ms después: el Master estará en 0.03 s (fase 0.515 del compás
+    // de 2 s desde su downbeat en 1.0 s), así que el Slave debe arrancar en 0.5 + 3.515 · 2 = 7.53 s.
+    const deckB = djStore.getSnapshot().deckB;
+    assert.equal(deckB.playbackState, 'playing');
+    assert.equal(deckB.barSync.status, 'completed');
+    assert.ok(Math.abs(deckB.currentTime - 7.53) < 1e-9, `posición de arranque ${deckB.currentTime}`);
+    assert.ok(Math.abs(audioEngine.getDeckCurrentTime('B') - 7.53) < 1e-9);
+  });
+
+  it('18. Rechaza BAR SYNC si el BPM efectivo no está igualado (SYNC inactivo)', async () => {
+    const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4);
+    const slaveTrack = createConfiguredTrack('slave.mp3', 124, HASH_SLAVE, 0.5, 4);
+    await djStore.loadTrackToDeck('A', masterTrack);
+    await djStore.loadTrackToDeck('B', slaveTrack);
+    await djStore.playDeck('A');
+    audioEngine.seekDeck('B', 8.2);
+
+    const plan = djStore.prepareBarSync('B');
+    assert.equal(plan.status, 'rejected_tempo_mismatch');
+    assert.match(plan.reason ?? '', /SYNC/);
+    assert.equal(audioEngine.getDeckCurrentTime('B'), 8.2, 'El rechazo no mueve el cabezal');
   });
 });

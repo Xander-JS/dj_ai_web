@@ -22,6 +22,8 @@ export interface OfflineSessionRenderOptions {
   maxOutputBytes?: number;
   /** Hard duration ceiling independent of the output byte ceiling (default 30 min). */
   maxDurationSeconds?: number;
+  /** Rendered fraction in [0, 1], measured through OfflineAudioContext.suspend() checkpoints. */
+  onProgress?: (fraction: number) => void;
   /** Injection point for deterministic scheduling tests and non-browser hosts. */
   createOfflineContext?: (channels: number, frames: number, sampleRate: number) => OfflineAudioContext;
 }
@@ -72,9 +74,17 @@ export class SessionRenderError extends Error {
   }
 }
 
+interface RateRamp {
+  start: number;
+  end: number;
+  from: number;
+  to: number;
+}
+
 interface DeckPlanState extends SessionInitialDeckState {
   lastSessionTimeSeconds: number;
-  currentRamp: { start: number; end: number; from: number; to: number } | null;
+  /** Pending linear rate ramps in session time, in order (a micro-slew queues up to three). */
+  ramps: RateRamp[];
   activeSegment: PlannedPlaybackSegment | null;
 }
 
@@ -101,9 +111,10 @@ function fail(code: SessionRenderErrorCode, message: string): never {
   throw new SessionRenderError(code, message);
 }
 
+/** Duration metadata is informational; the decoded buffer is validated separately. */
 function isValidTrack(track: SessionTrackReference): boolean {
   return typeof track.trackId === 'string' && track.trackId.length > 0
-    && Number.isFinite(track.durationSeconds) && track.durationSeconds > 0;
+    && Number.isFinite(track.durationSeconds) && track.durationSeconds >= 0;
 }
 
 function validateSession(session: RecordedSession): { events: SessionEvent[]; initialState: SessionInitialState } {
@@ -143,8 +154,8 @@ function validateSession(session: RecordedSession): { events: SessionEvent[]; in
       fail('INVALID_TIMELINE', 'Session events must have finite non-negative timestamps and unique non-negative sequence numbers.');
     }
     seenSequences.add(event.sequence);
-    if (event.type === 'deck.micro-slew') {
-      fail('UNSUPPORTED_EVENT', `Deck ${event.deckId} contains micro-slew automation that this renderer cannot reproduce faithfully.`);
+    if (event.type === 'deck.micro-slew' && hasSlewProfile(event) && !isValidSlewProfile(event)) {
+      fail('INVALID_TIMELINE', `Deck ${event.deckId} contains a micro-slew profile with invalid rates or durations.`);
     }
   }
   const recordedOrder = [...session.events].sort((left, right) => left.sequence - right.sequence);
@@ -197,9 +208,11 @@ function validateSession(session: RecordedSession): { events: SessionEvent[]; in
       fail('INVALID_SESSION', 'Master gain event must be within the engine range from 0 to 1.');
     }
   }
+  // Sessions recorded before the recorder re-anchored its clock stamp the snapshot
+  // a fraction of a millisecond late; it is still the session origin.
   const first = events[0];
-  if (first.type !== 'session.initial-state' || first.sessionTimeMs !== 0) {
-    fail('INVALID_SESSION', 'The first event must be the initial-state snapshot at session time zero.');
+  if (first.type !== 'session.initial-state' || first.sequence !== 0) {
+    fail('INVALID_SESSION', 'The first event must be the initial-state snapshot.');
   }
   if (events.slice(1).some((event) => event.type === 'session.initial-state')) {
     fail('INVALID_SESSION', 'A session must contain exactly one initial-state event.');
@@ -239,33 +252,48 @@ function validRate(value: number): boolean {
   return Number.isFinite(value) && value >= 0.92 && value <= 1.08;
 }
 
+type MicroSlewEvent = Extract<SessionEvent, { type: 'deck.micro-slew' }>;
+
+/** A micro-slew recorded when capture starts mid-maneuver carries no profile. */
+function hasSlewProfile(event: MicroSlewEvent): boolean {
+  return event.baseRate !== undefined || event.peakRate !== undefined
+    || event.rampDurationSeconds !== undefined || event.plateauDurationSeconds !== undefined;
+}
+
+function isValidSlewProfile(event: MicroSlewEvent): event is MicroSlewEvent & {
+  baseRate: number; peakRate: number; rampDurationSeconds: number; plateauDurationSeconds: number;
+} {
+  return validRate(event.baseRate as number) && validRate(event.peakRate as number)
+    && Number.isFinite(event.rampDurationSeconds) && (event.rampDurationSeconds as number) > 0
+    && Number.isFinite(event.plateauDurationSeconds) && (event.plateauDurationSeconds as number) >= 0;
+}
+
+function rateAt(ramp: RateRamp, time: number): number {
+  return ramp.from + (ramp.to - ramp.from) * ((time - ramp.start) / (ramp.end - ramp.start));
+}
+
 function advancePlayback(state: DeckPlanState, timeSeconds: number): void {
   if (timeSeconds < state.lastSessionTimeSeconds) fail('INVALID_TIMELINE', 'Event timestamps regress after ordering.');
   if (state.playbackState === 'playing') {
     let cursor = state.lastSessionTimeSeconds;
-    const ramp = state.currentRamp;
-    if (ramp && cursor < ramp.end && timeSeconds > ramp.start) {
-      const rampStart = Math.max(cursor, ramp.start);
-      const rampEnd = Math.min(timeSeconds, ramp.end);
-      if (rampEnd > rampStart) {
-        const rateAt = (t: number) => ramp.from + (ramp.to - ramp.from) * ((t - ramp.start) / (ramp.end - ramp.start));
-        state.trackPositionSeconds += (rateAt(rampStart) + rateAt(rampEnd)) * 0.5 * (rampEnd - rampStart);
-        cursor = rampEnd;
+    while (cursor < timeSeconds) {
+      const ramp = state.ramps[0];
+      if (!ramp || timeSeconds <= ramp.start) {
+        state.trackPositionSeconds += (timeSeconds - cursor) * state.effectivePlaybackRate;
+        break;
       }
-    }
-    if (timeSeconds > cursor) {
-      const rate = ramp && timeSeconds >= ramp.end ? ramp.to : state.effectivePlaybackRate;
-      state.trackPositionSeconds += (timeSeconds - cursor) * rate;
-    }
-    if (ramp) {
-      if (timeSeconds >= ramp.end) {
+      if (cursor < ramp.start) {
+        state.trackPositionSeconds += (ramp.start - cursor) * state.effectivePlaybackRate;
+        cursor = ramp.start;
+      }
+      const segmentEnd = Math.min(timeSeconds, ramp.end);
+      state.trackPositionSeconds += (rateAt(ramp, cursor) + rateAt(ramp, segmentEnd)) * 0.5 * (segmentEnd - cursor);
+      cursor = segmentEnd;
+      if (segmentEnd >= ramp.end) {
         state.effectivePlaybackRate = ramp.to;
-        state.currentRamp = null;
-      } else if (timeSeconds > ramp.start) {
-        const progress = (timeSeconds - ramp.start) / (ramp.end - ramp.start);
-        const currentRate = ramp.from + (ramp.to - ramp.from) * progress;
-        state.effectivePlaybackRate = currentRate;
-        state.currentRamp = { start: timeSeconds, end: ramp.end, from: currentRate, to: ramp.to };
+        state.ramps.shift();
+      } else {
+        state.effectivePlaybackRate = rateAt(ramp, segmentEnd);
       }
     }
   }
@@ -283,9 +311,8 @@ function closeSegment(state: DeckPlanState, timeSeconds: number, segments: Plann
 function startSegment(deckId: DeckId, state: DeckPlanState, timeSeconds: number): void {
   const resolved = state as ResolvedDeckPlanState;
   if (!state.track || !resolved._buffer) return;
-  if (state.trackPositionSeconds >= resolved._buffer.duration) {
-    fail('INVALID_TIMELINE', `Deck ${deckId} playback position is at or beyond the end of its audio buffer.`);
-  }
+  // Playing from the very end (seek clamp, ended race) is silent, not an invalid session.
+  if (state.trackPositionSeconds >= resolved._buffer.duration) return;
   state.activeSegment = {
     deckId,
     track: state.track,
@@ -301,10 +328,8 @@ interface ResolvedDeckPlanState extends DeckPlanState {
   _buffer: AudioBuffer | null;
 }
 
-function validateTrackPosition(state: DeckPlanState, positionSeconds: number, deckId: DeckId): void {
-  const resolved = state as ResolvedDeckPlanState;
-  if (!Number.isFinite(positionSeconds) || positionSeconds < 0
-    || (resolved._buffer && positionSeconds >= resolved._buffer.duration)) {
+function validateTrackPosition(positionSeconds: number, deckId: DeckId): void {
+  if (!Number.isFinite(positionSeconds) || positionSeconds < 0) {
     fail('INVALID_TIMELINE', `Deck ${deckId} has an invalid playback position.`);
   }
 }
@@ -380,13 +405,10 @@ async function planRender(
   for (const deckId of ['A', 'B'] as const) {
     const initial = initialState.decks[deckId];
     const initialBuffer = initial.track ? resolvedBuffers.get(initial.track.trackId) ?? null : null;
-    if (initial.track && initial.trackPositionSeconds >= (initialBuffer?.duration ?? 0)) {
-      fail('INVALID_TIMELINE', `Initial playback position for deck ${deckId} is at or beyond its audio buffer.`);
-    }
     decks[deckId] = {
       ...initial,
       lastSessionTimeSeconds: 0,
-      currentRamp: null,
+      ramps: [],
       activeSegment: null,
       _buffer: initialBuffer,
     };
@@ -405,7 +427,8 @@ async function planRender(
     if (event.type !== 'deck.track-loaded' && event.type !== 'deck.track-unloaded'
       && event.type !== 'deck.playback-rate' && event.type !== 'transport.play'
       && event.type !== 'transport.pause' && event.type !== 'transport.stop'
-      && event.type !== 'transport.ended' && event.type !== 'transport.seek') {
+      && event.type !== 'transport.ended' && event.type !== 'transport.seek'
+      && event.type !== 'deck.micro-slew') {
       fail('UNSUPPORTED_EVENT', `Event type ${event.type} cannot be replayed by this renderer.`);
     }
     const state = decks[event.deckId];
@@ -418,7 +441,7 @@ async function planRender(
         state.trackPositionSeconds = 0;
         state.playbackState = 'stopped';
         state.effectivePlaybackRate = event.effectivePlaybackRate;
-        state.currentRamp = null;
+        state.ramps = [];
         break;
       case 'deck.track-unloaded':
         closeSegment(state, at, segments);
@@ -429,21 +452,21 @@ async function planRender(
         state._buffer = null;
         state.trackPositionSeconds = 0;
         state.playbackState = 'stopped';
-        state.currentRamp = null;
+        state.ramps = [];
         break;
       case 'transport.play':
         if (!state.track || !state._buffer) fail('INVALID_SESSION', `Deck ${event.deckId} cannot play without a resolved track.`);
         closeSegment(state, at, segments);
-        validateTrackPosition(state, event.trackPositionSeconds, event.deckId);
+        validateTrackPosition(event.trackPositionSeconds, event.deckId);
         state.trackPositionSeconds = event.trackPositionSeconds;
         state.effectivePlaybackRate = event.effectivePlaybackRate;
-        state.currentRamp = null;
+        state.ramps = [];
         state.playbackState = 'playing';
         startSegment(event.deckId, state, at);
         break;
       case 'transport.pause':
         closeSegment(state, at, segments);
-        validateTrackPosition(state, event.trackPositionSeconds, event.deckId);
+        validateTrackPosition(event.trackPositionSeconds, event.deckId);
         state.trackPositionSeconds = event.trackPositionSeconds;
         state.playbackState = 'paused';
         break;
@@ -452,11 +475,11 @@ async function planRender(
         closeSegment(state, at, segments);
         state.trackPositionSeconds = 0;
         state.playbackState = 'stopped';
-        state.currentRamp = null;
+        state.ramps = [];
         break;
       case 'transport.seek':
         closeSegment(state, at, segments);
-        validateTrackPosition(state, event.trackPositionSeconds, event.deckId);
+        validateTrackPosition(event.trackPositionSeconds, event.deckId);
         state.trackPositionSeconds = event.trackPositionSeconds;
         state.playbackState = event.playbackState;
         if (event.playbackState === 'playing') startSegment(event.deckId, state, at);
@@ -472,11 +495,32 @@ async function planRender(
         }
         if (rampDurationSeconds > 0 && state.playbackState === 'playing') {
           const from = state.effectivePlaybackRate;
-          state.currentRamp = { start: at, end: at + rampDurationSeconds, from, to: event.effectiveRate };
+          state.ramps = [{ start: at, end: at + rampDurationSeconds, from, to: event.effectiveRate }];
         } else {
-          state.currentRamp = null;
+          state.ramps = [];
           state.effectivePlaybackRate = event.effectiveRate;
         }
+        break;
+      }
+      case 'deck.micro-slew': {
+        // Without a profile (capture started mid-maneuver) the remaining slew is a
+        // sub-beat correction; keeping the base rate is the closest faithful replay.
+        if (!isValidSlewProfile(event) || state.playbackState !== 'playing' || !state.activeSegment) break;
+        const { baseRate, peakRate, rampDurationSeconds, plateauDurationSeconds } = event;
+        const rampUpEnd = at + rampDurationSeconds;
+        const plateauEnd = rampUpEnd + plateauDurationSeconds;
+        const rates = state.activeSegment.rates;
+        rates.push({ sessionTimeSeconds: at, effectiveRate: peakRate, rampDurationSeconds, startRate: baseRate });
+        if (plateauDurationSeconds > 0) {
+          rates.push({ sessionTimeSeconds: rampUpEnd, effectiveRate: peakRate, rampDurationSeconds: plateauDurationSeconds, startRate: peakRate });
+        }
+        rates.push({ sessionTimeSeconds: plateauEnd, effectiveRate: baseRate, rampDurationSeconds, startRate: peakRate });
+        state.effectivePlaybackRate = baseRate;
+        state.ramps = [
+          { start: at, end: rampUpEnd, from: baseRate, to: peakRate },
+          ...(plateauDurationSeconds > 0 ? [{ start: rampUpEnd, end: plateauEnd, from: peakRate, to: peakRate }] : []),
+          { start: plateauEnd, end: plateauEnd + rampDurationSeconds, from: peakRate, to: baseRate },
+        ];
         break;
       }
     }
@@ -491,6 +535,33 @@ async function planRender(
 
 function setParam(param: AudioParam, value: number, time: number): void {
   param.setValueAtTime(value, time);
+}
+
+const RENDER_PROGRESS_STEPS = 20;
+
+/**
+ * OfflineAudioContext has no progress event. Suspending at evenly spaced,
+ * render-quantum-aligned times and resuming immediately yields measured progress.
+ */
+function scheduleRenderProgress(
+  context: OfflineAudioContext,
+  durationSeconds: number,
+  sampleRate: number,
+  onProgress: ((fraction: number) => void) | undefined,
+): void {
+  if (!onProgress || typeof context.suspend !== 'function' || typeof context.resume !== 'function') return;
+  const quantumSeconds = 128 / sampleRate;
+  const scheduled = new Set<number>();
+  for (let step = 1; step < RENDER_PROGRESS_STEPS; step += 1) {
+    const time = Math.floor((durationSeconds * step) / RENDER_PROGRESS_STEPS / quantumSeconds) * quantumSeconds;
+    if (time <= 0 || time >= durationSeconds || scheduled.has(time)) continue;
+    scheduled.add(time);
+    const fraction = step / RENDER_PROGRESS_STEPS;
+    context.suspend(time).then(() => {
+      try { onProgress(fraction); } catch { /* Progress listeners must never stall rendering. */ }
+      return context.resume();
+    }).catch(() => { /* A rejected checkpoint only loses one progress update. */ });
+  }
 }
 
 function createBrowserOfflineContext(channels: number, frames: number, sampleRate: number): OfflineAudioContext {
@@ -535,7 +606,7 @@ export async function renderSessionOffline(
     setParam(compressor.knee, 0, 0);
     setParam(compressor.ratio, 20, 0);
     setParam(compressor.attack, 0.001, 0);
-    setParam(compressor.release, 0.05, 0);
+    setParam(compressor.release, 0.2, 0);
     master.connect(compressor);
     nodes.push(compressor);
     output = compressor;
@@ -607,7 +678,14 @@ export async function renderSessionOffline(
       source.connect(channelNodes[segment.deckId].gain);
       const firstRate = segment.rates[0];
       source.playbackRate.setValueAtTime(firstRate.effectiveRate, segment.sessionStartSeconds);
+      let rampScheduledUntil = segment.sessionStartSeconds;
       for (const rate of segment.rates.slice(1)) {
+        // A rate change that interrupts a pending ramp (e.g. pitch moved mid-slew)
+        // must drop that ramp's end event, or the param keeps ramping toward it.
+        if (rate.sessionTimeSeconds < rampScheduledUntil && typeof source.playbackRate.cancelScheduledValues === 'function') {
+          source.playbackRate.cancelScheduledValues(rate.sessionTimeSeconds);
+        }
+        rampScheduledUntil = Math.max(rampScheduledUntil, rate.sessionTimeSeconds + rate.rampDurationSeconds);
         if (rate.rampDurationSeconds > 0) {
           source.playbackRate.setValueAtTime(rate.startRate, rate.sessionTimeSeconds);
           source.playbackRate.linearRampToValueAtTime(rate.effectiveRate, rate.sessionTimeSeconds + rate.rampDurationSeconds);
@@ -621,6 +699,7 @@ export async function renderSessionOffline(
       sources.push(source);
       nodes.push(source);
     }
+    scheduleRenderProgress(context, plan.durationSeconds, plan.sampleRate, options.onProgress);
     const buffer = await context.startRendering();
     if (!buffer || buffer.numberOfChannels !== 2 || buffer.sampleRate !== plan.sampleRate
       || buffer.length !== frames || !Number.isFinite(buffer.duration) || buffer.duration <= 0) {
@@ -629,6 +708,7 @@ export async function renderSessionOffline(
     for (const node of nodes) {
       try { node.disconnect(); } catch { /* Rendering is complete; tolerate already-disconnected nodes. */ }
     }
+    options.onProgress?.(1);
     return { buffer, durationMs: buffer.duration * 1000, sampleRate: buffer.sampleRate };
   } catch (error) {
     for (const source of sources) {

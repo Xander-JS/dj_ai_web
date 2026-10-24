@@ -1,0 +1,76 @@
+.sd-select-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.sd-select-field__control {
+  width: 100%;
+  min-width: 0;
+  height: var(--sd-control-height);
+  padding: 0 2.75rem 0 1.125rem;
+  border: 2px solid transparent;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-field-bg, var(--sd-surface));
+  color: var(--sd-ink);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1;
+  text-overflow: ellipsis;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: border-color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-select-field--sm .sd-select-field__control {
+  height: var(--sd-control-height-sm);
+  padding: 0 2.25rem 0 0.875rem;
+}
+
+.sd-select-field__chevron {
+  position: absolute;
+  right: 1rem;
+  color: var(--sd-ink-soft);
+  pointer-events: none;
+}
+
+.sd-select-field--sm .sd-select-field__chevron {
+  right: 0.75rem;
+}
+
+.sd-select-field__control:hover:not(:disabled) {
+  border-color: var(--sd-ink-soft);
+}
+
+.sd-select-field__control:focus-visible {
+  border-color: var(--sd-ink);
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 1px;
+}
+
+.sd-select-field__control:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* La lista desplegable nativa hereda el tema del sistema; se le da el del documento */
+.sd-select-field__control option {
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+}
+
+@media (pointer: coarse) {
+  .sd-select-field__control,
+  .sd-select-field--sm .sd-select-field__control {
+    height: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-select-field__control {
+    transition-duration: 0ms;
+  }
+}

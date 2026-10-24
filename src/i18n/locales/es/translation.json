@@ -384,7 +384,22 @@
     "playlist_error": "Falló la operación de playlist: {{error}}",
     "seed_mix_generated": "Mezcla \"{{name}}\" generada con {{count}} pistas.",
     "session_history_limit": "Límite de {{max}} sesiones alcanzado; se reemplazó la sesión más antigua.",
-    "session_history_save_failed": "No se pudo guardar la sesión exportada en el historial local."
+    "session_history_save_failed": "No se pudo guardar la sesión exportada en el historial local.",
+    "session_scope": "Eventos de esta sesión; se borran al recargar.",
+    "new": "Nueva",
+    "status": {
+      "warning": "Aviso",
+      "error": "Error"
+    },
+    "category": {
+      "analysis": "Análisis",
+      "import": "Importación",
+      "session": "Sesión",
+      "playlist": "Playlists",
+      "account": "Cuenta",
+      "library": "Biblioteca",
+      "system": "Sistema"
+    }
   },
   "states": {
     "loading": "Cargando...",
@@ -425,7 +440,7 @@
     "profile_error": "No se pudo guardar el perfil.",
     "profile_username_taken": "Ese nombre de usuario ya está en uso.",
     "accent_title": "Color de acento",
-    "accent_desc": "Color de resalte para botones y elementos activos.",
+    "accent_desc": "Color de resalte del Mixer, los decks y la barra de reproducción.",
     "accent": {
       "cyan": "Cian",
       "violet": "Violeta",
@@ -433,7 +448,7 @@
       "orange": "Naranja"
     },
     "density_title": "Densidad de la interfaz",
-    "density_desc": "Compacta reduce los espacios para mostrar más contenido.",
+    "density_desc": "Compacta reduce los espacios del Mixer, los decks y la barra de reproducción.",
     "density": {
       "standard": "Estándar",
       "compact": "Compacta"
@@ -515,7 +530,63 @@
     "factory_reset_confirm_title": "¿Restablecer todo a valores de fábrica?",
     "factory_reset_confirm_desc": "Se eliminarán todas las pistas, sesiones grabadas y playlists, y las preferencias volverán a sus valores predeterminados. Esta acción no se puede deshacer.",
     "factory_reset_confirm": "Restablecer todo",
-    "factory_reset_done": "Aplicación restablecida a valores de fábrica."
+    "factory_reset_done": "Aplicación restablecida a valores de fábrica.",
+    "page_desc": "Las preferencias se aplican en cuanto las cambias y se guardan en este navegador.",
+    "categories_label": "Categorías de ajustes",
+    "applied": "Aplicado",
+    "tab_desc": {
+      "general": "Tu identidad en SYSTEM DJ. El audio nunca sale de este dispositivo.",
+      "appearance": "Tema de la consola y color de resalte de los decks.",
+      "language": "Idioma de menús, avisos y mensajes.",
+      "audio": "Cómo mezcla el crossfader y cuánto pueden moverse pitch y SYNC.",
+      "playback": "Duración de las transiciones automáticas y comportamiento de CUE.",
+      "shortcuts": "Controla los decks y el mixer desde el teclado.",
+      "library": "Lo que ocupa tu música en este navegador y su mantenimiento."
+    },
+    "theme_title": "Tema",
+    "theme_desc": "Cambia el papel y la tinta de toda la consola.",
+    "theme_option": {
+      "light": "Claro",
+      "dark": "Oscuro"
+    },
+    "language_desc": "Se aplica al momento a toda la aplicación.",
+    "audio_mixer_title": "Mezcla",
+    "audio_engine_title": "Motor de audio",
+    "crossfader_preview_label": "Ganancia de los decks A y B a lo largo del crossfader con la curva {{curve}}",
+    "crossfader_center": "En el centro: A {{a}} % · B {{b}} %",
+    "auto_transition_bars": "{{beats}} beats = {{bars}} compases de 4 tiempos",
+    "shortcuts_fixed_title": "Atajos fijos",
+    "shortcuts_fixed_desc": "Estas teclas no se pueden reasignar.",
+    "shortcuts_disabled_note": "Los atajos están desactivados: ninguna tecla actuará sobre los decks hasta que los actives.",
+    "storage_desc": "Pistas, playlists y sesiones se guardan en el almacenamiento de este navegador.",
+    "storage_browser": "Navegador",
+    "storage_tracks": "Pistas",
+    "storage_share": "Cuota usada",
+    "storage_percent": "{{percent}} %",
+    "maintenance_title": "Mantenimiento",
+    "reset_mixer_action": "Restablecer",
+    "factory_reset_action": "Borrar todo",
+    "account_desc": "El usuario, el alias y la foto se guardan en tu cuenta.",
+    "view_profile": "Ver perfil",
+    "readout": {
+      "account": "Cuenta",
+      "theme": "Tema",
+      "accent": "Acento",
+      "density": "Densidad",
+      "curve": "Curva",
+      "pitch": "Pitch",
+      "sync": "SYNC",
+      "buffer": "Latencia",
+      "buffer_value": "{{ms}} ms",
+      "transition": "Transición",
+      "cue": "CUE",
+      "shortcuts": "Atajos",
+      "on": "Activado",
+      "off": "Desactivado",
+      "tracks": "Pistas",
+      "tracks_size": "Música",
+      "auto_analyze": "Análisis al importar"
+    }
   },
   "profile": {
     "title": "Mi Perfil",
@@ -535,7 +606,17 @@
     "no_name": "Sin nombre",
     "no_username": "Sin nombre de usuario",
     "audio_local_badge": "Audio solo local",
-    "full_name": "Nombre real"
+    "full_name": "Nombre real",
+    "no_account_title": "Sin cuenta",
+    "member_since": "Miembro desde",
+    "unsaved_changes": "Cambios sin guardar",
+    "discard_changes": "Descartar",
+    "device_title": "En este dispositivo",
+    "device_desc": "Tu música y tus sesiones viven en este navegador, no en tu cuenta.",
+    "device_error": "No se pudo leer el almacenamiento local de este navegador.",
+    "device_tracks": "Pistas",
+    "device_hours": "De música",
+    "device_playlists": "Playlists"
   },
   "sessions": {
     "eyebrow": "Herramientas de sesión",

@@ -384,7 +384,22 @@
     "playlist_error": "Playlist operation failed: {{error}}",
     "seed_mix_generated": "Mix \"{{name}}\" generated with {{count}} tracks.",
     "session_history_limit": "{{max}}-session limit reached; the oldest session has been replaced.",
-    "session_history_save_failed": "The exported session could not be saved to the local history."
+    "session_history_save_failed": "The exported session could not be saved to the local history.",
+    "session_scope": "Events from this session; cleared on reload.",
+    "new": "New",
+    "status": {
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "category": {
+      "analysis": "Analysis",
+      "import": "Import",
+      "session": "Session",
+      "playlist": "Playlists",
+      "account": "Account",
+      "library": "Library",
+      "system": "System"
+    }
   },
   "states": {
     "loading": "Loading...",
@@ -425,7 +440,7 @@
     "profile_error": "The profile could not be saved.",
     "profile_username_taken": "That username is already taken.",
     "accent_title": "Accent color",
-    "accent_desc": "Highlight color for buttons and active elements.",
+    "accent_desc": "Highlight color for the Mixer, decks and player bar.",
     "accent": {
       "cyan": "Cyan",
       "violet": "Violet",
@@ -433,7 +448,7 @@
       "orange": "Orange"
     },
     "density_title": "Interface density",
-    "density_desc": "Compact reduces spacing to show more content.",
+    "density_desc": "Compact reduces spacing in the Mixer, decks and player bar.",
     "density": {
       "standard": "Standard",
       "compact": "Compact"
@@ -515,7 +530,63 @@
     "factory_reset_confirm_title": "Reset everything to factory defaults?",
     "factory_reset_confirm_desc": "All tracks, recorded sessions and playlists will be deleted and preferences restored to their defaults. This cannot be undone.",
     "factory_reset_confirm": "Reset everything",
-    "factory_reset_done": "App reset to factory defaults."
+    "factory_reset_done": "App reset to factory defaults.",
+    "page_desc": "Preferences apply as soon as you change them and are kept in this browser.",
+    "categories_label": "Settings categories",
+    "applied": "Applied",
+    "tab_desc": {
+      "general": "Your identity in SYSTEM DJ. Audio never leaves this device.",
+      "appearance": "Console theme and the highlight color of the decks.",
+      "language": "Language for menus, alerts and messages.",
+      "audio": "How the crossfader blends and how far pitch and SYNC can move.",
+      "playback": "Length of automatic transitions and CUE behavior.",
+      "shortcuts": "Control the decks and mixer from the keyboard.",
+      "library": "How much space your music takes in this browser, and its upkeep."
+    },
+    "theme_title": "Theme",
+    "theme_desc": "Switches the paper and ink of the whole console.",
+    "theme_option": {
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language_desc": "Applies to the whole app straight away.",
+    "audio_mixer_title": "Mixing",
+    "audio_engine_title": "Audio engine",
+    "crossfader_preview_label": "Gain of decks A and B across the crossfader with the {{curve}} curve",
+    "crossfader_center": "At center: A {{a}}% · B {{b}}%",
+    "auto_transition_bars": "{{beats}} beats = {{bars}} bars of 4 beats",
+    "shortcuts_fixed_title": "Fixed shortcuts",
+    "shortcuts_fixed_desc": "These keys cannot be reassigned.",
+    "shortcuts_disabled_note": "Shortcuts are off: no key will act on the decks until you turn them on.",
+    "storage_desc": "Tracks, playlists and sessions are kept in this browser’s storage.",
+    "storage_browser": "Browser",
+    "storage_tracks": "Tracks",
+    "storage_share": "Quota used",
+    "storage_percent": "{{percent}}%",
+    "maintenance_title": "Maintenance",
+    "reset_mixer_action": "Reset",
+    "factory_reset_action": "Erase everything",
+    "account_desc": "Your username, alias and photo are stored in your account.",
+    "view_profile": "View profile",
+    "readout": {
+      "account": "Account",
+      "theme": "Theme",
+      "accent": "Accent",
+      "density": "Density",
+      "curve": "Curve",
+      "pitch": "Pitch",
+      "sync": "SYNC",
+      "buffer": "Latency",
+      "buffer_value": "{{ms}} ms",
+      "transition": "Transition",
+      "cue": "CUE",
+      "shortcuts": "Shortcuts",
+      "on": "On",
+      "off": "Off",
+      "tracks": "Tracks",
+      "tracks_size": "Music",
+      "auto_analyze": "Analyze on import"
+    }
   },
   "profile": {
     "title": "My Profile",
@@ -535,7 +606,17 @@
     "no_name": "No name",
     "no_username": "No username",
     "audio_local_badge": "Local-only audio",
-    "full_name": "Real name"
+    "full_name": "Real name",
+    "no_account_title": "No account",
+    "member_since": "Member since",
+    "unsaved_changes": "Unsaved changes",
+    "discard_changes": "Discard",
+    "device_title": "On this device",
+    "device_desc": "Your music and sessions live in this browser, not in your account.",
+    "device_error": "This browser’s local storage could not be read.",
+    "device_tracks": "Tracks",
+    "device_hours": "Of music",
+    "device_playlists": "Playlists"
   },
   "sessions": {
     "eyebrow": "Session tools",

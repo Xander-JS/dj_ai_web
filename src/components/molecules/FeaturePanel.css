@@ -1,0 +1,83 @@
+.sd-feature-panel {
+  position: relative;
+  border-radius: var(--sd-radius-panel);
+  color: var(--sd-field-ink);
+}
+
+.sd-feature-panel--accent { background-color: var(--sd-accent); }
+.sd-feature-panel--sage { background-color: var(--sd-field-sage); }
+.sd-feature-panel--acid { background-color: var(--sd-field-acid); }
+.sd-feature-panel--paper { background-color: var(--sd-field-paper); }
+
+.sd-feature-panel__inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--sd-gap-5);
+  min-height: clamp(24rem, 36vw, 34rem);
+  padding: clamp(1.5rem, 3vw, 2.75rem);
+}
+
+/* La decoración ocupa la esquina superior derecha y desborda el panel; el texto vive abajo a la izquierda */
+/* Regla única: cada objeto rompe la esquina superior derecha por la misma cantidad */
+.sd-feature-panel__decoration {
+  position: absolute;
+  top: clamp(-4rem, -4vw, -2rem);
+  right: clamp(-2.5rem, -2.5vw, -1rem);
+  width: clamp(11rem, 22vw, 20rem);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.sd-feature-panel__decoration--wide {
+  width: clamp(15rem, 30vw, 28rem);
+}
+
+.sd-feature-panel__copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+  max-width: 30rem;
+  margin-top: auto;
+}
+
+.sd-feature-panel__title {
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-black);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.sd-feature-panel__description {
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+}
+
+.sd-feature-panel__interactive {
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 640px) {
+  .sd-feature-panel__inner {
+    min-height: 0;
+    padding-top: clamp(9rem, 38vw, 12rem);
+  }
+
+  .sd-feature-panel:has(.sd-feature-panel__interactive) .sd-feature-panel__inner {
+    padding-top: clamp(1.5rem, 3vw, 2.75rem);
+  }
+
+  .sd-feature-panel__decoration {
+    width: clamp(9rem, 40vw, 12rem);
+    top: -2rem;
+    right: -0.5rem;
+  }
+}

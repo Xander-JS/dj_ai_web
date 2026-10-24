@@ -121,6 +121,19 @@ html[data-scroll-mode='document'] {
   scrollbar-color: var(--sd-ink-soft) var(--sd-paper);
 }
 
+/* Ámbito de tema anidado: un elemento con data-theme="light" vuelve a los valores claros
+   aunque el documento esté en oscuro (vistas previas del selector de tema en Ajustes) */
+[data-theme='light'] {
+  --sd-paper: #ffffff;
+  --sd-surface: #f3f3f1;
+  --sd-ink: #000000;
+  --sd-ink-soft: #545454;
+  --sd-inverse: #000000;
+  --sd-inverse-ink-soft: #b9b9b9;
+  --sd-inverse-surface: #2b2b2b;
+  --sd-focus: #000000;
+}
+
 [data-theme='dark'] {
   --sd-paper: #0f0f0f;
   --sd-surface: #1b1b1b;

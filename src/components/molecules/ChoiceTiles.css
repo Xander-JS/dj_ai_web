@@ -86,10 +86,24 @@
   font-weight: var(--sd-weight-medium);
 }
 
+.sd-choice-tile__hint {
+  margin-top: -0.25rem;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.2;
+  color: var(--sd-ink-soft);
+}
+
 /* Muestras de color: círculo con el sello centrado y la etiqueta debajo */
 .sd-choice-tiles--swatch .sd-choice-tile {
   align-items: center;
+  width: 5.5rem;
   min-width: 4.25rem;
+  text-align: center;
+}
+
+.sd-choice-tiles--swatch .sd-choice-tile__label {
+  text-wrap: balance;
 }
 
 .sd-choice-tiles--swatch .sd-choice-tile__preview {

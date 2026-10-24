@@ -9,6 +9,8 @@ export interface ChoiceTile<T extends string> {
   label: ReactNode;
   /** Muestra de lo que produce la opción (tema, idioma, color) */
   preview?: ReactNode;
+  /** Nota breve bajo la etiqueta (p. ej. «Predeterminado») */
+  hint?: ReactNode;
 }
 
 export interface ChoiceTilesProps<T extends string> {
@@ -49,6 +51,7 @@ export function ChoiceTiles<T extends string>({ value, options, label, onChange,
               </span>
             )}
             <span className="sd-choice-tile__label">{option.label}</span>
+            {option.hint && <span className="sd-choice-tile__hint">{option.hint}</span>}
           </label>
         );
       })}

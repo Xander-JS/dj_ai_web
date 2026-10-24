@@ -1,11 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Play, Music, FolderPlus } from 'lucide-react';
-import { Card, CardBody } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { IconButton } from '../components/ui/IconButton';
-import { StateView } from '../components/ui/StateView';
+import { ArrowRight, Clock, FolderPlus, Music, Play } from 'lucide-react';
+import { Button } from '../components/atoms/Button';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
+import { Tag } from '../components/atoms/Tag';
+import { EmptyState } from '../components/molecules/EmptyState';
+import { Panel } from '../components/molecules/Panel';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { VINYL_IMAGE } from '../components/organisms/landingAssets';
 import { SmartRecommendationCard } from '../components/dashboard/SmartRecommendationCard';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary } from '../services/localLibraryImport';
@@ -24,6 +28,7 @@ export const Dashboard: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const bandTitleId = useId();
 
   // Carga desde IndexedDB y suscripción a resultados de análisis para mantener las métricas al día
   useEffect(() => {
@@ -69,124 +74,105 @@ export const Dashboard: React.FC = () => {
   const stats = useMemo(() => computeLibraryStats(localTracks), [localTracks]);
   const recentTracks = useMemo(() => getRecentlyAddedTracks(localTracks, RECENT_TRACKS_LIMIT), [localTracks]);
 
+  const readouts = [
+    { value: String(stats.totalTracks), label: t('dashboard.library_tracks') },
+    { value: String(stats.analyzedTracks), label: t('dashboard.analyzed_tracks') },
+    { value: `${stats.totalHours} h`, label: t('dashboard.library_hours') },
+  ];
+
   return (
-    <div className="dashboard-container">
+    <ConsoleTemplate className="sd-home">
       <input
         type="file"
         ref={fileInputRef}
         multiple
         accept=".mp3,.wav,audio/mpeg,audio/wav,audio/mp3"
-        style={{ display: 'none' }}
+        hidden
         onChange={(e) => handleImportFiles(e.target.files)}
       />
 
-      {/* Header Area */}
-      <div className="dashboard-header">
-        <div>
-          <h2 className="dashboard-title">{t('dashboard.welcome')}</h2>
-          <p className="dashboard-subtitle">
-            DJ_System v1.0
-          </p>
-        </div>
-        <div className="dashboard-actions">
-          <Button variant="outline" onClick={() => navigate('/mixer')}>{t('common.mix')}</Button>
-          <Button
-            variant="primary"
-            disabled={isImporting}
-            title={t('library.import_btn')}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <FolderPlus size={18} />
-            {isImporting ? t('library.importing') : t('dashboard.quick_actions')}
-          </Button>
-        </div>
-      </div>
+      {/* Cabina: qué es esta pantalla, las dos acciones principales y el estado de la biblioteca */}
+      <section className="sd-home-band sd-field-sage" aria-labelledby={bandTitleId}>
+        <picture className="sd-home-band__visual" aria-hidden="true">
+          <source srcSet={VINYL_IMAGE.webp} type="image/webp" />
+          <img src={VINYL_IMAGE.src} width={VINYL_IMAGE.width} height={VINYL_IMAGE.height} alt="" loading="lazy" decoding="async" />
+        </picture>
 
-      {/* Grid Content */}
-      <div className="dashboard-grid">
+        <div className="sd-home-band__copy">
+          <h2 id={bandTitleId} className="sd-home-band__title">{t('dashboard.title')}</h2>
+          <p className="sd-home-band__subtitle">{t('dashboard.subtitle')}</p>
+          <div className="sd-home-band__actions">
+            <Button variant="accent" size="lg" onClick={() => navigate('/mixer')}>
+              {t('common.mix')}
+              <Icon icon={ArrowRight} size="md" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              disabled={isImporting}
+              aria-busy={isImporting}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon icon={FolderPlus} size="md" />
+              {isImporting ? t('library.importing') : t('library.import_btn')}
+            </Button>
+          </div>
+        </div>
 
-        {/* Recently added local tracks */}
-        <Card elevated>
-          <CardBody>
-            <div className="dashboard-section-header">
-              <h3 className="dashboard-section-title">{t('dashboard.recent')}</h3>
+        <dl className="sd-home-band__readouts">
+          {readouts.map((item) => (
+            <div key={item.label} className="sd-home-readout">
+              <dt className="sd-home-readout__label">{item.label}</dt>
+              <dd className="sd-home-readout__value sd-num">{item.value}</dd>
             </div>
-            {recentTracks.length === 0 ? (
-              <StateView
-                status="empty"
-                icon={Music}
-                title={t('dashboard.recent_empty_title')}
-                description={t('dashboard.recent_empty_desc')}
-              />
-            ) : (
-              <div className="dashboard-track-list">
-                {recentTracks.map(track => {
-                  const isAnalyzed = track.analysis?.status === 'analyzed';
-                  return (
-                    <div key={track.id} className="track-item">
-                      <div className="track-info">
-                        <div className="track-cover-mini"></div>
-                        <div>
-                          <div className="track-title">{track.title}</div>
-                          <div className="track-meta">
-                            <span>{track.artist || t('dj.unknown_artist')}</span>
-                            {isAnalyzed && track.analysis.bpm ? (
-                              <>
-                                <span>•</span>
-                                <span>{Math.round(track.analysis.bpm)} BPM</span>
-                              </>
-                            ) : null}
-                            {isAnalyzed && track.analysis.key ? (
-                              <>
-                                <span>•</span>
-                                <span>{track.analysis.key}</span>
-                              </>
-                            ) : null}
-                            <span>•</span>
-                            <span>{track.durationFormatted}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <IconButton
-                        icon={<Play size={16} />}
-                        size="sm"
-                        variant="ghost"
-                        title={t('library.load_deck_a')}
-                        aria-label={t('library.load_deck_a')}
-                        onClick={() => void loadTrackToDeckA(track)}
-                      />
+          ))}
+        </dl>
+      </section>
+
+      <div className="sd-home-grid">
+        {/* Pistas añadidas recientemente a la biblioteca local */}
+        <Panel title={t('dashboard.recent')} icon={Clock} className="sd-home-recent">
+          {recentTracks.length === 0 ? (
+            <EmptyState
+              icon={Music}
+              title={t('dashboard.recent_empty_title')}
+              description={t('dashboard.recent_empty_desc')}
+            />
+          ) : (
+            <ul className="sd-track-list">
+              {recentTracks.map((track) => {
+                const isAnalyzed = track.analysis?.status === 'analyzed';
+                return (
+                  <li key={track.id} className="sd-track-row">
+                    <div className="sd-track-row__info">
+                      <span className="sd-track-row__title">{track.title}</span>
+                      <span className="sd-track-row__artist">{track.artist || t('dj.unknown_artist')}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardBody>
-        </Card>
+                    <div className="sd-track-row__meta">
+                      {isAnalyzed && track.analysis.bpm ? (
+                        <Tag tone="paper" className="sd-num">{Math.round(track.analysis.bpm)} BPM</Tag>
+                      ) : null}
+                      {isAnalyzed && track.analysis.key ? (
+                        <Tag tone="paper">{track.analysis.key}</Tag>
+                      ) : null}
+                      <span className="sd-track-row__duration sd-num">{track.durationFormatted}</span>
+                    </div>
+                    <IconButton
+                      icon={<Icon icon={Play} size="sm" />}
+                      label={t('library.load_deck_a')}
+                      size="sm"
+                      variant="ink"
+                      onClick={() => void loadTrackToDeckA(track)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
 
-        {/* Stats & Smart Recommendations */}
-        <div className="dashboard-stats-col">
-
-          <Card>
-            <CardBody className="dashboard-stats-card">
-              <div className="stat-card">
-                <span className="stat-value">{stats.totalTracks}</span>
-                <span className="stat-label">{t('dashboard.library_tracks')}</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.analyzedTracks}</span>
-                <span className="stat-label">{t('dashboard.analyzed_tracks')}</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.totalHours}h</span>
-                <span className="stat-label">{t('dashboard.library_hours')}</span>
-              </div>
-            </CardBody>
-          </Card>
-
-          <SmartRecommendationCard />
-
-        </div>
+        <SmartRecommendationCard />
       </div>
-    </div>
+    </ConsoleTemplate>
   );
 };

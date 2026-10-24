@@ -765,6 +765,12 @@
     "confirm_new_password": "Confirm new password",
     "save_password": "Save password",
     "password_updated": "Your password has been updated successfully.",
-    "link_expired_title": "Link expired"
+    "link_expired_title": "Link expired",
+    "page": {
+      "login_intro": "Back to your console: your decks, library and sessions are waiting.",
+      "signup_intro": "All you need is an email and a password. Mix in the browser, nothing to install.",
+      "login_statement": "Your tracks are right where you left them: on your device.",
+      "signup_statement": "Your account stores your identity and profile. Your music never leaves your device."
+    }
   }
 }

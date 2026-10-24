@@ -765,6 +765,12 @@
     "confirm_new_password": "Confirmar nueva contraseña",
     "save_password": "Guardar contraseña",
     "password_updated": "Tu contraseña se ha actualizado correctamente.",
-    "link_expired_title": "Enlace caducado"
+    "link_expired_title": "Enlace caducado",
+    "page": {
+      "login_intro": "Vuelve a tu consola: tus decks, tu biblioteca y tus sesiones te esperan.",
+      "signup_intro": "Solo necesitas un correo y una contraseña. Mezclas desde el navegador, sin instalar nada.",
+      "login_statement": "Tus pistas siguen donde las dejaste: en tu equipo.",
+      "signup_statement": "La cuenta guarda tu identidad y tu perfil. Tu música nunca sale de tu equipo."
+    }
   }
 }

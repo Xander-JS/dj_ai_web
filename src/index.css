@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap');
+@import './design-system/tokens.css';
 
 :root {
   /* ==========================================================================
@@ -242,4 +243,17 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden; /* For desktop app feel */
+}
+
+/* Páginas largas (Home): desplaza el documento en lugar del shell fijo. Ver design-system/documentScroll.ts */
+html[data-scroll-mode='document'],
+html[data-scroll-mode='document'] body {
+  height: auto;
+  overflow-x: clip;
+}
+
+html[data-scroll-mode='document'] #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
 }

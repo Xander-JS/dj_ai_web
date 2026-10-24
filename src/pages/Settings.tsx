@@ -17,8 +17,10 @@ import {
 import { clsx } from 'clsx';
 import { Icon } from '../components/atoms/Icon';
 import { Fader } from '../components/atoms/Fader';
+import { Switch } from '../components/atoms/Switch';
 import { Tag } from '../components/atoms/Tag';
 import { ChoiceTiles } from '../components/molecules/ChoiceTiles';
+import { Notice } from '../components/molecules/Notice';
 import { Panel } from '../components/molecules/Panel';
 import { SegmentedControl } from '../components/molecules/SegmentedControl';
 import { SettingRow } from '../components/molecules/SettingRow';
@@ -29,11 +31,12 @@ import { readStorageUsage, toMb, type StorageUsage } from '../components/setting
 import { ShortcutSettings } from '../components/settings/ShortcutSettings';
 import { BeatLengthPreview, CrossfaderCurvePreview } from '../components/settings/SettingsPreviews';
 import { DURATION, EASE_OUT } from '../design-system/motion';
+import { useSystemReducedMotion } from '../design-system/motionPreference';
 import { useAuth } from '../context/AuthContext';
 import {
   ACCENT_COLORS,
-  ACCENT_HUES,
   AUTO_TRANSITION_BEATS,
+  DEFAULT_SETTINGS,
   BUFFER_SIZES,
   CROSSFADER_CURVES,
   PITCH_RANGES,
@@ -143,6 +146,9 @@ const ThemePreview: React.FC<{ theme: ThemeMode }> = ({ theme }) => (
   </span>
 );
 
+/** Animaciones gobernadas por la preferencia global; cada nueva se añade aquí y en su CSS */
+const ANIMATED_SURFACES = ['sidebar', 'selection_bar'] as const;
+
 const LanguagePreview: React.FC<{ code: string }> = ({ code }) => (
   <span className="sd-language-preview">
     <span className="sd-language-preview__code">{code}</span>
@@ -160,6 +166,24 @@ export const Settings: React.FC = () => {
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const baseId = useId();
   const applied = useAppliedStamp();
+  const systemReducedMotion = useSystemReducedMotion();
+  const [interfaceNotice, setInterfaceNotice] = useState<'reloading' | 'not_saved' | null>(null);
+
+  // Modo experimental: al activarlo se guarda y se recarga una sola vez, solo por acción del usuario.
+  // Si el almacenamiento no conserva el valor, no se recarga (se perdería y no tendría efecto).
+  const handleExperimentalChange = (enabled: boolean) => {
+    updateSettings({ experimentalInterface: enabled });
+    if (!enabled) {
+      setInterfaceNotice(null);
+      return;
+    }
+    if (settingsStore.readPersisted()?.experimentalInterface !== true) {
+      setInterfaceNotice('not_saved');
+      return;
+    }
+    setInterfaceNotice('reloading');
+    window.location.reload();
+  };
   const [storage, setStorage] = useState<StorageUsage | null>(null);
   const [storageToken, setStorageToken] = useState(0);
   const refreshStorage = useCallback(() => setStorageToken((n) => n + 1), []);
@@ -304,8 +328,9 @@ export const Settings: React.FC = () => {
                       options={ACCENT_COLORS.map((color) => ({
                         value: color,
                         label: t(`settings.accent.${color}`),
-                        // Mismo color que appearance.ts escribe en --color-accent
-                        preview: <span className="sd-accent-swatch" style={{ backgroundColor: `hsl(${ACCENT_HUES[color]}, 70%, 55%)` }} />,
+                        hint: color === DEFAULT_SETTINGS.accentColor ? t('settings.accent_default') : undefined,
+                        // El ámbito data-accent pinta el mismo --sd-accent que recibirá la consola
+                        preview: <span className="sd-accent-swatch" data-accent={color} />,
                       }))}
                     />
                   )}
@@ -321,6 +346,65 @@ export const Settings: React.FC = () => {
                       options={(['standard', 'compact'] as const).map((density) => ({ value: density, label: t(`settings.density.${density}`) }))}
                     />
                   )}
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'appearance' && (
+              <Panel title={t('settings.motion_title')} headingLevel="h4">
+                <SettingRow
+                  title={t('settings.animations_title')}
+                  description={t('settings.animations_desc')}
+                  control={({ titleId, descriptionId }) => (
+                    <Switch
+                      checked={settings.animations}
+                      aria-labelledby={titleId}
+                      aria-describedby={descriptionId}
+                      onChange={(e) => updateSettings({ animations: e.target.checked })}
+                    />
+                  )}
+                  preview={(
+                    <div className="sd-settings__motion">
+                      <p className="sd-settings__motion-scope">
+                        <span className="sd-settings__motion-label">{t('settings.animations_scope')}</span>
+                        {ANIMATED_SURFACES.map((surface) => (
+                          <Tag key={surface} tone={settings.animations && !systemReducedMotion ? 'ink' : 'surface'}>
+                            {t(`settings.animations_list.${surface}`)}
+                          </Tag>
+                        ))}
+                      </p>
+                      {systemReducedMotion && (
+                        <Notice tone="info">{t('settings.animations_reduced')}</Notice>
+                      )}
+                    </div>
+                  )}
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'appearance' && (
+              <Panel title={t('settings.lab_title')} headingLevel="h4" aside={<Tag tone="acid">{t('settings.experimental_tag')}</Tag>}>
+                <SettingRow
+                  title={t('settings.experimental_title')}
+                  description={t('settings.experimental_desc')}
+                  control={({ titleId, descriptionId }) => (
+                    <Switch
+                      checked={settings.experimentalInterface}
+                      disabled={interfaceNotice === 'reloading'}
+                      aria-labelledby={titleId}
+                      aria-describedby={descriptionId}
+                      onChange={(e) => handleExperimentalChange(e.target.checked)}
+                    />
+                  )}
+                  preview={
+                    interfaceNotice === 'not_saved' ? (
+                      <Notice tone="error">{t('settings.experimental_not_saved')}</Notice>
+                    ) : interfaceNotice === 'reloading' ? (
+                      <p className="sd-settings__value-line" role="status">{t('settings.experimental_reloading')}</p>
+                    ) : settings.experimentalInterface ? (
+                      <p className="sd-settings__value-line">{t('settings.experimental_on_note')}</p>
+                    ) : undefined
+                  }
                 />
               </Panel>
             )}
@@ -473,6 +557,7 @@ function buildReadouts(
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
+        { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },
       ];
     case 'language':
       // La muestra del idioma ya es la lectura: no se duplica

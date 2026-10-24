@@ -1,47 +1,66 @@
+/* Navegación lateral de la consola (Design System v2): píldoras; la activa en tinta,
+   como la opción pulsada de los controles segmentados de Home */
 .sidebar-nav-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
+  gap: var(--sd-gap-2);
+  min-height: var(--sd-control-height);
+  padding: 0 1.125rem;
+  border-radius: var(--sd-radius-pill);
+  color: var(--sd-ink-soft);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1;
   cursor: pointer;
-  transition: all var(--transition-fast);
   text-decoration: none;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out);
 }
 
 .sidebar-nav-item:hover {
-  background-color: var(--bg-surface-hover);
-  color: var(--text-primary);
+  background-color: var(--sd-surface);
+  color: var(--sd-ink);
 }
 
 .sidebar-nav-item.active {
-  color: var(--color-primary-500);
-  background-color: var(--bg-surface-active);
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 2px;
 }
 
 .sidebar-aside {
-  padding: var(--space-4) 0;
+  padding: var(--sd-gap-2) 0;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: 0 var(--space-2);
+  gap: 0.25rem;
+  padding: 0 var(--sd-gap-3);
 }
 
 /* Tablet: the sidebar collapses into an icon rail; labels stay available to assistive tech */
 @media (max-width: 1024px) {
   .sidebar-aside {
-    padding: var(--space-3) 0;
+    padding: var(--sd-gap-2) 0;
+  }
+
+  .sidebar-nav {
+    align-items: center;
+    padding: 0;
   }
 
   .sidebar-nav-item {
     justify-content: center;
-    min-height: var(--touch-target-min);
-    padding: var(--space-2);
+    width: var(--sd-control-height);
+    min-height: var(--sd-control-height);
+    padding: 0;
   }
 
   .sidebar-nav-label {
@@ -51,5 +70,17 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+
+@media (pointer: coarse) {
+  .sidebar-nav-item {
+    min-height: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-nav-item {
+    transition-duration: 0ms;
   }
 }

@@ -15,7 +15,7 @@ export interface PanelProps {
   aside?: ReactNode;
   tone?: PanelTone;
   /** Nivel del título dentro de la página */
-  headingLevel?: 'h2' | 'h3';
+  headingLevel?: 'h2' | 'h3' | 'h4';
   className?: string;
   bodyClassName?: string;
   children?: ReactNode;

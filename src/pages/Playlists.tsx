@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, Play, ListMusic, Pencil, Trash2, ChevronUp, ChevronDown, X, Check } from 'lucide-react';
-import { IconButton } from '../components/ui/IconButton';
-import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
-import { Input } from '../components/ui/Input';
-import { StateView } from '../components/ui/StateView';
+import { Plus, Play, ListMusic, Pencil, Trash2, ChevronUp, ChevronDown, X, Check, Music } from 'lucide-react';
+import { Button } from '../components/atoms/Button';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
+import { TextField } from '../components/atoms/TextField';
+import { SelectField } from '../components/atoms/SelectField';
+import { EmptyState } from '../components/molecules/EmptyState';
+import { Notice } from '../components/molecules/Notice';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { notificationCenter } from '../services/notifications/notificationCenter';
 import {
@@ -23,8 +26,21 @@ import { formatDuration } from '../utils/formatters';
 import type { Playlist } from '../types/playlist';
 import type { Track } from '../types/track';
 import { clsx } from 'clsx';
-import '../components/ui/Table.css';
 import './Playlists.css';
+
+// La portada se pinta con un campo plano del sistema derivado de forma estable del color guardado;
+// el dato `coverColor` no cambia
+const COVER_FIELDS = ['sd-field-accent', 'sd-field-sage', 'sd-field-acid'] as const;
+
+function coverFieldClass(coverColor: string): string {
+  let hash = 0;
+  for (const char of coverColor) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return COVER_FIELDS[hash % COVER_FIELDS.length];
+}
+
+function playlistInitial(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || '#';
+}
 
 export const Playlists: React.FC = () => {
   const { t } = useTranslation();
@@ -163,254 +179,277 @@ export const Playlists: React.FC = () => {
   };
 
   if (!isLoaded) {
-    return <StateView status="loading" />;
+    return (
+      <ConsoleTemplate fill className="sd-playlists">
+        <EmptyState status="loading" title={t('states.loading')} />
+      </ConsoleTemplate>
+    );
   }
 
   return (
-    <div className="playlists-container">
+    <ConsoleTemplate fill className="sd-playlists">
+      <div className="sd-playlists__layout">
 
-      {/* Sidebar: List of playlists */}
-      <div className="playlists-sidebar">
-        <div className="playlists-sidebar-header">
-          <h3 className="playlists-title">{t('playlists.title')}</h3>
-          <IconButton
-            icon={isCreating ? <X size={20} /> : <Plus size={20} />}
-            title={t('playlists.create')}
-            aria-label={t('playlists.create')}
-            onClick={() => setIsCreating((v) => !v)}
-          />
-        </div>
-
-        {isCreating && (
-          <form className="playlists-sidebar-header" onSubmit={handleCreate}>
-            <Input
-              autoFocus
-              placeholder={t('playlists.name_placeholder')}
-              aria-label={t('playlists.name_placeholder')}
-              maxLength={MAX_PLAYLIST_NAME_LENGTH}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Escape' && setIsCreating(false)}
-            />
+        {/* Lista de playlists */}
+        <section className="sd-playlists-list" aria-labelledby="playlists-list-title">
+          <header className="sd-playlists-list__header">
+            <h2 id="playlists-list-title" className="sd-playlists-list__title">{t('playlists.title')}</h2>
             <IconButton
-              type="submit"
-              icon={<Check size={18} />}
-              title={t('playlists.create_confirm')}
-              aria-label={t('playlists.create_confirm')}
-              disabled={!normalizePlaylistName(newName)}
+              icon={<Icon icon={isCreating ? X : Plus} size="md" />}
+              label={t('playlists.create')}
+              variant={isCreating ? 'surface' : 'ink'}
+              aria-expanded={isCreating}
+              onClick={() => setIsCreating((v) => !v)}
             />
-          </form>
-        )}
+          </header>
 
-        <div className="playlists-list">
-          {playlists.map(playlist => (
-            <div
-              key={playlist.id}
-              className={clsx('playlist-item', activePlaylist?.id === playlist.id && 'active')}
-              onClick={() => selectPlaylist(playlist.id)}
-            >
-              <div className="playlist-cover-mini" style={{ backgroundColor: playlist.coverColor }}></div>
-              <div className="playlist-info-mini">
-                <span className="playlist-name-mini">{playlist.name}</span>
-                <span className="playlist-count-mini">
-                  {t('playlists.tracks_count', { count: playlist.trackIds.filter((id) => tracksById.has(id)).length })}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+          {isCreating && (
+            <form className="sd-playlists-list__create" onSubmit={handleCreate}>
+              <TextField
+                autoFocus
+                placeholder={t('playlists.name_placeholder')}
+                aria-label={t('playlists.name_placeholder')}
+                maxLength={MAX_PLAYLIST_NAME_LENGTH}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && setIsCreating(false)}
+                wrapperClassName="sd-playlists-list__create-field"
+              />
+              <IconButton
+                type="submit"
+                icon={<Icon icon={Check} size="md" />}
+                label={t('playlists.create_confirm')}
+                variant="ink"
+                disabled={!normalizePlaylistName(newName)}
+              />
+            </form>
+          )}
 
-      {/* Main Content: Playlist Details */}
-      <div className="playlist-detail">
-        {activePlaylist ? (
-          <>
-            <div className="playlist-detail-header">
-              <div className="playlist-cover-large" style={{ backgroundColor: activePlaylist.coverColor }}></div>
-              <div className="playlist-detail-info">
-                <Badge variant="secondary" className="playlist-badge">Playlist</Badge>
-                {isRenaming ? (
-                  <form className="playlist-detail-actions" onSubmit={handleRename}>
-                    <Input
-                      autoFocus
-                      aria-label={t('playlists.rename')}
-                      maxLength={MAX_PLAYLIST_NAME_LENGTH}
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Escape' && setIsRenaming(false)}
-                    />
-                    <Button type="submit" variant="primary" disabled={!normalizePlaylistName(renameValue)}>
-                      {t('common.save')}
-                    </Button>
-                    <Button type="button" variant="outline" onClick={() => setIsRenaming(false)}>
-                      {t('common.cancel')}
-                    </Button>
-                  </form>
-                ) : (
-                  <h1 className="playlist-detail-title">{activePlaylist.name}</h1>
-                )}
-                <div className="playlist-detail-meta">
-                  <span>{t('playlists.tracks_count', { count: activeTracks.length })}</span>
-                  <span>•</span>
-                  <span>{t('playlists.total_duration', { time: formatDuration(totalDuration) })}</span>
-                </div>
-
-                {isConfirmingDelete ? (
-                  <div className="playlist-detail-actions">
-                    <span className="playlist-detail-desc">
-                      {t('playlists.delete_confirm', { name: activePlaylist.name })}
+          <ul className="sd-playlists-list__items">
+            {playlists.map(playlist => (
+              <li key={playlist.id}>
+                <button
+                  type="button"
+                  aria-current={activePlaylist?.id === playlist.id ? 'true' : undefined}
+                  className={clsx('sd-playlist-item', activePlaylist?.id === playlist.id && 'is-active')}
+                  onClick={() => selectPlaylist(playlist.id)}
+                >
+                  <span className={clsx('sd-playlist-cover sd-playlist-cover--mini', coverFieldClass(playlist.coverColor))} aria-hidden="true">
+                    {playlistInitial(playlist.name)}
+                  </span>
+                  <span className="sd-playlist-item__info">
+                    <span className="sd-playlist-item__name">{playlist.name}</span>
+                    <span className="sd-playlist-item__count sd-num">
+                      {t('playlists.tracks_count', { count: playlist.trackIds.filter((id) => tracksById.has(id)).length })}
                     </span>
-                    <Button variant="outline" onClick={() => setIsConfirmingDelete(false)}>
-                      {t('common.cancel')}
-                    </Button>
-                    <Button variant="primary" onClick={handleDelete}>
-                      <Trash2 size={16} />
-                      {t('common.delete')}
-                    </Button>
-                  </div>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Detalle de la playlist activa */}
+        <section className="sd-playlist-detail" aria-label={activePlaylist?.name}>
+          {activePlaylist ? (
+            <>
+              <header className="sd-playlist-detail__header">
+                <div className={clsx('sd-playlist-cover sd-playlist-cover--large', coverFieldClass(activePlaylist.coverColor))} aria-hidden="true">
+                  {playlistInitial(activePlaylist.name)}
+                </div>
+                <div className="sd-playlist-detail__info">
+                  {isRenaming ? (
+                    <form className="sd-playlist-detail__actions" onSubmit={handleRename}>
+                      <TextField
+                        autoFocus
+                        aria-label={t('playlists.rename')}
+                        maxLength={MAX_PLAYLIST_NAME_LENGTH}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Escape' && setIsRenaming(false)}
+                        wrapperClassName="sd-playlist-detail__rename"
+                      />
+                      <Button type="submit" variant="ink" disabled={!normalizePlaylistName(renameValue)}>
+                        {t('common.save')}
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => setIsRenaming(false)}>
+                        {t('common.cancel')}
+                      </Button>
+                    </form>
+                  ) : (
+                    <h2 className="sd-playlist-detail__title">{activePlaylist.name}</h2>
+                  )}
+                  <p className="sd-playlist-detail__meta sd-num">
+                    <span>{t('playlists.tracks_count', { count: activeTracks.length })}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{t('playlists.total_duration', { time: formatDuration(totalDuration) })}</span>
+                  </p>
+
+                  {isConfirmingDelete ? (
+                    <Notice
+                      tone="error"
+                      role="status"
+                      className="sd-playlist-detail__confirm"
+                      action={
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
+                            {t('common.cancel')}
+                          </Button>
+                          <Button variant="ink" size="sm" onClick={handleDelete}>
+                            <Icon icon={Trash2} size="sm" />
+                            {t('common.delete')}
+                          </Button>
+                        </>
+                      }
+                    >
+                      {t('playlists.delete_confirm', { name: activePlaylist.name })}
+                    </Notice>
+                  ) : (
+                    <div className="sd-playlist-detail__actions">
+                      <Button variant="accent" disabled={activeTracks.length === 0} onClick={handlePlay}>
+                        <Icon icon={Play} size="md" />
+                        {t('common.play')}
+                      </Button>
+                      <IconButton
+                        icon={<Icon icon={Pencil} size="md" />}
+                        variant="surface"
+                        label={t('playlists.rename')}
+                        onClick={() => {
+                          setRenameValue(activePlaylist.name);
+                          setIsRenaming(true);
+                        }}
+                      />
+                      <IconButton
+                        icon={<Icon icon={Trash2} size="md" />}
+                        variant="surface"
+                        label={t('playlists.delete')}
+                        onClick={() => setIsConfirmingDelete(true)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </header>
+
+              <div className="sd-playlist-detail__tracks">
+                {/* Añadir pistas desde la biblioteca local */}
+                {libraryTracks.length === 0 ? (
+                  <EmptyState
+                    icon={ListMusic}
+                    title={t('playlists.no_library_title')}
+                    description={t('playlists.no_library_desc')}
+                    action={
+                      <Button variant="ink" onClick={() => navigate('/library')}>
+                        <Icon icon={Music} size="md" />
+                        {t('navigation.library')}
+                      </Button>
+                    }
+                  />
                 ) : (
-                  <div className="playlist-detail-actions">
-                    <Button variant="primary" disabled={activeTracks.length === 0} onClick={handlePlay}>
-                      <Play size={18} />
-                      {t('common.play')}
+                  <div className="sd-playlist-detail__add">
+                    <SelectField
+                      aria-label={t('playlists.add_track')}
+                      value={trackToAdd}
+                      disabled={availableToAdd.length === 0}
+                      onChange={(e) => setTrackToAdd(e.target.value)}
+                      wrapperClassName="sd-playlist-detail__add-select"
+                    >
+                      <option value="">
+                        {availableToAdd.length === 0 ? t('playlists.all_tracks_added') : t('playlists.select_track')}
+                      </option>
+                      {availableToAdd.map((tr) => (
+                        <option key={tr.id} value={tr.id}>
+                          {tr.artist ? `${tr.title} — ${tr.artist}` : tr.title}
+                        </option>
+                      ))}
+                    </SelectField>
+                    <Button variant="ink" disabled={!trackToAdd} onClick={handleAddTrack}>
+                      <Icon icon={Plus} size="md" />
+                      {t('playlists.add_track')}
                     </Button>
-                    <IconButton
-                      icon={<Pencil size={18} />}
-                      variant="outline"
-                      title={t('playlists.rename')}
-                      aria-label={t('playlists.rename')}
-                      onClick={() => {
-                        setRenameValue(activePlaylist.name);
-                        setIsRenaming(true);
-                      }}
-                    />
-                    <IconButton
-                      icon={<Trash2 size={18} />}
-                      variant="outline"
-                      title={t('playlists.delete')}
-                      aria-label={t('playlists.delete')}
-                      onClick={() => setIsConfirmingDelete(true)}
-                    />
                   </div>
                 )}
-              </div>
-            </div>
 
-            <div className="playlist-tracks-container">
-              {/* Añadir pistas desde la biblioteca local */}
-              {libraryTracks.length === 0 ? (
-                <StateView
-                  status="empty"
-                  icon={ListMusic}
-                  title={t('playlists.no_library_title')}
-                  description={t('playlists.no_library_desc')}
-                  action={<Button variant="outline" onClick={() => navigate('/library')}>{t('navigation.library')}</Button>}
-                />
-              ) : (
-                <div className="playlist-detail-actions" style={{ marginTop: 0, marginBottom: 'var(--space-6)' }}>
-                  <select
-                    className="input-field"
-                    aria-label={t('playlists.add_track')}
-                    value={trackToAdd}
-                    disabled={availableToAdd.length === 0}
-                    onChange={(e) => setTrackToAdd(e.target.value)}
-                  >
-                    <option value="">
-                      {availableToAdd.length === 0 ? t('playlists.all_tracks_added') : t('playlists.select_track')}
-                    </option>
-                    {availableToAdd.map((tr) => (
-                      <option key={tr.id} value={tr.id}>
-                        {tr.artist ? `${tr.title} — ${tr.artist}` : tr.title}
-                      </option>
-                    ))}
-                  </select>
-                  <Button variant="outline" disabled={!trackToAdd} onClick={handleAddTrack}>
-                    <Plus size={16} />
-                    {t('playlists.add_track')}
-                  </Button>
-                </div>
-              )}
-
-              {activeTracks.length > 0 ? (
-                <table className="library-table">
-                  <thead>
-                    <tr>
-                      <th className="col-index">#</th>
-                      <th>{t('library.col_title')}</th>
-                      <th>{t('library.col_artist')}</th>
-                      <th>{t('library.col_bpm')}</th>
-                      <th className="col-duration">{t('library.col_duration')}</th>
-                      <th className="col-actions"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeTracks.map((track, index) => {
-                      // Índice real en trackIds (puede diferir si hay ids huérfanos)
-                      const storedIndex = activePlaylist.trackIds.indexOf(track.id);
-                      const bpm = track.analysis?.status === 'analyzed' ? track.analysis.bpm : undefined;
-                      return (
-                        <tr key={track.id}>
-                          <td className="track-index">{index + 1}</td>
-                          <td className="track-title">{track.title}</td>
-                          <td className="track-artist">{track.artist || t('dj.unknown_artist')}</td>
-                          <td>{bpm ? Math.round(bpm) : '—'}</td>
-                          <td className="track-duration col-duration">{track.durationFormatted}</td>
-                          <td className="col-actions">
-                            <IconButton
-                              icon={<ChevronUp size={16} />}
-                              size="sm"
-                              title={t('playlists.move_up')}
-                              aria-label={t('playlists.move_up')}
-                              disabled={index === 0}
-                              onClick={() => updateActive((p) => moveTrackInPlaylist(p, storedIndex, activePlaylist.trackIds.indexOf(activeTracks[index - 1].id)))}
-                            />
-                            <IconButton
-                              icon={<ChevronDown size={16} />}
-                              size="sm"
-                              title={t('playlists.move_down')}
-                              aria-label={t('playlists.move_down')}
-                              disabled={index === activeTracks.length - 1}
-                              onClick={() => updateActive((p) => moveTrackInPlaylist(p, storedIndex, activePlaylist.trackIds.indexOf(activeTracks[index + 1].id)))}
-                            />
-                            <IconButton
-                              icon={<X size={16} />}
-                              size="sm"
-                              title={t('playlists.remove_track')}
-                              aria-label={t('playlists.remove_track')}
-                              onClick={() => updateActive((p) => removeTrackFromPlaylist(p, track.id))}
-                            />
-                          </td>
+                {activeTracks.length > 0 ? (
+                  <div className="sd-playlist-detail__table-wrap">
+                    <table className="sd-table sd-playlist-table">
+                      <thead>
+                        <tr>
+                          <th className="sd-table__num sd-playlist-table__index">#</th>
+                          <th>{t('library.col_title')}</th>
+                          <th>{t('library.col_artist')}</th>
+                          <th className="sd-table__num">{t('library.col_bpm')}</th>
+                          <th className="sd-table__num">{t('library.col_duration')}</th>
+                          <th className="sd-table__actions"><span className="sd-visually-hidden">{t('library.col_actions')}</span></th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : libraryTracks.length > 0 ? (
-                <StateView
-                  status="empty"
-                  icon={ListMusic}
-                  title={t('playlists.empty_playlist_title')}
-                  description={t('playlists.empty_playlist_desc')}
-                />
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <StateView
-            status="empty"
-            icon={ListMusic}
-            title={t('playlists.no_playlists_title')}
-            description={t('playlists.no_playlists_desc')}
-            action={
-              <Button variant="primary" onClick={() => setIsCreating(true)}>
-                <Plus size={16} />
-                {t('playlists.create')}
-              </Button>
-            }
-          />
-        )}
-      </div>
+                      </thead>
+                      <tbody>
+                        {activeTracks.map((track, index) => {
+                          // Índice real en trackIds (puede diferir si hay ids huérfanos)
+                          const storedIndex = activePlaylist.trackIds.indexOf(track.id);
+                          const bpm = track.analysis?.status === 'analyzed' ? track.analysis.bpm : undefined;
+                          return (
+                            <tr key={track.id}>
+                              <td className="sd-table__num sd-playlist-table__index">{index + 1}</td>
+                              <td className="sd-playlist-table__title">{track.title}</td>
+                              <td className="sd-playlist-table__muted">{track.artist || t('dj.unknown_artist')}</td>
+                              <td className="sd-table__num">{bpm ? Math.round(bpm) : '—'}</td>
+                              <td className="sd-table__num sd-playlist-table__muted">{track.durationFormatted}</td>
+                              <td className="sd-table__actions">
+                                <div className="sd-playlist-table__actions">
+                                  <IconButton
+                                    icon={<Icon icon={ChevronUp} size="sm" />}
+                                    size="sm"
+                                    label={t('playlists.move_up')}
+                                    disabled={index === 0}
+                                    onClick={() => updateActive((p) => moveTrackInPlaylist(p, storedIndex, activePlaylist.trackIds.indexOf(activeTracks[index - 1].id)))}
+                                  />
+                                  <IconButton
+                                    icon={<Icon icon={ChevronDown} size="sm" />}
+                                    size="sm"
+                                    label={t('playlists.move_down')}
+                                    disabled={index === activeTracks.length - 1}
+                                    onClick={() => updateActive((p) => moveTrackInPlaylist(p, storedIndex, activePlaylist.trackIds.indexOf(activeTracks[index + 1].id)))}
+                                  />
+                                  <IconButton
+                                    icon={<Icon icon={X} size="sm" />}
+                                    size="sm"
+                                    label={t('playlists.remove_track')}
+                                    onClick={() => updateActive((p) => removeTrackFromPlaylist(p, track.id))}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : libraryTracks.length > 0 ? (
+                  <EmptyState
+                    icon={ListMusic}
+                    title={t('playlists.empty_playlist_title')}
+                    description={t('playlists.empty_playlist_desc')}
+                  />
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <EmptyState
+              icon={ListMusic}
+              className="sd-playlist-detail__empty"
+              title={t('playlists.no_playlists_title')}
+              description={t('playlists.no_playlists_desc')}
+              action={
+                <Button variant="accent" onClick={() => setIsCreating(true)}>
+                  <Icon icon={Plus} size="md" />
+                  {t('playlists.create')}
+                </Button>
+              }
+            />
+          )}
+        </section>
 
-    </div>
+      </div>
+    </ConsoleTemplate>
   );
 };

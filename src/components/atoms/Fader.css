@@ -30,7 +30,7 @@
   left: 0;
   width: var(--sd-fader-percent);
   border-radius: inherit;
-  background-color: var(--sd-ink);
+  background-color: var(--sd-indicator);
 }
 
 .sd-fader__input {

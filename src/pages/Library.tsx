@@ -5,12 +5,19 @@ import {
   Search, CheckSquare, Square, 
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
   Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus,
-  Target, WandSparkles, ArrowLeftRight, Link2, Pencil, Check
+  Target, WandSparkles, ArrowLeftRight, Link2, Pencil, Check, Music
 } from 'lucide-react';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
-import { IconButton } from '../components/ui/IconButton';
-import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/atoms/Button';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
+import { Tag } from '../components/atoms/Tag';
+import { TextField } from '../components/atoms/TextField';
+import { SelectField } from '../components/atoms/SelectField';
+import { SegmentedControl } from '../components/molecules/SegmentedControl';
+import { PageHeader } from '../components/molecules/PageHeader';
+import { Notice } from '../components/molecules/Notice';
+import { EmptyState } from '../components/molecules/EmptyState';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
 import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
@@ -35,7 +42,6 @@ import {
 } from '../utils/trackAnalysis';
 import type { Track, AnalysisStatus, ManualAnalysisField, MusicalKeyCamelot } from '../types/track';
 import type { Playlist } from '../types/playlist';
-import '../components/ui/Table.css';
 import './Library.css';
 import { clsx } from 'clsx';
 
@@ -98,43 +104,43 @@ export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
     switch (status) {
       case 'analyzing':
         return {
-          icon: <Loader2 size={12} className="spin-anim" />,
+          icon: <Icon icon={Loader2} size="xs" className="sd-status__spin" />,
           label: t('library.status_analyzing'),
           title: t('library.status_analyzing_title'),
-          className: 'status-badge-analyzing',
+          className: 'sd-status--analyzing',
           isInteractive: false,
         };
       case 'analyzed':
         return {
-          icon: <CheckCircle2 size={12} />,
+          icon: <Icon icon={CheckCircle2} size="xs" />,
           label: t('library.status_analyzed'),
           title: t('library.status_analyzed_title'),
-          className: 'status-badge-analyzed',
+          className: 'sd-status--analyzed',
           isInteractive: Boolean(onAnalyze),
         };
       case 'failed':
         return {
-          icon: <AlertCircle size={12} />,
+          icon: <Icon icon={AlertCircle} size="xs" />,
           label: t('library.status_failed'),
           title: error ? `${t('library.status_failed_title')}: ${error}` : t('library.status_failed_title'),
-          className: 'status-badge-failed',
+          className: 'sd-status--failed',
           isInteractive: Boolean(onAnalyze),
         };
       case 'unsupported':
         return {
-          icon: <AlertTriangle size={12} />,
+          icon: <Icon icon={AlertTriangle} size="xs" />,
           label: t('library.status_unsupported'),
           title: error || t('library.status_unsupported_title'),
-          className: 'status-badge-unsupported',
+          className: 'sd-status--unsupported',
           isInteractive: Boolean(onAnalyze),
         };
       case 'pending':
       default:
         return {
-          icon: <Clock size={12} />,
+          icon: <Icon icon={Clock} size="xs" />,
           label: t('library.status_pending'),
           title: t('library.status_pending_title'),
-          className: 'status-badge-pending',
+          className: 'sd-status--pending',
           isInteractive: Boolean(onAnalyze),
         };
     }
@@ -147,7 +153,7 @@ export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
       role="status"
       aria-label={config.title}
       title={config.title}
-      className={clsx('status-badge', config.className, config.isInteractive && 'interactive')}
+      className={clsx('sd-status', config.className, config.isInteractive && 'sd-status--interactive')}
       onClick={config.isInteractive ? onAnalyze : undefined}
     >
       {config.icon}
@@ -634,210 +640,208 @@ export const Library: React.FC = () => {
     setSelectedTracks(newSelected);
   };
 
+  const filterOptions: { value: FilterType; label: React.ReactNode }[] = [
+    { value: 'all', label: t('library.filter_all') },
+    {
+      value: 'local',
+      label: (
+        <>
+          <Icon icon={HardDrive} size="sm" />
+          {t('library.filter_local')}
+          <span className="sd-num">({localTracks.length})</span>
+        </>
+      ),
+    },
+    { value: 'audio', label: t('library.filter_audio') },
+    { value: 'video', label: t('library.filter_video') },
+  ];
+
   return (
-    <div 
-      className="library-container"
+    <ConsoleTemplate
+      fill
+      className="sd-library"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Input de archivo invisible */}
-      <input 
+      <input
         type="file"
         ref={fileInputRef}
         multiple
         accept=".mp3,.wav,audio/mpeg,audio/wav,audio/mp3"
-        style={{ display: 'none' }}
+        hidden
         onChange={(e) => handleImportFiles(e.target.files)}
       />
 
-      <div className="library-header">
-        <div className="library-title-row">
-          <h2 className="library-title">{t('library.title')}</h2>
-          
-          <div className="library-header-actions">
-            <Button 
-              variant="primary"
-              disabled={isImporting}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <FolderPlus size={18} />
-              {isImporting ? t('library.importing') : t('library.import_btn')}
-            </Button>
-            <Button variant="outline" onClick={() => setYoutubeModalOpen(true)}>
-              <Link2 size={18} />
-              {t('library.import_youtube_btn')}
-            </Button>
-          </div>
-        </div>
+      <div className="sd-library__header">
+        <PageHeader
+          title={t('library.title')}
+          actions={
+            <>
+              <Button
+                variant="accent"
+                disabled={isImporting}
+                aria-busy={isImporting}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon icon={FolderPlus} size="md" />
+                {isImporting ? t('library.importing') : t('library.import_btn')}
+              </Button>
+              <Button variant="ghost" onClick={() => setYoutubeModalOpen(true)}>
+                <Icon icon={Link2} size="md" />
+                {t('library.import_youtube_btn')}
+              </Button>
+            </>
+          }
+        />
 
         {/* Zona visual interactiva de Drag & Drop */}
-        <div 
-          className={clsx('library-dropzone', isDragging && 'active')}
+        <div
+          role="button"
+          tabIndex={0}
+          className={clsx('sd-library-dropzone', isDragging ? 'sd-field-acid' : 'sd-field-sage', isDragging && 'is-active')}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
         >
-          <div className="dropzone-icon">
-            <UploadCloud size={24} />
-          </div>
-          <div className="dropzone-text-group">
-            <span className="dropzone-main-text">{t('library.drag_drop_title')}</span>
-            <span className="dropzone-sub-text">{t('library.drag_drop_subtitle')}</span>
-          </div>
+          <Icon icon={UploadCloud} size="lg" />
+          <span className="sd-library-dropzone__text">
+            <span className="sd-library-dropzone__title">{t('library.drag_drop_title')}</span>
+            <span className="sd-library-dropzone__hint">{t('library.drag_drop_subtitle')}</span>
+          </span>
         </div>
 
         {/* Notificaciones y alertas */}
         {feedback && (
-          <div className={clsx('library-alert', feedback.type)}>
-            <div className="alert-content">
-              {feedback.type === 'success' && <CheckCircle2 size={18} />}
-              {feedback.type === 'warning' && <AlertCircle size={18} />}
-              {feedback.type === 'error' && <AlertCircle size={18} />}
-              <span>{feedback.text}</span>
-            </div>
-            <IconButton 
-              icon={<X size={16} />} 
-              size="sm" 
-              variant="ghost" 
-              onClick={() => setFeedback(null)} 
-            />
+          <Notice
+            tone={feedback.type}
+            dismissLabel={t('common.close')}
+            onDismiss={() => setFeedback(null)}
+          >
+            {feedback.text}
+          </Notice>
+        )}
+
+        <div className="sd-library-toolbar">
+          <TextField
+            type="search"
+            placeholder={t('library.search_tracks')}
+            aria-label={t('library.search_tracks')}
+            icon={<Icon icon={Search} size="sm" />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            wrapperClassName="sd-library-toolbar__search"
+          />
+
+          <SegmentedControl
+            label={t('library.filters_label')}
+            value={filter}
+            options={filterOptions}
+            onChange={setFilter}
+          />
+        </div>
+
+        {/* Modo referencia (semillas) */}
+        {localTracks.length > 0 && (
+          <div className="sd-library-bar" role="region" aria-label={t('seed.mode_title')}>
+            <span className="sd-library-bar__title">
+              <Icon icon={Target} size="md" />
+              {t('seed.mode_title')}
+            </span>
+            {seedTracks.length === 0 ? (
+              <span className="sd-library-bar__hint">{t('seed.mode_hint', { max: MAX_SEED_TRACKS })}</span>
+            ) : (
+              <span className="sd-library-bar__seeds">
+                {seedTracks.map((seed, index) => (
+                  <Tag key={seed.id} tone="acid" title={seed.title} className="sd-library-bar__seed">
+                    {seedTracks.length === 2
+                      ? t(index === 0 ? 'seed.start_label' : 'seed.end_label', { title: seed.title })
+                      : t('seed.single_label', { title: seed.title })}
+                  </Tag>
+                ))}
+              </span>
+            )}
+            <span className="sd-library-bar__actions">
+              {seedTracks.length === 2 && (
+                <IconButton
+                  icon={<Icon icon={ArrowLeftRight} size="sm" />}
+                  label={t('seed.swap')}
+                  size="sm"
+                  onClick={swapSeeds}
+                />
+              )}
+              <Button
+                variant="ink"
+                size="sm"
+                disabled={seedTracks.length === 0 || isGenerating}
+                title={seedTracks.length === 0 ? t('seed.generate_disabled') : undefined}
+                onClick={handleGenerateFromSeeds}
+              >
+                <Icon icon={WandSparkles} size="sm" />
+                {isGenerating ? t('seed.generating') : t('seed.generate')}
+              </Button>
+              {seedTracks.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearSeeds}>
+                  {t('seed.clear')}
+                </Button>
+              )}
+            </span>
           </div>
         )}
 
-        <div className="library-toolbar">
-          <Input 
-            placeholder={t('library.search_tracks')} 
-            icon={<Search size={18} />}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            wrapperClassName="library-search-container" 
-          />
-          
-          <div className="library-filters">
-            <Button 
-              variant={filter === 'all' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('all')}
-            >
-              {t('library.filter_all')}
-            </Button>
-            <Button 
-              variant={filter === 'local' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('local')}
-            >
-              <HardDrive size={14} />
-              {t('library.filter_local')} ({localTracks.length})
-            </Button>
-            <Button 
-              variant={filter === 'audio' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('audio')}
-            >
-              {t('library.filter_audio')}
-            </Button>
-            <Button 
-              variant={filter === 'video' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('video')}
-            >
-              {t('library.filter_video')}
+        {/* Acción sobre la selección: añadir a playlist */}
+        {selectedTracks.size > 0 && (
+          <div className="sd-library-bar sd-field-inverse">
+            <span className="sd-library-bar__title sd-num">{t('library.selected_count', { count: selectedTracks.size })}</span>
+            {playlists.length === 0 ? (
+              <span className="sd-library-bar__hint">{t('library.playlist_none_available')}</span>
+            ) : (
+              <span className="sd-library-bar__actions">
+                <SelectField
+                  size="sm"
+                  aria-label={t('library.playlist_target')}
+                  value={targetPlaylistId}
+                  onChange={(e) => setTargetPlaylistId(e.target.value)}
+                >
+                  <option value="">{t('library.playlist_target')}</option>
+                  {playlists.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </SelectField>
+                <Button variant="accent" size="sm" disabled={!targetPlaylistId} onClick={handleAddSelectedToPlaylist}>
+                  <Icon icon={ListPlus} size="sm" />
+                  {t('library.playlist_add_btn')}
+                </Button>
+              </span>
+            )}
+            <Button variant="ghost" size="sm" className="sd-library-bar__end" onClick={() => setSelectedTracks(new Set())}>
+              {t('common.cancel')}
             </Button>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Modo referencia (semillas) */}
-      {localTracks.length > 0 && (
-        <div className="library-filters" style={{ alignItems: 'center' }} role="region" aria-label={t('seed.mode_title')}>
-          <Target size={16} aria-hidden="true" />
-          <strong>{t('seed.mode_title')}</strong>
-          {seedTracks.length === 0 ? (
-            <span className="text-muted">{t('seed.mode_hint', { max: MAX_SEED_TRACKS })}</span>
-          ) : (
-            seedTracks.map((seed, index) => (
-              <Badge key={seed.id} variant="secondary" title={seed.title}>
-                {seedTracks.length === 2
-                  ? t(index === 0 ? 'seed.start_label' : 'seed.end_label', { title: seed.title })
-                  : t('seed.single_label', { title: seed.title })}
-              </Badge>
-            ))
-          )}
-          {seedTracks.length === 2 && (
-            <IconButton
-              icon={<ArrowLeftRight size={14} />}
-              size="sm"
-              variant="ghost"
-              title={t('seed.swap')}
-              aria-label={t('seed.swap')}
-              onClick={swapSeeds}
-            />
-          )}
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={seedTracks.length === 0 || isGenerating}
-            title={seedTracks.length === 0 ? t('seed.generate_disabled') : undefined}
-            onClick={handleGenerateFromSeeds}
-          >
-            <WandSparkles size={14} />
-            {isGenerating ? t('seed.generating') : t('seed.generate')}
-          </Button>
-          {seedTracks.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearSeeds}>
-              {t('seed.clear')}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Acción sobre la selección: añadir a playlist */}
-      {selectedTracks.size > 0 && (
-        <div className="library-filters" style={{ alignItems: 'center' }}>
-          <span>{t('library.selected_count', { count: selectedTracks.size })}</span>
-          {playlists.length === 0 ? (
-            <span className="text-muted">{t('library.playlist_none_available')}</span>
-          ) : (
-            <>
-              <select
-                className="input-field"
-                aria-label={t('library.playlist_target')}
-                value={targetPlaylistId}
-                onChange={(e) => setTargetPlaylistId(e.target.value)}
-              >
-                <option value="">{t('library.playlist_target')}</option>
-                {playlists.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <Button variant="primary" size="sm" disabled={!targetPlaylistId} onClick={handleAddSelectedToPlaylist}>
-                <ListPlus size={14} />
-                {t('library.playlist_add_btn')}
-              </Button>
-            </>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => setSelectedTracks(new Set())}>
-            {t('common.cancel')}
-          </Button>
-        </div>
-      )}
-
       {/* Tabla unificada */}
-      <div className="library-table-container">
-        <table className="library-table">
+      <div className="sd-library-table-wrap">
+        <table className="sd-table sd-library-table">
           <thead>
             <tr>
-              <th className="col-checkbox">
-                <Square size={16} />
+              <th className="sd-table__check">
+                <Icon icon={Square} size="sm" />
               </th>
               <th>{t('library.col_title')}</th>
-              <th>{t('library.col_artist')}</th>
               <th>{t('library.col_album')}</th>
-              <th>{t('library.col_bpm')}</th>
+              <th className="sd-table__num">{t('library.col_bpm')}</th>
               <th>{t('library.col_key')}</th>
               <th>{t('library.col_energy')}</th>
-              <th className="col-status">{t('library.col_status')}</th>
-              <th>{t('library.col_duration')}</th>
-              <th className="col-actions"></th>
+              <th>{t('library.col_status')}</th>
+              <th className="sd-table__num">{t('library.col_duration')}</th>
+              <th className="sd-table__actions"><span className="sd-visually-hidden">{t('library.col_actions')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -849,50 +853,53 @@ export const Library: React.FC = () => {
               const isEditing = editingTrackId === track.id;
 
               return (
-                <tr key={track.id} className={clsx(isSelected && 'selected', (isLoadedInDeckA || isLoadedInDeckB) && 'prepared')}>
-                  <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
+                <tr key={track.id} className={clsx(isSelected && 'is-selected', (isLoadedInDeckA || isLoadedInDeckB) && 'is-prepared')}>
+                  <td className="sd-table__check" onClick={() => toggleSelection(track.id)}>
                     {isSelected ? (
-                      <CheckSquare size={16} className="icon-selected" />
+                      <Icon icon={CheckSquare} size="sm" className="sd-table__check-on" />
                     ) : (
-                      <Square size={16} className="icon-unselected" />
+                      <Icon icon={Square} size="sm" className="sd-table__check-off" />
                     )}
                   </td>
-                  <td>
-                    <div className="track-title-container">
-                      <span className="track-title">{track.title}</span>
-                      <Badge variant="primary">{t('library.badge_local')}</Badge>
-                      {seedIndex !== -1 && (
-                        <Badge variant="warning" title={t('seed.badge_title')}>
-                          <Target size={11} aria-hidden="true" /> {t('seed.badge', { index: seedIndex + 1 })}
-                        </Badge>
-                      )}
-                      {track.type === 'video' && <Badge variant="secondary">V</Badge>}
-                      {isLoadedInDeckA && (
-                        <span className="deck-prepared-tag" title={t('library.load_deck_a')}>
-                          <Disc size={13} className={clsx(deckA.playbackState === 'playing' && 'playing-anim-spin')} />
-                          Deck A {deckA.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
-                        </span>
-                      )}
-                      {isLoadedInDeckB && (
-                        <span className="deck-prepared-tag deck-b-tag" title={t('library.load_deck_b')}>
-                          <Disc size={13} className={clsx(deckB.playbackState === 'playing' && 'playing-anim-spin')} />
-                          Deck B {deckB.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
-                        </span>
-                      )}
+                  <td className="sd-library-table__track">
+                    <div className="sd-library-track">
+                      <span className="sd-library-track__line">
+                        <span className="sd-library-track__title">{track.title}</span>
+                        {seedIndex !== -1 && (
+                          <Tag tone="acid" className="sd-library-track__tag" title={t('seed.badge_title')}>
+                            <Icon icon={Target} size="xs" /> {t('seed.badge', { index: seedIndex + 1 })}
+                          </Tag>
+                        )}
+                        {isLoadedInDeckA && (
+                          <Tag tone="ink" className="sd-library-track__tag" title={t('library.load_deck_a')}>
+                            <Icon icon={Disc} size="xs" className={clsx(deckA.playbackState === 'playing' && 'sd-deck-spin')} />
+                            Deck A {deckA.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
+                          </Tag>
+                        )}
+                        {isLoadedInDeckB && (
+                          <Tag tone="ink" className="sd-library-track__tag" title={t('library.load_deck_b')}>
+                            <Icon icon={Disc} size="xs" className={clsx(deckB.playbackState === 'playing' && 'sd-deck-spin')} />
+                            Deck B {deckB.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
+                          </Tag>
+                        )}
+                      </span>
+                      <span className="sd-library-track__line">
+                        <span className="sd-library-track__artist">{track.artist}</span>
+                        <Tag tone="surface" className="sd-library-track__tag">{t('library.badge_local')}</Tag>
+                        {track.type === 'video' && <Tag tone="surface" className="sd-library-track__tag">V</Tag>}
+                      </span>
                     </div>
                   </td>
-                  <td>{track.artist}</td>
-                  <td className="track-album">
-                    {track.album}
+                  <td className="sd-library-table__file">
+                    <span className="sd-library-table__file-name">{track.album}</span>
                     {track.fileSizeFormatted && (
-                      <span className="text-muted" style={{ marginLeft: 'var(--space-2)' }}>
-                        ({track.fileSizeFormatted})
-                      </span>
+                      <span className="sd-library-table__muted sd-num">{track.fileSizeFormatted}</span>
                     )}
                   </td>
-                  <td>
+                  <td className="sd-table__num">
                     {isEditing ? (
-                      <Input
+                      <TextField
+                        size="sm"
                         type="number"
                         inputMode="decimal"
                         min={MANUAL_BPM_MIN}
@@ -903,28 +910,30 @@ export const Library: React.FC = () => {
                         disabled={isSavingMetadata}
                         onChange={(e) => setMetadataDraft((d) => ({ ...d, bpm: e.target.value }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                        wrapperClassName="sd-library-edit sd-library-edit--bpm"
                         autoFocus
                       />
                     ) : track.bpm !== undefined && track.bpm > 0 ? (
                       <span
-                        className="track-bpm-value"
+                        className={clsx('sd-library-table__bpm sd-num', track.manualFields.includes('bpm') && 'is-manual')}
                         title={track.manualFields.includes('bpm') ? t('library.manual_value_title') : undefined}
                       >
                         {track.bpm % 1 === 0 ? track.bpm : track.bpm.toFixed(1)}
                       </span>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="sd-library-table__muted">—</span>
                     )}
                   </td>
                   <td>
                     {isEditing ? (
-                      <select
-                        className="input-field"
+                      <SelectField
+                        size="sm"
                         value={metadataDraft.camelot}
                         aria-label={t('library.manual_key_label')}
                         disabled={isSavingMetadata}
                         onChange={(e) => setMetadataDraft((d) => ({ ...d, camelot: e.target.value }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                        wrapperClassName="sd-library-edit sd-library-edit--key"
                       >
                         <option value="">{t('library.manual_key_none')}</option>
                         {CAMELOT_KEYS.map((camelot) => (
@@ -932,26 +941,27 @@ export const Library: React.FC = () => {
                             {camelot} · {camelotToKey(camelot)}
                           </option>
                         ))}
-                      </select>
+                      </SelectField>
                     ) : track.key ? (
                       <div
-                        className="track-key-group"
+                        className={clsx('sd-library-key', track.manualFields.includes('camelot') && 'is-manual')}
                         title={track.manualFields.includes('camelot') ? t('library.manual_value_title') : undefined}
                       >
-                        <span className="track-key-name">{track.key}</span>
+                        <span className="sd-library-key__name">{track.key}</span>
                         {track.camelot && (
-                          <Badge variant="outline" className="track-camelot-badge">
+                          <Tag tone="surface" className="sd-library-key__camelot">
                             {track.camelot}
-                          </Badge>
+                          </Tag>
                         )}
                       </div>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="sd-library-table__muted">—</span>
                     )}
                   </td>
                   <td>
                     {isEditing ? (
-                      <Input
+                      <TextField
+                        size="sm"
                         type="number"
                         inputMode="numeric"
                         min={MANUAL_ENERGY_MIN}
@@ -962,127 +972,112 @@ export const Library: React.FC = () => {
                         disabled={isSavingMetadata}
                         onChange={(e) => setMetadataDraft((d) => ({ ...d, energy: e.target.value }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                        wrapperClassName="sd-library-edit sd-library-edit--energy"
                       />
                     ) : typeof track.energy === 'number' ? (
                       <div
-                        className="energy-bar-container"
+                        className={clsx('sd-energy', track.manualFields.includes('energy') && 'is-manual')}
                         title={track.manualFields.includes('energy')
                           ? `${t('library.energy_label', { val: track.energy })} · ${t('library.manual_value_title')}`
                           : t('library.energy_label', { val: track.energy })}
                       >
-                        <div className="energy-bar">
-                          <div 
-                            className="energy-bar-fill" 
+                        <div className="sd-energy__track">
+                          <div
+                            className="sd-energy__fill"
                             style={{ width: `${Math.min(10, Math.max(0, track.energy)) * 10}%` }}
                           ></div>
                         </div>
-                        <span className="energy-bar-value">{track.energy}</span>
+                        <span className="sd-energy__value sd-num">{track.energy}</span>
                       </div>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="sd-library-table__muted">—</span>
                     )}
                   </td>
-                  <td className="col-status">
+                  <td>
                     <AnalysisStatusBadge
                       status={track.status}
                       error={track.analysisError}
                       onAnalyze={() => handleAnalyzeTrack(track.rawLocalTrack, track.status === 'analyzed')}
                     />
                   </td>
-                  <td className="track-duration">{track.durationFormatted}</td>
-                  <td className="col-actions">
-                    <div className="track-actions-container">
-                      <IconButton 
-                        icon={<span className="deck-action-badge">A</span>} 
-                        size="sm" 
-                        variant={isLoadedInDeckA ? 'primary' : 'outline'}
-                        title={t('library.load_deck_a')}
-                        aria-label={t('library.load_deck_a')}
+                  <td className="sd-table__num sd-library-table__muted sd-num">{track.durationFormatted}</td>
+                  <td className="sd-table__actions">
+                    <div className="sd-library-actions">
+                      <IconButton
+                        icon={<span className="sd-library-actions__deck">A</span>}
+                        size="sm"
+                        variant={isLoadedInDeckA ? 'ink' : 'surface'}
+                        label={t('library.load_deck_a')}
                         onClick={() => handleLoadToDeck(track, 'A')}
                       />
-                      <IconButton 
-                        icon={<span className="deck-action-badge">B</span>} 
-                        size="sm" 
-                        variant={isLoadedInDeckB ? 'secondary' : 'outline'}
-                        title={t('library.load_deck_b')}
-                        aria-label={t('library.load_deck_b')}
+                      <IconButton
+                        icon={<span className="sd-library-actions__deck">B</span>}
+                        size="sm"
+                        variant={isLoadedInDeckB ? 'ink' : 'surface'}
+                        label={t('library.load_deck_b')}
                         onClick={() => handleLoadToDeck(track, 'B')}
                       />
                       <IconButton
-                        icon={<Target size={15} />}
+                        icon={<Icon icon={Target} size="sm" />}
                         size="sm"
-                        variant={seedIndex !== -1 ? 'primary' : 'ghost'}
+                        variant={seedIndex !== -1 ? 'ink' : 'ghost'}
                         aria-pressed={seedIndex !== -1}
-                        title={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
-                        aria-label={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
+                        label={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
                         onClick={() => handleToggleSeed(track.rawLocalTrack)}
                       />
                       {isEditing ? (
                         <>
                           <IconButton
-                            icon={<Check size={15} />}
+                            icon={<Icon icon={Check} size="sm" />}
                             size="sm"
-                            variant="primary"
+                            variant="ink"
                             disabled={isSavingMetadata}
-                            title={t('library.action_save_metadata')}
-                            aria-label={t('library.action_save_metadata')}
+                            label={t('library.action_save_metadata')}
                             onClick={() => handleSaveMetadataEdit(track)}
                           />
                           <IconButton
-                            icon={<X size={15} />}
+                            icon={<Icon icon={X} size="sm" />}
                             size="sm"
-                            variant="ghost"
                             disabled={isSavingMetadata}
-                            title={t('library.action_cancel_edit')}
-                            aria-label={t('library.action_cancel_edit')}
+                            label={t('library.action_cancel_edit')}
                             onClick={handleCancelMetadataEdit}
                           />
                         </>
                       ) : (
                         <IconButton
-                          icon={<Pencil size={15} />}
+                          icon={<Icon icon={Pencil} size="sm" />}
                           size="sm"
-                          variant="ghost"
                           disabled={track.status === 'analyzing'}
-                          title={t('library.action_edit_metadata')}
-                          aria-label={t('library.action_edit_metadata')}
+                          label={t('library.action_edit_metadata')}
                           onClick={() => handleStartMetadataEdit(track)}
                         />
                       )}
                       {track.status === 'analyzing' ? (
-                        <IconButton 
-                          icon={<Loader2 size={15} className="spin-anim" />} 
-                          size="sm" 
-                          variant="ghost"
+                        <IconButton
+                          icon={<Icon icon={Loader2} size="sm" className="sd-status__spin" />}
+                          size="sm"
                           disabled
-                          title={t('library.status_analyzing')}
-                          aria-label={t('library.status_analyzing')}
+                          label={t('library.status_analyzing')}
                         />
                       ) : track.status === 'analyzed' ? (
-                        <IconButton 
-                          icon={<RefreshCw size={15} />} 
-                          size="sm" 
-                          variant="ghost"
-                          title={t('library.action_reanalyze')}
-                          aria-label={t('library.action_reanalyze')}
+                        <IconButton
+                          icon={<Icon icon={RefreshCw} size="sm" />}
+                          size="sm"
+                          label={t('library.action_reanalyze')}
                           onClick={() => handleAnalyzeTrack(track.rawLocalTrack, true)}
                         />
                       ) : (
-                        <IconButton 
-                          icon={<Sparkles size={15} />} 
-                          size="sm" 
-                          variant="ghost"
-                          title={t('library.action_analyze')}
-                          aria-label={t('library.action_analyze')}
+                        <IconButton
+                          icon={<Icon icon={Sparkles} size="sm" />}
+                          size="sm"
+                          label={t('library.action_analyze')}
                           onClick={() => handleAnalyzeTrack(track.rawLocalTrack, false)}
                         />
                       )}
-                      <IconButton 
-                        icon={<Trash2 size={16} />} 
-                        size="sm" 
-                        variant="ghost"
-                        title={t('library.delete_track')}
-                        aria-label={t('library.delete_track')}
+                      <IconButton
+                        icon={<Icon icon={Trash2} size="sm" />}
+                        size="sm"
+                        label={t('library.delete_track')}
                         onClick={() => setDeleteConfirmTrack(track.rawLocalTrack)}
                       />
                     </div>
@@ -1092,17 +1087,13 @@ export const Library: React.FC = () => {
             })}
 
             {filteredTracks.length === 0 && (
-              <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <AlertCircle size={28} className="text-muted" />
-                    <span style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-primary)' }}>
-                      {localTracks.length === 0 ? t('library.empty_local_title') : t('states.empty_title')}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                      {localTracks.length === 0 ? t('library.empty_local_desc') : t('states.empty_desc')}
-                    </span>
-                  </div>
+              <tr className="sd-table__empty-row">
+                <td colSpan={9}>
+                  <EmptyState
+                    icon={localTracks.length === 0 ? Music : Search}
+                    title={localTracks.length === 0 ? t('library.empty_local_title') : t('states.empty_title')}
+                    description={localTracks.length === 0 ? t('library.empty_local_desc') : t('states.empty_desc')}
+                  />
                 </td>
               </tr>
             )}
@@ -1118,25 +1109,31 @@ export const Library: React.FC = () => {
 
       {/* Modal de confirmación para eliminar pista local */}
       {deleteConfirmTrack && (
-        <div className="delete-confirm-overlay" onClick={() => setDeleteConfirmTrack(null)}>
-          <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="delete-modal-title">{t('library.delete_track')}</h3>
-            <p className="delete-modal-desc">
+        <div className="sd-confirm-overlay" onClick={() => setDeleteConfirmTrack(null)}>
+          <div
+            className="sd-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="library-delete-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="library-delete-title" className="sd-confirm__title">{t('library.delete_track')}</h3>
+            <p className="sd-confirm__description">
               {t('library.delete_confirm', { title: deleteConfirmTrack.title })}
             </p>
-            <div className="delete-modal-actions">
-              <Button variant="outline" onClick={() => setDeleteConfirmTrack(null)}>
+            <div className="sd-confirm__actions">
+              <Button variant="ghost" onClick={() => setDeleteConfirmTrack(null)}>
                 {t('common.cancel')}
               </Button>
-              <Button variant="primary" onClick={() => handleDeleteTrack(deleteConfirmTrack)}>
-                <Trash2 size={16} />
+              <Button variant="ink" onClick={() => handleDeleteTrack(deleteConfirmTrack)}>
+                <Icon icon={Trash2} size="sm" />
                 {t('common.delete')}
               </Button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </ConsoleTemplate>
   );
 };
 

@@ -12,11 +12,13 @@ import './LandingNavbar.css';
 export interface LandingNavbarProps {
   onLogIn: () => void;
   onSignUp: () => void;
+  /** Página de cuenta abierta ahora mismo (Login o Registro): su botón se marca como actual */
+  current?: 'login' | 'signup';
 }
 
 // Barra superior de la Home: marca, idioma, tema y acceso a la cuenta.
 // Idioma y tema se guardan en settingsStore, igual que en Configuración.
-export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onLogIn, onSignUp }) => {
+export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onLogIn, onSignUp, current }) => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettingsStore();
 
@@ -44,10 +46,10 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onLogIn, onSignUp 
             labelToDark={t('landing.nav.theme_to_dark')}
             labelToLight={t('landing.nav.theme_to_light')}
           />
-          <Button variant="ghost" onClick={onLogIn} className="sd-navbar__login">
+          <Button variant="ghost" onClick={onLogIn} className="sd-navbar__login" aria-current={current === 'login' ? 'page' : undefined}>
             {t('landing.nav.log_in')}
           </Button>
-          <Button variant="ink" onClick={onSignUp}>
+          <Button variant="ink" onClick={onSignUp} aria-current={current === 'signup' ? 'page' : undefined}>
             {t('landing.nav.sign_up')}
           </Button>
         </div>

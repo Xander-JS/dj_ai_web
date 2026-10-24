@@ -1,0 +1,125 @@
+.sd-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: min(calc(100svh - var(--sd-nav-height)), calc(62vw + 14rem));
+}
+
+.sd-hero__title-wrap {
+  padding: clamp(0.25rem, 1.5vh, 1.5rem) var(--sd-margin) 0;
+  container-type: inline-size;
+}
+
+.sd-hero__title {
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-poster);
+  font-weight: var(--sd-weight-black);
+  line-height: var(--sd-leading-display);
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--sd-ink);
+}
+
+/* Banda inferior: campo salvia con el texto de apoyo y la acción principal */
+.sd-hero__band {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--sd-gap-4) var(--sd-gap-5);
+  min-height: clamp(15rem, 38svh, 24rem);
+  margin-top: auto;
+  padding: clamp(1.75rem, 3vw, 2.75rem) var(--sd-margin) clamp(1.75rem, 3.2vw, 3rem);
+  border-radius: var(--sd-radius-panel) var(--sd-radius-panel) 0 0;
+  background-color: var(--sd-field-sage);
+  color: var(--sd-field-ink);
+}
+
+.sd-hero__copy {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+  max-width: min(36rem, 40vw);
+}
+
+.sd-hero__subtitle {
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.sd-hero__description {
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+  max-width: 46ch;
+}
+
+.sd-hero__cta {
+  position: relative;
+  z-index: 4;
+}
+
+/* Auriculares: cruzan la costura entre el papel y la banda, por encima del titular */
+.sd-hero__visual {
+  position: absolute;
+  top: 0;
+  left: 42%;
+  z-index: 3;
+  width: clamp(18rem, min(38vw, 64svh), 40rem);
+  transform: translateY(-46%) rotate(12deg);
+  pointer-events: none;
+  user-select: none;
+}
+
+.sd-hero__shutter {
+  transform-origin: 50% 100%;
+}
+
+.sd-hero__shutter img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Tableta: la acción pasa bajo el texto y los auriculares se apoyan a la derecha */
+@media (max-width: 1024px) {
+  .sd-hero__band {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    align-content: end;
+  }
+
+  .sd-hero__copy {
+    max-width: min(30rem, 46vw);
+  }
+
+  .sd-hero__visual {
+    left: auto;
+    right: var(--sd-margin);
+    width: clamp(18rem, min(56vw, 60svh), 34rem);
+    transform: translateY(-34%) rotate(12deg);
+  }
+}
+
+/* Por debajo de tableta: composición apilada, sin solapes con el texto */
+@media (max-width: 640px) {
+  .sd-hero__band {
+    padding-top: 60vw;
+  }
+
+  .sd-hero__copy {
+    max-width: none;
+  }
+
+  .sd-hero__visual {
+    right: 50%;
+    width: 62vw;
+    transform: translate(50%, -6%) rotate(12deg);
+  }
+}

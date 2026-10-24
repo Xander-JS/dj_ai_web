@@ -6,7 +6,7 @@
 >
 > **Method.** Static inspection of the source on branch `refactor/ui-home` (2026-10-24). Nothing was rendered in a browser for this document. Values marked *not verified* could not be confirmed from code alone.
 >
-> **Update (2026-10-24).** Home (console `/dashboard`), Library, Playlists and Sessions now use this system through `ConsoleTemplate`; the shell's Header and Sidebar were restyled. Mixer, Settings, Profile, the notifications panel and PlayerBar remain legacy. See §15.
+> **Update (2026-10-24).** Home (console `/dashboard`), Library, Playlists and Sessions now use this system through `ConsoleTemplate`; the shell's Header and Sidebar were restyled. See §15. Settings, Profile and the notifications panel followed the same day (§16). Mixer and PlayerBar remain legacy.
 >
 > **Related files.** `docs/DESIGN.md` is an earlier design-intent spec (YAML front matter + prose) for the same system. It is consistent with the code in most respects; known differences are listed in §12.5. When the two disagree, **the code and this document win**.
 
@@ -761,7 +761,7 @@ Added on 2026-10-24 to carry the poster world into the console. Scope is strictl
 ### 15.1 Isolation rules
 
 - **`ConsoleTemplate`** (`templates/ConsoleTemplate.tsx/.css`) wraps each of the four pages in `.sd-console`: paper ground, Kanit 400, its own scroll container (so the native scrollbar follows `color-scheme`), and `fill` mode for pages whose table scrolls internally (Library, Playlists).
-- `.sd-console` re-maps legacy tokens (`--text-*`, `--bg-*`, `--border-*`, `--color-primary-*`) **only inside those pages**, and re-skins the legacy `ui/Modal` + auth form classes used by `YouTubeImportModal`. `index.css`, `components/ui/*`, `Table.css` and `Badge.css` are untouched because Mixer, Settings and Profile still depend on them.
+- `.sd-console` re-maps legacy tokens (`--text-*`, `--bg-*`, `--border-*`, `--color-primary-*`) **only inside those pages**, and re-skins the legacy `ui/Modal` + auth form classes used by `YouTubeImportModal`. `index.css`, `components/ui/*`, `Table.css` and `Badge.css` are untouched because Mixer, the decks and PlayerBar still depend on them.
 - Shell: `.layout-header` and `.layout-sidebar` (in `DesktopLayout.css`) plus `Sidebar.css` use `--sd-*` tokens. `.layout-main`, `.layout-player`, `PlayerBar` and the notifications dropdown markup are unchanged.
 
 ### 15.2 New tokens (`tokens.css`)
@@ -811,3 +811,38 @@ Shared console table styles (`.sd-table`) live in `ConsoleTemplate.css`: no rule
 - The unread counter on the bell uses the note size in a 1.375rem pill.
 - `Badge.css` still documents "Shared analysis status badges used by Library and Deck"; Library now renders its own `.sd-status` pill and only Deck uses those classes.
 
+---
+
+## 16. Settings, Profile and notifications
+
+Added on 2026-10-24. Same poster world as §15, with one composition per screen.
+
+### 16.1 Screens
+
+| Screen | Composition | Notes |
+|---|---|---|
+| Settings (`/settings?section=…`) | Category rail (`role="tablist"`, vertical; arrows/Home/End) + one view per category: Kanit 900 section-size title, one-line purpose, **readout strip** of the current values, then `Panel`s of `SettingRow`s | The `section` search param keeps the category on reload and makes it linkable. ≤1024px the rail becomes wrapping rows above the view. An «Aplicado» sage tag appears for 2.4s after any `settingsStore` change (the store applies in memory synchronously; a blocked `localStorage` write is not detectable, so the stamp says *applied*, not *saved*). |
+| Profile (`/profile`) | `ProfilePanel`: accent field band with `AvatarDisc` + stage name at section size, handle, email, member since (`profiles.created_at`), sign out · `ProfileForm` panel · «En este dispositivo» panel with real IndexedDB counts (tracks, hours, playlists, recorded sessions) linking to their screens | Without an account (local mode, or signed out) the band states it and offers sign-in only when Supabase is configured. The former mock achievements/history (`src/mock/profile.ts`) are no longer rendered. |
+| Notifications (`NotificationsPopover`, organism, used by `Header`) | Paper panel framed by a 2px ink border (the only floating surface; no shadow). Rows: category icon (derived from the message key prefix), message, category · relative time; warnings carry an acid `Tag`, errors take the whole row as an acid field with an ink `Error` tag | Opening marks everything read (unchanged `notificationCenter` contract); rows that were unread when opened, or arrive while it is open, keep an accent dot and medium weight until it closes. Animations are CSS so the shell chunk does not load framer-motion. |
+
+### 16.2 New components
+
+| Level | Component | Notes |
+|---|---|---|
+| Atom | `Switch` | Native checkbox with `role="switch"`; ink track when on, thumb stretches on press |
+| Atom | `Fader` | Native `range` over a flat track with ink fill; pill fader cap; optional tick labels (`is-current` on the selected one) |
+| Molecule | `ChoiceTiles` | Native radio group with a preview per option (`tile` or `swatch`); ink ring + check badge on the selected one |
+| Molecule | `SettingRow` | Title + description left, control right (or `stacked`), optional preview row; stacks under a 40rem container |
+| Molecule | `AvatarDisc` | Avatar as the label of a black vinyl (SVG grooves, acid position marker). Quarter-turn spin-up on mount; spins at 33⅓ rpm while an upload runs |
+| Organism | `profile/ProfileForm` | Username / DJ alias / real name form shared by Profile and Settings → General (unsaved-changes line, Discard, inline username hint that becomes the error) |
+| Hook | `hooks/useAvatarUpload` | File picker, validation and upload shared by both screens |
+| Settings | `settings/SettingsPreviews` | `CrossfaderCurvePreview` (plots `calculateCrossfaderGains` — the engine's own law — and morphs between curves), `BeatLengthPreview` (8 bars × 4 beats sequencer grid), `StorageMeter` (32-segment VU-style meter at the true usage/quota ratio; top segments turn accent) |
+
+`Panel` accepts `headingLevel="h4"` (Settings: page h2 → view h3 → panel h4).
+
+### 16.3 Tokens and exceptions
+
+- `tokens.css` adds a `[data-theme='light']` scope so a nested element can render light tokens inside the dark theme (the theme preview tiles use `data-theme` on a `<span>`).
+- Miniature radii outside the panel/inset/pill scale, all on sub-2rem elements: theme preview inner panel `8px`, keycaps `0.5rem`, beat cells and meter segments `0.25rem`. The popover uses `1.5rem` (inset `1rem` + its `0.5rem` list padding, concentric).
+- Fixed `3.5rem` Kanit 900 for the deck letters (Shortcuts) and the language codes inside fixed-size tiles, where the fluid section step would overflow.
+- Accent swatches use `hsl(hue, 70%, 55%)` from `ACCENT_HUES`, the same value `appearance.ts` writes to `--color-accent`; accent and density only affect the legacy Mixer, decks and PlayerBar, and their descriptions say so.

@@ -1,0 +1,32 @@
+.sd-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: var(--sd-control-height);
+  height: var(--sd-control-height);
+  border-radius: var(--sd-radius-pill);
+  color: var(--sd-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-icon-button:hover {
+  background-color: var(--sd-surface);
+}
+
+.sd-icon-button:active {
+  transform: scale(0.92);
+}
+
+.sd-icon-button:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: var(--sd-focus-offset);
+}
+
+@media (pointer: coarse) {
+  .sd-icon-button {
+    width: 3rem;
+    height: 3rem;
+  }
+}

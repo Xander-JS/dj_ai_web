@@ -97,9 +97,15 @@
   --sd-surface: #f3f3f1;
   --sd-ink: #000000;
   --sd-ink-soft: #545454;
-  --sd-accent: #fe7141;
-  --sd-accent-hover: #ff5a22;
+  /* Naranja de la identidad: fijo en Home/Login/Sign Up y predeterminado del acento de la consola */
+  --sd-brand-accent: #fe7141;
+  --sd-brand-accent-hover: #ff5a22;
+  --sd-accent: var(--sd-brand-accent);
+  --sd-accent-hover: var(--sd-brand-accent-hover);
   --sd-accent-ink: #000000;
+  /* Piloto encendido de un control (pomo del interruptor, relleno de faders y progreso, LED de
+     navegación): sigue al acento; sobre un campo de color pasa a tinta para no desaparecer */
+  --sd-indicator: var(--sd-accent);
   --sd-field-sage: #d1ddd3;
   --sd-field-acid: #f0ff1c;
   --sd-field-ink: #000000;
@@ -148,6 +154,48 @@ html[data-scroll-mode='document'] {
 }
 
 /* ==========================================================================
+   Acento elegido en Ajustes → Apariencia (data-accent en <html>, appearance.ts).
+   Mismo valor en ambos temas, como los campos. Todos admiten tinta negra encima
+   con AA (≥ 5.4:1); el hover sube un paso de saturación, como el naranja.
+   Un elemento con data-accent muestra ese acento aunque el documento use otro
+   (muestras del selector en Ajustes).
+   ========================================================================== */
+[data-accent='orange'] {
+  --sd-accent: var(--sd-brand-accent);
+  --sd-accent-hover: var(--sd-brand-accent-hover);
+}
+
+[data-accent='blue'] {
+  --sd-accent: #5b8cff;
+  --sd-accent-hover: #4479ff;
+}
+
+[data-accent='cyan'] {
+  --sd-accent: #1fc8e3;
+  --sd-accent-hover: #00b3d1;
+}
+
+[data-accent='violet'] {
+  --sd-accent: #a681ff;
+  --sd-accent-hover: #9166ff;
+}
+
+[data-accent='magenta'] {
+  --sd-accent: #ff5cc8;
+  --sd-accent-hover: #ff3db8;
+}
+
+[data-accent='neon'] {
+  --sd-accent: #2fd67a;
+  --sd-accent-hover: #14c264;
+}
+
+[data-accent='amber'] {
+  --sd-accent: #ffb21e;
+  --sd-accent-hover: #ff9f00;
+}
+
+/* ==========================================================================
    Campos planos (consola). Un contenedor adopta un campo y remapea las tintas
    de sus descendientes: botones, campos y etiquetas siguen la Field Ink Rule
    sin variantes propias. Mismo color en ambos temas.
@@ -163,6 +211,7 @@ html[data-scroll-mode='document'] {
   --sd-ghost-hover: rgb(0 0 0 / 0.08);
   --sd-field-bg: var(--sd-field-paper);
   --sd-progress-track: rgb(0 0 0 / 0.12);
+  --sd-indicator: var(--sd-field-ink);
 
   color: var(--sd-ink);
 }

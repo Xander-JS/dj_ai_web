@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
-  Search, CheckSquare, Square, 
+  Search, CheckSquare, Square, MinusSquare,
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
-  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus,
+  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle,
   Target, WandSparkles, ArrowLeftRight, Link2, Pencil, Check, Music
 } from 'lucide-react';
 import { Button } from '../components/atoms/Button';
@@ -12,12 +12,15 @@ import { IconButton } from '../components/atoms/IconButton';
 import { Icon } from '../components/atoms/Icon';
 import { Tag } from '../components/atoms/Tag';
 import { TextField } from '../components/atoms/TextField';
-import { SelectField } from '../components/atoms/SelectField';
 import { SegmentedControl } from '../components/molecules/SegmentedControl';
+import { SelectMenu } from '../components/molecules/SelectMenu';
+import { ConfirmDialog } from '../components/molecules/ConfirmDialog';
 import { PageHeader } from '../components/molecules/PageHeader';
 import { Notice } from '../components/molecules/Notice';
 import { EmptyState } from '../components/molecules/EmptyState';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { LibrarySelectionBar } from '../components/organisms/LibrarySelectionBar';
+import { AnalysisQueuePanel } from '../components/organisms/AnalysisQueuePanel';
 import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
@@ -28,7 +31,7 @@ import { useDJStore } from '../store/useDJStore';
 import { useSeedStore } from '../store/useSeedStore';
 import { buildPlaylistFromSeeds, MAX_SEED_TRACKS } from '../engine/playlistBuilder';
 import { notificationCenter } from '../services/notifications/notificationCenter';
-import { analysisSyncManager } from '../services/analysis';
+import { analysisSyncManager, bulkAnalysisQueue } from '../services/analysis';
 import { playlistService, addTracksToPlaylist } from '../services/playlists/playlistService';
 import { camelotToKey, keyToCamelot } from '../audio/analysis/camelotMapper';
 import {
@@ -87,20 +90,46 @@ function draftToManualEdits(draft: MetadataDraft, initial: MetadataDraft): Manua
   return edits;
 }
 
+/** Filas visibles según el filtro de tipo y la búsqueda; es también el alcance de la selección. */
+function filterLibraryRows(rows: UnifiedRowTrack[], filter: FilterType, query: string): UnifiedRowTrack[] {
+  const q = query.trim().toLowerCase();
+  return rows.filter((track) => {
+    // 'all' y 'local' muestran la biblioteca local completa
+    if (filter === 'audio' && track.type !== 'audio') return false;
+    if (filter === 'video' && track.type !== 'video') return false;
+    if (q === '') return true;
+    return track.title.toLowerCase().includes(q)
+      || track.artist.toLowerCase().includes(q)
+      || track.album.toLowerCase().includes(q);
+  });
+}
+
 export interface AnalysisStatusBadgeProps {
   status: AnalysisStatus;
   error?: string;
   onAnalyze?: () => void;
+  /** Esperando turno en la cola de reanálisis */
+  queued?: boolean;
 }
 
 export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
   status,
   error,
   onAnalyze,
+  queued = false,
 }) => {
   const { t } = useTranslation();
 
   const getStatusConfig = () => {
+    if (queued) {
+      return {
+        icon: <Icon icon={Clock} size="xs" />,
+        label: t('library.queue.status_queued'),
+        title: t('library.queue.status_queued_title'),
+        className: 'sd-status--queued',
+        isInteractive: false,
+      };
+    }
     switch (status) {
       case 'analyzing':
         return {
@@ -184,6 +213,11 @@ export const Library: React.FC = () => {
   } | null>(null);
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  // Ancla del rango con Mayús + clic
+  const selectionAnchorRef = useRef<string | null>(null);
+  const queue = useSyncExternalStore(bulkAnalysisQueue.subscribe, bulkAnalysisQueue.getSnapshot);
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -542,22 +576,24 @@ export const Library: React.FC = () => {
     });
 
   // Filtrado reactivo por tipo y búsqueda
-  const filteredTracks = unifiedTracks.filter((track) => {
-    // Filtro por categoría ('all' y 'local' muestran la biblioteca local completa)
-    if (filter === 'audio' && track.type !== 'audio') return false;
-    if (filter === 'video' && track.type !== 'video') return false;
+  const filteredTracks = filterLibraryRows(unifiedTracks, filter, searchQuery);
+  const isFiltered = filter === 'audio' || filter === 'video' || searchQuery.trim() !== '';
 
-    // Filtro por texto de búsqueda
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = track.title.toLowerCase().includes(q);
-      const matchArtist = track.artist.toLowerCase().includes(q);
-      const matchAlbum = track.album.toLowerCase().includes(q);
-      return matchTitle || matchArtist || matchAlbum;
-    }
+  // La selección solo abarca pistas visibles: al cambiar la vista se descartan las que quedan ocultas,
+  // para que ninguna acción masiva alcance pistas que el usuario ya no ve
+  const selectedRows = filteredTracks.filter((track) => selectedTracks.has(track.id));
+  const allVisibleSelected = filteredTracks.length > 0 && selectedRows.length === filteredTracks.length;
+  const queuedIds = new Set(queue.pending.map((item) => item.trackId));
 
-    return true;
-  });
+  const changeView = (nextFilter: FilterType, nextQuery: string) => {
+    setFilter(nextFilter);
+    setSearchQuery(nextQuery);
+    const visibleIds = new Set(filterLibraryRows(unifiedTracks, nextFilter, nextQuery).map((track) => track.id));
+    setSelectedTracks((prev) => {
+      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  };
 
   // Pistas de referencia resueltas en orden (1.ª = inicio, 2.ª = cierre); se ignoran ids ya eliminados
   const seedTracks = seedTrackIds
@@ -609,8 +645,8 @@ export const Library: React.FC = () => {
   // Añade las pistas seleccionadas (en el orden de la tabla) a la playlist elegida
   const handleAddSelectedToPlaylist = async () => {
     const playlist = playlists.find((p) => p.id === targetPlaylistId);
-    if (!playlist || selectedTracks.size === 0) return;
-    const ids = unifiedTracks.filter((tr) => selectedTracks.has(tr.id)).map((tr) => tr.id);
+    if (!playlist || selectedRows.length === 0) return;
+    const ids = selectedRows.map((tr) => tr.id);
     try {
       const before = playlist.trackIds.length;
       const updated = await playlistService.update(playlist.id, (p) => addTracksToPlaylist(p, ids));
@@ -621,7 +657,7 @@ export const Library: React.FC = () => {
           ? t('library.playlist_add_success', { count: added, name: playlist.name })
           : t('library.playlist_add_none', { name: playlist.name }),
       });
-      setSelectedTracks(new Set());
+      clearSelection();
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -630,14 +666,84 @@ export const Library: React.FC = () => {
     }
   };
 
-  const toggleSelection = (id: string) => {
-    const newSelected = new Set(selectedTracks);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
+  // Clic: alterna una pista · Mayús + clic: marca el tramo desde la última pista pulsada
+  const toggleSelection = (id: string, extendRange = false) => {
+    const anchor = selectionAnchorRef.current;
+    const ids = filteredTracks.map((track) => track.id);
+    const from = anchor ? ids.indexOf(anchor) : -1;
+    const to = ids.indexOf(id);
+    const next = new Set(selectedTracks);
+    if (extendRange && from !== -1 && to !== -1 && from !== to) {
+      for (const rangeId of ids.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(rangeId);
+    } else if (next.has(id)) {
+      next.delete(id);
     } else {
-      newSelected.add(id);
+      next.add(id);
     }
-    setSelectedTracks(newSelected);
+    selectionAnchorRef.current = id;
+    setSelectedTracks(next);
+  };
+
+  const selectAllVisible = () => {
+    setSelectedTracks(new Set(filteredTracks.map((track) => track.id)));
+  };
+
+  const clearSelection = () => {
+    selectionAnchorRef.current = null;
+    setSelectedTracks(new Set());
+  };
+
+  // Reanálisis masivo: las pistas pasan a la cola y se procesan una a una en segundo plano
+  const handleBulkReanalyze = () => {
+    const { added, duplicates } = bulkAnalysisQueue.enqueue(
+      selectedRows.map((track) => ({ trackId: track.id, title: track.title })),
+    );
+    clearSelection();
+    if (duplicates > 0) {
+      const parts = [
+        added > 0 ? t('library.bulk.queue_added', { count: added }) : '',
+        t('library.bulk.queue_duplicates', { count: duplicates }),
+      ];
+      setFeedback({ type: 'warning', text: parts.filter(Boolean).join(' ') });
+    }
+  };
+
+  // Borrado masivo: mismo mecanismo que el individual, pista a pista, con el resultado real
+  const handleBulkDelete = async () => {
+    const targets = selectedRows.map((track) => track.rawLocalTrack);
+    if (targets.length === 0) return;
+    setIsDeleting(true);
+    const failedIds: string[] = [];
+    const errors: string[] = [];
+    for (const track of targets) {
+      try {
+        if (analysisSyncManager.isAnalyzing(track.id)) analysisSyncManager.cancelAnalysis(track.id);
+        await indexedDBStorage.deleteTrack(track.id);
+        removeSeed(track.id);
+      } catch (err) {
+        failedIds.push(track.id);
+        errors.push(`${track.title}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    // deleteTrack también retira las pistas de las playlists; avisar a las vistas suscritas
+    if (failedIds.length < targets.length) playlistService.notifyExternalChange();
+    await refreshLocalTracks();
+    setSelectedTracks(new Set(failedIds));
+    selectionAnchorRef.current = null;
+    setIsDeleting(false);
+    setBulkDeleteOpen(false);
+
+    const deleted = targets.length - failedIds.length;
+    if (failedIds.length === 0) {
+      setFeedback({ type: 'success', text: t('library.bulk.delete_success', { count: deleted }) });
+    } else if (deleted > 0) {
+      setFeedback({
+        type: 'warning',
+        text: t('library.bulk.delete_partial', { deleted, total: targets.length, failed: failedIds.length, errors: errors.join(' | ') }),
+      });
+    } else {
+      setFeedback({ type: 'error', text: t('library.bulk.delete_failed', { total: targets.length, errors: errors.join(' | ') }) });
+    }
   };
 
   const filterOptions: { value: FilterType; label: React.ReactNode }[] = [
@@ -734,7 +840,7 @@ export const Library: React.FC = () => {
             aria-label={t('library.search_tracks')}
             icon={<Icon icon={Search} size="sm" />}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => changeView(filter, e.target.value)}
             wrapperClassName="sd-library-toolbar__search"
           />
 
@@ -742,7 +848,7 @@ export const Library: React.FC = () => {
             label={t('library.filters_label')}
             value={filter}
             options={filterOptions}
-            onChange={setFilter}
+            onChange={(value) => changeView(value, searchQuery)}
           />
         </div>
 
@@ -794,35 +900,26 @@ export const Library: React.FC = () => {
           </div>
         )}
 
-        {/* Acción sobre la selección: añadir a playlist */}
-        {selectedTracks.size > 0 && (
-          <div className="sd-library-bar sd-field-inverse">
-            <span className="sd-library-bar__title sd-num">{t('library.selected_count', { count: selectedTracks.size })}</span>
-            {playlists.length === 0 ? (
-              <span className="sd-library-bar__hint">{t('library.playlist_none_available')}</span>
-            ) : (
-              <span className="sd-library-bar__actions">
-                <SelectField
-                  size="sm"
-                  aria-label={t('library.playlist_target')}
-                  value={targetPlaylistId}
-                  onChange={(e) => setTargetPlaylistId(e.target.value)}
-                >
-                  <option value="">{t('library.playlist_target')}</option>
-                  {playlists.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </SelectField>
-                <Button variant="accent" size="sm" disabled={!targetPlaylistId} onClick={handleAddSelectedToPlaylist}>
-                  <Icon icon={ListPlus} size="sm" />
-                  {t('library.playlist_add_btn')}
-                </Button>
-              </span>
-            )}
-            <Button variant="ghost" size="sm" className="sd-library-bar__end" onClick={() => setSelectedTracks(new Set())}>
-              {t('common.cancel')}
-            </Button>
-          </div>
+        {/* Cola de reanálisis en segundo plano y su resumen */}
+        <AnalysisQueuePanel />
+
+        {/* Barra contextual de la selección */}
+        {selectedRows.length > 0 && (
+          <LibrarySelectionBar
+            selectedCount={selectedRows.length}
+            visibleCount={filteredTracks.length}
+            isFiltered={isFiltered}
+            playlists={playlists}
+            countPlaylistTracks={(playlist) => playlist.trackIds.filter((id) => localTracks.some((tr) => tr.id === id)).length}
+            targetPlaylistId={targetPlaylistId}
+            onTargetPlaylistChange={setTargetPlaylistId}
+            onAddToPlaylist={handleAddSelectedToPlaylist}
+            onSelectAll={selectAllVisible}
+            onDeselectAll={clearSelection}
+            onReanalyze={handleBulkReanalyze}
+            onDelete={() => setBulkDeleteOpen(true)}
+            busy={isDeleting}
+          />
         )}
       </div>
 
@@ -832,7 +929,22 @@ export const Library: React.FC = () => {
           <thead>
             <tr>
               <th className="sd-table__check">
-                <Icon icon={Square} size="sm" />
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={allVisibleSelected ? true : selectedRows.length > 0 ? 'mixed' : false}
+                  aria-label={t('library.bulk.select_all_rows')}
+                  title={t('library.bulk.select_all_rows')}
+                  disabled={filteredTracks.length === 0}
+                  className="sd-table__checkbox"
+                  onClick={() => (selectedRows.length > 0 ? clearSelection() : selectAllVisible())}
+                >
+                  <Icon
+                    icon={allVisibleSelected ? CheckSquare : selectedRows.length > 0 ? MinusSquare : Square}
+                    size="sm"
+                    className={selectedRows.length > 0 ? 'sd-table__check-on' : 'sd-table__check-off'}
+                  />
+                </button>
               </th>
               <th>{t('library.col_title')}</th>
               <th>{t('library.col_album')}</th>
@@ -851,15 +963,25 @@ export const Library: React.FC = () => {
               const isLoadedInDeckB = deckB.track?.title === track.title;
               const seedIndex = seedTrackIds.indexOf(track.id);
               const isEditing = editingTrackId === track.id;
+              const isQueued = queuedIds.has(track.id);
 
               return (
                 <tr key={track.id} className={clsx(isSelected && 'is-selected', (isLoadedInDeckA || isLoadedInDeckB) && 'is-prepared')}>
-                  <td className="sd-table__check" onClick={() => toggleSelection(track.id)}>
-                    {isSelected ? (
-                      <Icon icon={CheckSquare} size="sm" className="sd-table__check-on" />
-                    ) : (
-                      <Icon icon={Square} size="sm" className="sd-table__check-off" />
-                    )}
+                  <td className="sd-table__check" onClick={(e) => { if (e.target === e.currentTarget) toggleSelection(track.id, e.shiftKey); }}>
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={t('library.bulk.select_row', { title: track.title })}
+                      className="sd-table__checkbox"
+                      onClick={(e) => toggleSelection(track.id, e.shiftKey)}
+                    >
+                      <Icon
+                        icon={isSelected ? CheckSquare : Square}
+                        size="sm"
+                        className={isSelected ? 'sd-table__check-on' : 'sd-table__check-off'}
+                      />
+                    </button>
                   </td>
                   <td className="sd-library-table__track">
                     <div className="sd-library-track">
@@ -926,22 +1048,21 @@ export const Library: React.FC = () => {
                   </td>
                   <td>
                     {isEditing ? (
-                      <SelectField
+                      <SelectMenu
                         size="sm"
+                        label={t('library.manual_key_label')}
+                        placeholder={t('library.manual_key_none')}
                         value={metadataDraft.camelot}
-                        aria-label={t('library.manual_key_label')}
                         disabled={isSavingMetadata}
-                        onChange={(e) => setMetadataDraft((d) => ({ ...d, camelot: e.target.value }))}
+                        menuMinWidth={176}
+                        options={[
+                          { value: '', label: t('library.manual_key_none') },
+                          ...CAMELOT_KEYS.map((camelot) => ({ value: camelot, label: `${camelot} · ${camelotToKey(camelot)}` })),
+                        ]}
+                        onChange={(camelot) => setMetadataDraft((d) => ({ ...d, camelot }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
                         wrapperClassName="sd-library-edit sd-library-edit--key"
-                      >
-                        <option value="">{t('library.manual_key_none')}</option>
-                        {CAMELOT_KEYS.map((camelot) => (
-                          <option key={camelot} value={camelot}>
-                            {camelot} · {camelotToKey(camelot)}
-                          </option>
-                        ))}
-                      </SelectField>
+                      />
                     ) : track.key ? (
                       <div
                         className={clsx('sd-library-key', track.manualFields.includes('camelot') && 'is-manual')}
@@ -997,7 +1118,8 @@ export const Library: React.FC = () => {
                     <AnalysisStatusBadge
                       status={track.status}
                       error={track.analysisError}
-                      onAnalyze={() => handleAnalyzeTrack(track.rawLocalTrack, track.status === 'analyzed')}
+                      queued={isQueued}
+                      onAnalyze={isQueued ? undefined : () => handleAnalyzeTrack(track.rawLocalTrack, track.status === 'analyzed')}
                     />
                   </td>
                   <td className="sd-table__num sd-library-table__muted sd-num">{track.durationFormatted}</td>
@@ -1052,7 +1174,14 @@ export const Library: React.FC = () => {
                           onClick={() => handleStartMetadataEdit(track)}
                         />
                       )}
-                      {track.status === 'analyzing' ? (
+                      {isQueued ? (
+                        <IconButton
+                          icon={<Icon icon={Clock} size="sm" />}
+                          size="sm"
+                          disabled
+                          label={t('library.queue.status_queued_title')}
+                        />
+                      ) : track.status === 'analyzing' ? (
                         <IconButton
                           icon={<Icon icon={Loader2} size="sm" className="sd-status__spin" />}
                           size="sm"
@@ -1107,32 +1236,28 @@ export const Library: React.FC = () => {
         onAudioReceived={handleYouTubeAudio}
       />
 
-      {/* Modal de confirmación para eliminar pista local */}
-      {deleteConfirmTrack && (
-        <div className="sd-confirm-overlay" onClick={() => setDeleteConfirmTrack(null)}>
-          <div
-            className="sd-confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="library-delete-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="library-delete-title" className="sd-confirm__title">{t('library.delete_track')}</h3>
-            <p className="sd-confirm__description">
-              {t('library.delete_confirm', { title: deleteConfirmTrack.title })}
-            </p>
-            <div className="sd-confirm__actions">
-              <Button variant="ghost" onClick={() => setDeleteConfirmTrack(null)}>
-                {t('common.cancel')}
-              </Button>
-              <Button variant="ink" onClick={() => handleDeleteTrack(deleteConfirmTrack)}>
-                <Icon icon={Trash2} size="sm" />
-                {t('common.delete')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmación para eliminar una pista local */}
+      <ConfirmDialog
+        open={deleteConfirmTrack !== null}
+        title={t('library.delete_track')}
+        description={deleteConfirmTrack ? t('library.delete_confirm', { title: deleteConfirmTrack.title }) : ''}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={<><Icon icon={Trash2} size="sm" />{t('common.delete')}</>}
+        onCancel={() => setDeleteConfirmTrack(null)}
+        onConfirm={() => { if (deleteConfirmTrack) void handleDeleteTrack(deleteConfirmTrack); }}
+      />
+
+      {/* Confirmación del borrado masivo: indica cuántas pistas se eliminarán */}
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        busy={isDeleting}
+        title={t('library.bulk.delete_title', { count: selectedRows.length })}
+        description={t('library.bulk.delete_confirm', { count: selectedRows.length })}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={<><Icon icon={Trash2} size="sm" />{isDeleting ? t('library.bulk.deleting') : t('common.delete')}</>}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void handleBulkDelete()}
+      />
     </ConsoleTemplate>
   );
 };

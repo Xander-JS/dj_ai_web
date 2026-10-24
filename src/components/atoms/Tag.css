@@ -1,0 +1,45 @@
+.sd-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.75rem;
+  padding: 0 0.75rem;
+  border-radius: var(--sd-radius-pill);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.sd-tag--surface {
+  background-color: var(--sd-surface);
+  color: var(--sd-ink);
+}
+
+.sd-tag--paper {
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+}
+
+/* Field Ink Rule: sobre los campos de color la tinta es siempre negra */
+.sd-tag--sage {
+  background-color: var(--sd-field-sage);
+  color: var(--sd-field-ink);
+}
+
+.sd-tag--acid {
+  background-color: var(--sd-field-acid);
+  color: var(--sd-field-ink);
+}
+
+.sd-tag--accent {
+  background-color: var(--sd-accent);
+  color: var(--sd-accent-ink);
+}
+
+.sd-tag--ink {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}

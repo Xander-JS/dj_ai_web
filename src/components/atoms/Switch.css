@@ -52,15 +52,20 @@
   width: calc(1.875rem + 2px);
 }
 
-/* Encendido: pista de tinta y pomo de papel, como la opción pulsada de los segmentados */
+/* Encendido: pista de tinta y pomo encendido en el acento, como el piloto de un canal activo */
 .sd-switch__input:checked + .sd-switch__track {
   background-color: var(--sd-ink);
   box-shadow: inset 0 0 0 2px var(--sd-ink);
 }
 
 .sd-switch__input:checked + .sd-switch__track .sd-switch__thumb {
-  background-color: var(--sd-paper);
+  background-color: var(--sd-indicator);
   transform: translateX(calc(3.25rem - 1.875rem));
+}
+
+/* Sobre un campo de color el piloto pasa a tinta, igual que la pista: el pomo vuelve al papel */
+:is(.sd-field-sage, .sd-field-acid, .sd-field-accent) .sd-switch__input:checked + .sd-switch__track .sd-switch__thumb {
+  background-color: var(--sd-paper);
 }
 
 .sd-switch__input:checked:active:not(:disabled) + .sd-switch__track .sd-switch__thumb {

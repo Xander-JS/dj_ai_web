@@ -155,12 +155,17 @@ export function resolveShortcut(event: ShortcutKeyEvent, heldSelector: MixShortc
   return null;
 }
 
-/** Evita disparar atajos mientras el usuario escribe o maneja un control nativo. */
+/** Controles ARIA que usan Espacio/flechas como un control nativo (casillas, selectores, listas). */
+const FORM_CONTROL_ROLES = new Set(['checkbox', 'switch', 'radio', 'combobox', 'listbox', 'option']);
+
+/** Evita disparar atajos mientras el usuario escribe o maneja un control nativo (o su equivalente ARIA). */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as HTMLElement).tagName !== 'string') return false;
   const element = target as HTMLElement;
   const tag = element.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable === true;
+  const role = typeof element.getAttribute === 'function' ? element.getAttribute('role') : null;
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable === true
+    || (role !== null && FORM_CONTROL_ROLES.has(role));
 }
 
 /** Acciones del DJ que consumen los atajos (inyectables en pruebas). */

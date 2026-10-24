@@ -11,13 +11,15 @@ import {
   RotateCcw,
   Loader2,
   Lightbulb,
-  CheckCircle2,
-  AlertTriangle,
+  Check,
+  Zap,
 } from 'lucide-react';
-import { Card, CardBody } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { Badge } from '../ui/Badge';
-import { StateView } from '../ui/StateView';
+import { Button } from '../atoms/Button';
+import { Icon } from '../atoms/Icon';
+import { Tag } from '../atoms/Tag';
+import { EmptyState } from '../molecules/EmptyState';
+import { Notice } from '../molecules/Notice';
+import { Panel } from '../molecules/Panel';
 import { useDJStore } from '../../store/useDJStore';
 import { indexedDBStorage } from '../../services/storage/IndexedDBStorage';
 import { LatestRequest } from '../../services/ai/LatestRequest';
@@ -233,37 +235,30 @@ export const SmartRecommendationCard: React.FC = () => {
   };
 
   return (
-    <Card elevated className="smart-rec-card">
-      <CardBody className="smart-rec-container">
-        {/* Cabecera */}
-        <div className="smart-rec-header">
-          <div className="smart-rec-title-group">
-            <h3 className="smart-rec-title">
-              <Sparkles size={18} color="var(--color-primary-500)" />
-              {t('dashboard.smart_recommendations_title')}
-            </h3>
-            <p className="smart-rec-subtitle">
-              {t('dashboard.smart_recommendations_subtitle')}
-            </p>
-          </div>
-
-          {modelUsed && (
-            <Badge variant={isMockResult ? 'outline' : 'primary'}>
-              {isMockResult ? t('dashboard.badge_mock') : t('dashboard.badge_gemini')}
-            </Badge>
-          )}
-        </div>
+    <Panel
+      className="smart-rec-card"
+      bodyClassName="smart-rec-container"
+      title={t('dashboard.smart_recommendations_title')}
+      description={t('dashboard.smart_recommendations_subtitle')}
+      icon={Sparkles}
+      aside={modelUsed && (
+        <Tag tone={isMockResult ? 'paper' : 'ink'}>
+          {isMockResult ? t('dashboard.badge_mock') : t('dashboard.badge_gemini')}
+        </Tag>
+      )}
+    >
 
         {/* Selector de Deck de Referencia */}
         <div className="smart-rec-controls">
-          <div className="smart-rec-deck-selector">
+          <div className="smart-rec-deck-selector" role="group" aria-label={t('dashboard.reference_track')}>
             <button
               type="button"
+              aria-pressed={activeDeck === 'A'}
               className={`smart-rec-deck-btn ${activeDeck === 'A' ? 'active' : ''}`}
               onClick={() => setActiveDeck('A')}
             >
               <span className="smart-rec-deck-btn-title">
-                <Disc size={13} />
+                <Icon icon={Disc} size="xs" />
                 {t('dashboard.select_deck_a')}
               </span>
               <span className="smart-rec-deck-btn-track">
@@ -273,11 +268,12 @@ export const SmartRecommendationCard: React.FC = () => {
 
             <button
               type="button"
+              aria-pressed={activeDeck === 'B'}
               className={`smart-rec-deck-btn ${activeDeck === 'B' ? 'active' : ''}`}
               onClick={() => setActiveDeck('B')}
             >
               <span className="smart-rec-deck-btn-title">
-                <Disc size={13} />
+                <Icon icon={Disc} size="xs" />
                 {t('dashboard.select_deck_b')}
               </span>
               <span className="smart-rec-deck-btn-track">
@@ -290,15 +286,14 @@ export const SmartRecommendationCard: React.FC = () => {
           <div className="smart-rec-action-row">
             {referenceTrack ? (
               <Button
-                variant="primary"
-                size="sm"
+                variant="accent"
                 onClick={() => handleFetchRecommendations()}
                 disabled={isLoading || referenceTrack.analysis?.status !== 'analyzed' || typeof referenceTrack.analysis.bpm !== 'number' || !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)}
               >
                 {isLoading ? (
-                  <Loader2 size={14} className="smart-rec-spin" />
+                  <Icon icon={Loader2} size="sm" className="smart-rec-spin" />
                 ) : (
-                  <Sparkles size={14} />
+                  <Icon icon={Sparkles} size="sm" />
                 )}
                 {recommendations.length > 0
                   ? t('dashboard.refresh_recommendations')
@@ -321,15 +316,14 @@ export const SmartRecommendationCard: React.FC = () => {
 
         {/* Feedback temporal de carga a Deck */}
         {feedback && (
-          <div className="smart-rec-feedback" role="status">
-            <CheckCircle2 size={14} />
-            <span>{feedback}</span>
-          </div>
+          <Notice tone="success" className="smart-rec-feedback">
+            {feedback}
+          </Notice>
         )}
 
         {/* Estados de Contenido */}
         {isLoading && (
-          <StateView
+          <EmptyState
             status="loading"
             title={t('dashboard.loading_recommendations')}
             description={t('dashboard.loading_recommendations_desc')}
@@ -343,27 +337,30 @@ export const SmartRecommendationCard: React.FC = () => {
         )}
 
         {!isLoading && errorMsg && (
-          <div className="smart-rec-error-box">
-            <AlertTriangle size={24} color="var(--color-warning)" />
-            <span>{errorMsg}</span>
-            <div className="smart-rec-item-actions">
+          <Notice
+            tone="error"
+            className="smart-rec-error-box"
+            action={
               <Button
-                variant="outline"
+                variant="ink"
                 size="sm"
                 onClick={() => handleFetchRecommendations()}
               >
-                <RotateCcw size={12} />
+                <Icon icon={RotateCcw} size="xs" />
                 {t('dashboard.retry')}
               </Button>
-            </div>
-          </div>
+            }
+          >
+            {errorMsg}
+          </Notice>
         )}
 
         {!isLoading && !errorMsg && !referenceTrack && (
-          <div className="smart-rec-empty-box">
-            <Disc size={28} />
-            <p>{t('dashboard.no_deck_track_prompt')}</p>
-          </div>
+          <EmptyState
+            icon={Disc}
+            className="smart-rec-empty-box"
+            title={t('dashboard.no_deck_track_prompt')}
+          />
         )}
 
         {!isLoading &&
@@ -371,7 +368,7 @@ export const SmartRecommendationCard: React.FC = () => {
           referenceTrack &&
           recommendations.length === 0 && insufficientCandidateCount === 0 && (
             <div className="smart-rec-empty-box">
-              <Sparkles size={28} />
+              <Icon icon={Sparkles} size="lg" />
               <p>
                 {t('dashboard.current_track_info', {
                   title: referenceTrack.title,
@@ -412,7 +409,8 @@ export const SmartRecommendationCard: React.FC = () => {
                   <div className="smart-rec-item-header">
                     <div className="smart-rec-item-title-col">
                       <span className="smart-rec-item-title">
-                        #{index + 1} {rec.title || t('dashboard.untitled_track', 'Pista sin título')}
+                        <span className="smart-rec-item-rank sd-num">{index + 1}</span>
+                        {rec.title || t('dashboard.untitled_track', 'Pista sin título')}
                       </span>
                       {rec.artist ? (
                         <span className="smart-rec-item-artist">{rec.artist}</span>
@@ -459,7 +457,7 @@ export const SmartRecommendationCard: React.FC = () => {
                       </span>
                     )}
                     {rec.tempoEvaluation?.relation === 'out_of_range' && (
-                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)' }}>
+                      <span className="smart-rec-tag smart-rec-tag--alert">
                         {t('dashboard.pitch_out_of_range', 'Pitch > ±8%')}
                       </span>
                     )}
@@ -483,18 +481,20 @@ export const SmartRecommendationCard: React.FC = () => {
                       </span>
                     )}
                     {rec.harmonicEvaluation?.relation === 'incompatible' && (
-                      <span className="smart-rec-tag" style={{ borderColor: 'var(--color-warning)', color: 'var(--color-warning)' }}>
+                      <span className="smart-rec-tag smart-rec-tag--alert">
                         {t('dashboard.different_harmony', 'Armonía diferente')}
                       </span>
                     )}
                     {rec.energy !== undefined && (
                       <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
-                        ⚡ {rec.energy}/10
+                        <Icon icon={Zap} size="xs" />
+                        {rec.energy}/10
                       </span>
                     )}
                     {rec.isAnalysisVerified && (
                       <span className="smart-rec-verified-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
-                        ✓ {t('dashboard.local_verified', 'Datos verificados')}
+                        <Icon icon={Check} size="xs" />
+                        {t('dashboard.local_verified', 'Datos verificados')}
                       </span>
                     )}
                   </div>
@@ -508,7 +508,7 @@ export const SmartRecommendationCard: React.FC = () => {
                   {/* Sugerencia de técnica de transición */}
                   {rec.transitionSuggestion && (
                     <div className="smart-rec-transition">
-                      <Lightbulb size={13} color="var(--color-primary-500)" />
+                      <Icon icon={Lightbulb} size="sm" />
                       <span>{rec.transitionSuggestion}</span>
                     </div>
                   )}
@@ -516,21 +516,21 @@ export const SmartRecommendationCard: React.FC = () => {
                   {/* Botones de acción para cargar en Deck A o Deck B */}
                   <div className="smart-rec-item-actions">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => handleLoadTrack(rec, 'A')}
                       title={t('dashboard.load_deck_a')}
                     >
-                      <Disc size={12} />
+                      <Icon icon={Disc} size="sm" />
                       {t('dashboard.load_deck_a')}
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => handleLoadTrack(rec, 'B')}
                       title={t('dashboard.load_deck_b')}
                     >
-                      <Disc size={12} />
+                      <Icon icon={Disc} size="sm" />
                       {t('dashboard.load_deck_b')}
                     </Button>
                   </div>
@@ -539,7 +539,6 @@ export const SmartRecommendationCard: React.FC = () => {
             })}
           </div>
         )}
-      </CardBody>
-    </Card>
+    </Panel>
   );
 };

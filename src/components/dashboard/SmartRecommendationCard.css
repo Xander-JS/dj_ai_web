@@ -1,331 +1,277 @@
-/**
- * SYSTEM DJ — Smart Recommendation Card Styles
- * Adaptado para temas Claro y Oscuro mediante variables CSS del sistema.
- */
+/* ==========================================================================
+   Recomendaciones de mezcla (Inicio). Panel de superficie del Design System v2;
+   el contenedor y la cabecera los aporta molecules/Panel.
+   ========================================================================== */
 
 .smart-rec-container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sd-gap-3);
 }
 
-.smart-rec-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.smart-rec-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.smart-rec-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.smart-rec-subtitle {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
+/* Selector de deck de referencia: dos botones conmutadores sobre el papel */
 .smart-rec-controls {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-md);
+  gap: var(--sd-gap-2);
 }
 
 .smart-rec-deck-selector {
-  display: flex;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--sd-radius-inset);
+  background-color: var(--sd-paper);
 }
 
 .smart-rec-deck-btn {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: var(--space-2) var(--space-3);
-  background-color: var(--bg-surface-hover);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--sd-radius-inset);
+  font-family: var(--sd-font);
   text-align: left;
+  color: var(--sd-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out);
 }
 
-.smart-rec-deck-btn:hover {
-  background-color: var(--bg-surface);
-  border-color: var(--border-strong);
+.smart-rec-deck-btn:hover:not(.active) {
+  background-color: var(--sd-surface);
 }
 
 .smart-rec-deck-btn.active {
-  border-color: var(--color-primary-500);
-  background-color: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
-  color: var(--text-primary);
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.smart-rec-deck-btn:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 1px;
 }
 
 .smart-rec-deck-btn-title {
-  font-weight: var(--font-weight-semibold);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 0.375rem;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-black);
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .smart-rec-deck-btn-track {
-  font-size: 11px;
-  white-space: nowrap;
+  max-width: 100%;
   overflow: hidden;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.3;
+  white-space: nowrap;
   text-overflow: ellipsis;
-  max-width: 160px;
+  opacity: 0.8;
 }
 
 .smart-rec-action-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--sd-gap-2);
   flex-wrap: wrap;
 }
 
-.smart-rec-feedback {
-  padding: var(--space-2) var(--space-3);
-  background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
-  color: var(--color-success);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.smart-rec-empty-hint,
+.smart-rec-evidence-note {
+  font-size: var(--sd-text-note);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
 }
 
+.smart-rec-spin {
+  animation: smart-rec-spin 1s linear infinite;
+}
+
+@keyframes smart-rec-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Estado sin recomendaciones calculadas para la pista de referencia */
+.smart-rec-empty-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-1);
+  padding: var(--sd-gap-3) 0 var(--sd-gap-1);
+  font-size: var(--sd-text-note);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
+}
+
+.smart-rec-empty-box > .sd-icon {
+  color: var(--sd-ink);
+}
+
+/* --------------------------------------------------------------------------
+   Lista de recomendaciones
+   -------------------------------------------------------------------------- */
 .smart-rec-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--sd-gap-1);
 }
 
 .smart-rec-item {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-md);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
-}
-
-.smart-rec-item:hover {
-  border-color: var(--border-strong);
-  background-color: var(--bg-surface-hover);
+  align-items: flex-start;
+  gap: var(--sd-gap-2);
+  padding: var(--sd-gap-3) 1.125rem;
+  border-radius: var(--sd-radius-inset);
+  background-color: var(--sd-paper);
+  --sd-ghost-hover: var(--sd-surface);
 }
 
 .smart-rec-item-header {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: var(--sd-gap-2);
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 .smart-rec-item-title-col {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
+  min-width: 0;
 }
 
 .smart-rec-item-title {
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: var(--sd-gap-1);
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.25;
+}
+
+.smart-rec-item-rank {
+  font-weight: var(--sd-weight-black);
 }
 
 .smart-rec-item-artist {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
+  padding-left: 1.125rem;
+  font-size: var(--sd-text-note);
+  color: var(--sd-ink-soft);
 }
 
-.smart-rec-item-badges {
+.smart-rec-item-badges,
+.smart-rec-meta-tags {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 0.375rem;
   flex-wrap: wrap;
+}
+
+/* Etiquetas de datos: píldoras planas; el color solo marca compatibilidad o alerta */
+.smart-rec-score-badge,
+.smart-rec-evidence-tag,
+.smart-rec-gemini-tag,
+.smart-rec-mock-tag,
+.smart-rec-tag,
+.smart-rec-verified-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.75rem;
+  padding: 0 0.75rem;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-surface);
+  color: var(--sd-ink);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .smart-rec-score-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 6px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--sd-weight-black);
 }
 
 .smart-rec-score-high {
-  background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
-  color: var(--color-success);
-  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+  background-color: var(--sd-field-sage);
+  color: var(--sd-field-ink);
 }
 
 .smart-rec-score-medium {
-  background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
-  color: var(--color-warning);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  background-color: var(--sd-field-acid);
+  color: var(--sd-field-ink);
 }
 
 .smart-rec-score-low {
-  background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
-  color: var(--color-error);
-  border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent);
+  background-color: var(--sd-surface);
+  color: var(--sd-ink-soft);
 }
 
-.smart-rec-evidence-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-base);
-  background-color: var(--bg-surface-hover);
-  color: var(--text-secondary);
-  font-size: 10px;
-  line-height: 1.4;
+.smart-rec-gemini-tag {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
 }
 
-.smart-rec-evidence-note {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-sm);
-  background-color: var(--bg-surface-hover);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
+.smart-rec-verified-tag {
+  background-color: var(--sd-field-sage);
+  color: var(--sd-field-ink);
 }
 
-.smart-rec-meta-tags {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  font-size: 11px;
-  color: var(--text-secondary);
-  flex-wrap: wrap;
+.smart-rec-tag-na {
+  color: var(--sd-ink-soft);
 }
 
-.smart-rec-tag {
-  background-color: var(--bg-surface-hover);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-base);
+/* Fuera de rango de pitch o armonía incompatible: requiere atención */
+.smart-rec-tag--alert {
+  background-color: var(--sd-field-acid);
+  color: var(--sd-field-ink);
 }
 
 .smart-rec-justification {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  line-height: 1.4;
-  margin: 0;
+  max-width: 68ch;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.5;
+  color: var(--sd-ink);
+  text-wrap: pretty;
 }
 
 .smart-rec-transition {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  background-color: color-mix(in srgb, var(--color-primary-500) 8%, transparent);
-  border-left: 2px solid var(--color-primary-500);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-size: 11px;
-  color: var(--text-primary);
-  line-height: 1.4;
+  gap: var(--sd-gap-1);
+  font-size: var(--sd-text-note);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
+}
+
+.smart-rec-transition .sd-icon {
+  margin-top: 0.125rem;
+  color: var(--sd-ink);
 }
 
 .smart-rec-item-actions {
   display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
-  justify-content: flex-end;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-left: -0.5rem;
 }
 
-.smart-rec-mock-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 5px;
-  font-size: 10px;
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-sm);
-  background-color: rgba(245, 158, 11, 0.1);
-  color: #d97706;
-  border: 1px solid rgba(245, 158, 11, 0.25);
-}
-
-.smart-rec-gemini-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 5px;
-  font-size: 10px;
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-sm);
-  background-color: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
-  color: var(--color-primary-500);
-  border: 1px solid color-mix(in srgb, var(--color-primary-500) 25%, transparent);
-}
-
-.smart-rec-verified-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 1px 5px;
-  font-size: 10px;
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-sm);
-  background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
-  color: var(--color-success);
-  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
-}
-
-.smart-rec-tag-na {
-  opacity: 0.6;
-  font-style: italic;
-}
-
-.smart-rec-empty-box,
-.smart-rec-error-box {
-  padding: var(--space-4);
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-}
-
-.smart-rec-spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
+@media (prefers-reduced-motion: reduce) {
+  .smart-rec-deck-btn {
+    transition-duration: 0ms;
   }
-  to {
-    transform: rotate(360deg);
+
+  .smart-rec-spin {
+    animation: none;
   }
 }

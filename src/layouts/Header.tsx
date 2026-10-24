@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Settings, Search, Bell, CheckCircle2, AlertCircle } from 'lucide-react';
-import { IconButton } from '../components/ui/IconButton';
-import { Input } from '../components/ui/Input';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
+import { TextField } from '../components/atoms/TextField';
+import { Wordmark } from '../components/atoms/Wordmark';
 import { Avatar } from '../components/ui/Avatar';
-import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody } from '../components/ui/Card';
 import { StateView } from '../components/ui/StateView';
@@ -53,35 +54,35 @@ export const Header: React.FC = () => {
       <div className="header-logo-container">
         <Link to="/dashboard" className="header-logo-link">
           <h1 className="header-logo-text">
-            SYSTEM DJ
+            <Wordmark name={t('landing.brand')} />
           </h1>
         </Link>
       </div>
 
-      <Input
+      <TextField
+        type="search"
         placeholder={t('common.search')}
-        icon={<Search size={18} />}
+        aria-label={t('common.search')}
+        icon={<Icon icon={Search} size="sm" />}
         wrapperClassName="header-search-container"
       />
 
       <div className="header-actions">
         <div ref={notificationsRef} style={{ position: 'relative' }}>
           <IconButton
-            icon={<Bell size={20} />}
-            title={t('common.notifications')}
-            aria-label={t('common.notifications')}
+            icon={<Icon icon={Bell} size="md" />}
+            label={t('common.notifications')}
             aria-haspopup="true"
             aria-expanded={isNotificationsOpen}
             onClick={toggleNotifications}
           />
           {unreadCount > 0 && (
-            <Badge
-              variant="error"
+            <span
+              className="header-notification-count"
               aria-label={t('notifications.unread', { count: unreadCount })}
-              style={{ position: 'absolute', top: 0, right: 0, pointerEvents: 'none' }}
             >
               {unreadCount}
-            </Badge>
+            </span>
           )}
           {isNotificationsOpen && (
             <Card
@@ -124,14 +125,16 @@ export const Header: React.FC = () => {
           )}
         </div>
         <IconButton
-          icon={<Settings size={20} />}
-          title={t('navigation.settings')}
+          icon={<Icon icon={Settings} size="md" />}
+          label={t('navigation.settings')}
           onClick={() => navigate('/settings')}
         />
-        <div
+        <button
+          type="button"
           className="header-profile"
           onClick={() => navigate('/profile')}
           title={t('navigation.profile')}
+          aria-label={t('navigation.profile')}
         >
           <Avatar
             size="sm"
@@ -139,7 +142,7 @@ export const Header: React.FC = () => {
             alt={profile?.dj_alias || profile?.full_name || user?.email || ''}
             fallback={user ? undefined : 'DJ'}
           />
-        </div>
+        </button>
       </div>
     </header>
   );

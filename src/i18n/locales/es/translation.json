@@ -22,6 +22,8 @@
   },
   "dashboard": {
     "welcome": "Bienvenido de nuevo",
+    "title": "Tu cabina",
+    "subtitle": "Importa, analiza y mezcla tus pistas. El audio nunca sale de este equipo.",
     "recent": "Añadidas recientemente",
     "recent_empty_title": "Aún no hay pistas importadas",
     "recent_empty_desc": "Importa archivos MP3 o WAV desde la Biblioteca para verlos aquí.",
@@ -91,6 +93,7 @@
     "filter_audio": "Audio",
     "filter_video": "Video",
     "filter_local": "Mis Archivos Locales",
+    "filters_label": "Filtrar pistas",
     "badge_local": "LOCAL",
     "import_btn": "Importar archivos",
     "importing": "Importando pistas...",
@@ -127,6 +130,7 @@
     "col_duration": "Duración",
     "col_size": "Tamaño",
     "col_date": "Importado",
+    "col_actions": "Acciones",
     "status_pending": "Pendiente",
     "status_analyzing": "Analizando...",
     "status_analyzed": "Analizado",
@@ -184,6 +188,7 @@
   "playlists": {
     "title": "Mis Playlists",
     "create": "Nueva Playlist",
+    "tracks_count_one": "{{count}} pista",
     "tracks_count": "{{count}} pistas",
     "total_duration": "Duración total: {{time}}",
     "name_placeholder": "Nombre de la playlist",

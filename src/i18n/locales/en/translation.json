@@ -22,6 +22,8 @@
   },
   "dashboard": {
     "welcome": "Welcome back",
+    "title": "Your booth",
+    "subtitle": "Import, analyse and mix your tracks. The audio never leaves this device.",
     "recent": "Recently Added",
     "recent_empty_title": "No tracks imported yet",
     "recent_empty_desc": "Import MP3 or WAV files from the Library to see them here.",
@@ -91,6 +93,7 @@
     "filter_audio": "Audio",
     "filter_video": "Video",
     "filter_local": "My Local Files",
+    "filters_label": "Filter tracks",
     "badge_local": "LOCAL",
     "import_btn": "Import Files",
     "importing": "Importing tracks...",
@@ -127,6 +130,7 @@
     "col_duration": "Time",
     "col_size": "Size",
     "col_date": "Added",
+    "col_actions": "Actions",
     "status_pending": "Pending",
     "status_analyzing": "Analyzing...",
     "status_analyzed": "Analyzed",
@@ -184,6 +188,7 @@
   "playlists": {
     "title": "My Playlists",
     "create": "New Playlist",
+    "tracks_count_one": "{{count}} track",
     "tracks_count": "{{count}} tracks",
     "total_duration": "Total time: {{time}}",
     "name_placeholder": "Playlist name",

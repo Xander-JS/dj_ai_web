@@ -1,0 +1,116 @@
+.sd-choice-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sd-gap-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sd-choice-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-1);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.sd-choice-tile__preview {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--sd-radius-inset);
+  /* Aro de selección: anillo interior, sin desplazar el contenido */
+  box-shadow: 0 0 0 2px transparent;
+  transition:
+    box-shadow var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-choice-tile:hover .sd-choice-tile__preview {
+  box-shadow: 0 0 0 2px var(--sd-ink-soft);
+}
+
+.sd-choice-tile:active .sd-choice-tile__preview {
+  transform: scale(0.98);
+}
+
+.sd-choice-tile.is-checked .sd-choice-tile__preview {
+  box-shadow: 0 0 0 3px var(--sd-ink);
+}
+
+.sd-choice-tile:has(:focus-visible) .sd-choice-tile__preview {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 4px;
+}
+
+/* Sello de selección: aparece con un pequeño escalado, como un piloto que se enciende */
+.sd-choice-tile__check {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-choice-tile.is-checked .sd-choice-tile__check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.sd-choice-tile__label {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.3;
+  color: var(--sd-ink-soft);
+  transition: color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-choice-tile.is-checked .sd-choice-tile__label,
+.sd-choice-tile:hover .sd-choice-tile__label {
+  color: var(--sd-ink);
+}
+
+.sd-choice-tile.is-checked .sd-choice-tile__label {
+  font-weight: var(--sd-weight-medium);
+}
+
+/* Muestras de color: círculo con el sello centrado y la etiqueta debajo */
+.sd-choice-tiles--swatch .sd-choice-tile {
+  align-items: center;
+  min-width: 4.25rem;
+}
+
+.sd-choice-tiles--swatch .sd-choice-tile__preview {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--sd-radius-pill);
+}
+
+.sd-choice-tiles--swatch .sd-choice-tile.is-checked .sd-choice-tile__preview {
+  box-shadow: 0 0 0 3px var(--sd-paper), 0 0 0 5px var(--sd-ink);
+}
+
+.sd-choice-tiles--swatch .sd-choice-tile__check {
+  inset: 0;
+  margin: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-choice-tile__preview,
+  .sd-choice-tile__check,
+  .sd-choice-tile__label {
+    transition-duration: 0ms;
+  }
+}

@@ -623,20 +623,108 @@
     "generated_name_pair": "Mezcla {{start}} → {{end}}"
   },
   "landing": {
-    "badge": "Audio 100% local en tu dispositivo",
-    "title": "Mezcla como un profesional, directamente en el navegador",
-    "subtitle": "SYSTEM DJ analiza BPM y tonalidad de tu música local, sincroniza dos decks y te sugiere la siguiente pista con IA para que tus sesiones fluyan.",
-    "privacy_note": "Tu cuenta solo guarda tu identidad y perfil. Los archivos de audio nunca salen de tu equipo.",
-    "features_title": "Funciones principales",
+    "brand": "SYSTEM DJ",
+    "skip_to_content": "Saltar al contenido",
+    "nav": {
+      "label": "Principal",
+      "home": "SYSTEM DJ, inicio",
+      "language": "Idioma",
+      "language_es": "Español",
+      "language_en": "English",
+      "theme_to_dark": "Cambiar a tema oscuro",
+      "theme_to_light": "Cambiar a tema claro",
+      "log_in": "Iniciar sesión",
+      "sign_up": "Registrarse"
+    },
+    "hero": {
+      "title": "SYSTEM DJ",
+      "subtitle": "Mezcla como un profesional, directamente en tu navegador.",
+      "description": "SYSTEM DJ analiza el BPM y la tonalidad de tu música local, sincroniza dos decks y usa IA para sugerirte la siguiente pista, para que tus sesiones fluyan sin cortes.",
+      "cta": "Abrir consola",
+      "image_alt": "Auriculares de DJ blancos"
+    },
+    "band": {
+      "items": [
+        {
+          "value": "124 BPM",
+          "label": "Tempo detectado"
+        },
+        {
+          "value": "8A",
+          "label": "Tonalidad Camelot"
+        },
+        {
+          "value": "SYNC",
+          "label": "Tempo enganchado"
+        },
+        {
+          "value": "ALIGN",
+          "label": "Fase alineada"
+        },
+        {
+          "value": "BAR SYNC",
+          "label": "Compases a la par"
+        },
+        {
+          "value": "HOT CUES",
+          "label": "Puntos de salto"
+        },
+        {
+          "value": "±16 %",
+          "label": "Rango de pitch"
+        },
+        {
+          "value": "9A",
+          "label": "Siguiente tonalidad"
+        },
+        {
+          "value": "BEATGRID",
+          "label": "Downbeat editable"
+        },
+        {
+          "value": "WAV",
+          "label": "Exportación sin pérdida"
+        },
+        {
+          "value": "MP3",
+          "label": "Codificado en tu equipo"
+        },
+        {
+          "value": "128 BPM",
+          "label": "Deck B sincronizado"
+        }
+      ]
+    },
+    "privacy": {
+      "title": "Audio 100 % local",
+      "body": "Tu música se analiza, se mezcla y se graba en tu dispositivo. Tu cuenta solo guarda tu identidad y tu perfil. Los archivos de audio nunca salen de tu equipo."
+    },
     "features": {
+      "title": "Cuatro herramientas, una consola",
       "analysis_title": "Análisis musical",
-      "analysis_desc": "Detección de BPM, tonalidad Camelot, energía y beatgrid sobre tus archivos locales.",
+      "analysis_desc": "Detecta BPM, tonalidad Camelot, energía y beatgrid de tus archivos locales, y te deja corregir el downbeat a mano.",
       "sync_title": "Dos decks sincronizados",
-      "sync_desc": "SYNC, ALIGN y BAR SYNC, hot cues, pitch bend y crossfader con curva configurable.",
+      "sync_desc": "SYNC, ALIGN y BAR SYNC, hot cues, pitch bend y un crossfader con curva configurable: potencia constante, lineal o corte.",
       "ai_title": "Recomendaciones con IA",
-      "ai_desc": "Sugerencias de la siguiente pista según armonía, tempo y energía de la mezcla.",
+      "ai_desc": "Sugiere la siguiente pista según armonía, tempo y energía. Un motor local decide el orden; la IA solo añade una explicación opcional.",
       "export_title": "Graba y exporta",
-      "export_desc": "Graba tus sesiones y expórtalas en WAV o MP3 sin depender de servidores."
+      "export_desc": "Graba tus sesiones y expórtalas en WAV o MP3. El render y la codificación ocurren en tu equipo.",
+      "key_matcher": {
+        "label": "Tonalidad de tu pista",
+        "previous": "Tonalidad anterior",
+        "next": "Tonalidad siguiente",
+        "mode": "Modo",
+        "minor": "Menor",
+        "major": "Mayor",
+        "result": "Mezcla bien con",
+        "summary": "{{key}} mezcla bien con {{list}}.",
+        "note": "La misma regla Camelot que usa el motor de recomendaciones."
+      }
+    },
+    "closing": {
+      "title": "Tu sesión empieza aquí",
+      "secondary": "Crear cuenta",
+      "copyright": "© {{year}} SYSTEM DJ"
     }
   },
   "auth": {

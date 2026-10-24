@@ -623,20 +623,108 @@
     "generated_name_pair": "Mix {{start}} → {{end}}"
   },
   "landing": {
-    "badge": "100% local audio on your device",
-    "title": "Mix like a pro, right in your browser",
-    "subtitle": "SYSTEM DJ analyzes BPM and key of your local music, syncs two decks and suggests the next track with AI so your sessions keep flowing.",
-    "privacy_note": "Your account only stores your identity and profile. Audio files never leave your computer.",
-    "features_title": "Main features",
+    "brand": "SYSTEM DJ",
+    "skip_to_content": "Skip to content",
+    "nav": {
+      "label": "Main",
+      "home": "SYSTEM DJ home",
+      "language": "Language",
+      "language_es": "Español",
+      "language_en": "English",
+      "theme_to_dark": "Switch to dark theme",
+      "theme_to_light": "Switch to light theme",
+      "log_in": "Log in",
+      "sign_up": "Sign up"
+    },
+    "hero": {
+      "title": "SYSTEM DJ",
+      "subtitle": "Mix like a pro, directly in your browser.",
+      "description": "SYSTEM DJ analyzes the BPM and key of your local music, synchronizes two decks, and uses AI to suggest the next track so your sessions flow seamlessly.",
+      "cta": "Open Console",
+      "image_alt": "White DJ headphones"
+    },
+    "band": {
+      "items": [
+        {
+          "value": "124 BPM",
+          "label": "Detected tempo"
+        },
+        {
+          "value": "8A",
+          "label": "Camelot key"
+        },
+        {
+          "value": "SYNC",
+          "label": "Tempo locked"
+        },
+        {
+          "value": "ALIGN",
+          "label": "Phase aligned"
+        },
+        {
+          "value": "BAR SYNC",
+          "label": "Bars in step"
+        },
+        {
+          "value": "HOT CUES",
+          "label": "Jump points"
+        },
+        {
+          "value": "±16%",
+          "label": "Pitch range"
+        },
+        {
+          "value": "9A",
+          "label": "Next key"
+        },
+        {
+          "value": "BEATGRID",
+          "label": "Editable downbeat"
+        },
+        {
+          "value": "WAV",
+          "label": "Lossless export"
+        },
+        {
+          "value": "MP3",
+          "label": "Encoded on your device"
+        },
+        {
+          "value": "128 BPM",
+          "label": "Deck B synced"
+        }
+      ]
+    },
+    "privacy": {
+      "title": "100% local audio",
+      "body": "Your music is analyzed, mixed and recorded on your device. Your account only stores your identity and profile. Audio files never leave your device."
+    },
     "features": {
+      "title": "Four tools, one console",
       "analysis_title": "Music analysis",
-      "analysis_desc": "BPM, Camelot key, energy and beatgrid detection on your local files.",
+      "analysis_desc": "Detects BPM, Camelot key, energy and beatgrid from your local files, and lets you correct the downbeat by hand.",
       "sync_title": "Two synced decks",
-      "sync_desc": "SYNC, ALIGN and BAR SYNC, hot cues, pitch bend and a crossfader with configurable curve.",
+      "sync_desc": "SYNC, ALIGN and BAR SYNC, hot cues, pitch bend and a crossfader with a configurable curve: constant power, linear or cut.",
       "ai_title": "AI recommendations",
-      "ai_desc": "Next-track suggestions based on the harmony, tempo and energy of your mix.",
+      "ai_desc": "Suggests the next track by harmony, tempo and energy. A local engine does the ranking; AI only adds an optional explanation.",
       "export_title": "Record and export",
-      "export_desc": "Record your sessions and export them as WAV or MP3 without relying on servers."
+      "export_desc": "Record your sessions and export them as WAV or MP3. Rendering and encoding happen on your device.",
+      "key_matcher": {
+        "label": "Your track's key",
+        "previous": "Previous key",
+        "next": "Next key",
+        "mode": "Mode",
+        "minor": "Minor",
+        "major": "Major",
+        "result": "Mixes well with",
+        "summary": "{{key}} mixes well with {{list}}.",
+        "note": "The same Camelot rule the recommendation engine uses."
+      }
+    },
+    "closing": {
+      "title": "Your session starts here",
+      "secondary": "Create account",
+      "copyright": "© {{year}} SYSTEM DJ"
     }
   },
   "auth": {

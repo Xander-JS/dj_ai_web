@@ -1,0 +1,48 @@
+.sd-speaker-3d {
+  position: relative;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sd-speaker-3d__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transform: translateY(1.5rem) scale(0.96);
+  transition:
+    opacity var(--sd-duration-slow) var(--sd-ease-out),
+    transform 1.1s var(--sd-ease-out);
+}
+
+/* El altavoz entra una vez listo: el campo de color nunca espera a WebGL */
+.sd-speaker-3d--ready .sd-speaker-3d__canvas {
+  opacity: 1;
+  transform: none;
+}
+
+.sd-speaker-3d--failed .sd-speaker-3d__canvas {
+  display: none;
+}
+
+.sd-speaker-3d__fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.sd-speaker-3d__fallback img {
+  width: auto;
+  height: auto;
+  max-width: 78%;
+  max-height: 78%;
+  transform: rotate(-8deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-speaker-3d__canvas {
+    transform: none;
+    transition: opacity var(--sd-duration-base) linear;
+  }
+}

@@ -1,145 +1,111 @@
-.profile-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: var(--space-6);
-  gap: var(--space-8);
-  overflow-y: auto;
-}
+/* ==========================================================================
+   Perfil: cartel de identidad + edición y lo que guarda este dispositivo
+   ========================================================================== */
 
-.profile-header-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-8);
-  background-color: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-}
-
-
-.profile-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.profile-name {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-weight-bold);
-  margin: 0;
-}
-
-.profile-username {
-  color: var(--text-secondary);
-  font-size: var(--text-base);
-}
-
-
-
-
-
-
-.profile-content-grid {
+.sd-profile__grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-6);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  align-items: start;
+  gap: var(--sd-gap-4);
 }
 
-.profile-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+/* Sin cuenta solo queda el bloque del dispositivo: ocupa el ancho */
+.sd-profile__device:only-child {
+  grid-column: 1 / -1;
 }
 
-.profile-section-title {
-  font-size: var(--text-xl);
-  font-weight: var(--font-weight-bold);
+.sd-profile-readouts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sd-gap-1);
   margin: 0;
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0;
+  list-style: none;
 }
 
-.achievement-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3);
-  background-color: var(--bg-base);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
+.sd-profile__device:only-child .sd-profile-readouts {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
 }
 
-.achievement-icon {
-  width: var(--size-lg);
-  height: var(--size-lg);
-  background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  color: var(--color-warning);
-  border-radius: var(--radius-full);
+/* Lectura de consola que lleva a su pantalla: cifra grande sobre su etiqueta */
+.sd-profile-readout {
   display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.history-item {
-  display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-4);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 0.375rem;
+  width: 100%;
+  padding: var(--sd-gap-3) 1.25rem;
+  border-radius: var(--sd-radius-inset);
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+  font-family: var(--sd-font);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
 }
 
-.history-item:last-child {
-  border-bottom: none;
+.sd-profile-readout:hover {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
 }
 
-.history-bullet {
-  width: 8px;
-  height: 8px;
-  background-color: var(--color-primary-500);
-  border-radius: 50%;
-  margin-top: 6px;
+.sd-profile-readout:active {
+  transform: scale(0.98);
 }
 
-.profile-achievements-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+.sd-profile-readout:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 2px;
 }
 
-.achievement-title {
-  font-weight: var(--font-weight-bold);
+.sd-profile-readout__value {
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-black);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
-.achievement-desc {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+.sd-profile-readout__placeholder {
+  color: var(--sd-ink-soft);
 }
 
-.profile-history-list {
-  display: flex;
-  flex-direction: column;
+/* Texto en línea: si la etiqueta parte en dos líneas, la flecha sigue a la última palabra */
+.sd-profile-readout__label {
+  display: block;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.25;
+  color: inherit;
+  opacity: 0.8;
 }
 
-.history-content {
-  flex: 1;
+.sd-profile-readout__arrow {
+  margin-left: 0.25rem;
+  vertical-align: -0.2em;
+  transition: transform var(--sd-duration-base) var(--sd-ease-out);
 }
 
-.history-action {
-  font-weight: var(--font-weight-medium);
+.sd-profile-readout:hover .sd-profile-readout__arrow {
+  transform: translate(2px, -2px);
 }
 
-.history-target {
-  color: var(--color-primary-500);
-  font-size: var(--text-sm);
+@media (max-width: 1280px) {
+  .sd-profile__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sd-profile-readouts {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
 }
 
-.history-date {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+@media (prefers-reduced-motion: reduce) {
+  .sd-profile-readout,
+  .sd-profile-readout__arrow {
+    transition-duration: 0ms;
+  }
 }

@@ -1,89 +1,97 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Award, Clock, LogIn, UserRound } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { Card, CardBody } from '../components/ui/Card';
-import { StateView } from '../components/ui/StateView';
-import { AuthModal } from '../components/auth/AuthModal';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
+import { Icon } from '../components/atoms/Icon';
+import { Panel } from '../components/molecules/Panel';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { ProfileForm } from '../components/profile/ProfileForm';
 import { ProfilePanel } from '../components/profile/ProfilePanel';
 import { useAuth } from '../context/AuthContext';
-import { MOCK_PROFILE } from '../mock/profile';
+import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
+import { computeLibraryStats } from '../utils/libraryStats';
 import './Profile.css';
+
+interface DeviceSummary {
+  tracks: number;
+  hours: number;
+  playlists: number;
+  sessions: number;
+}
+
+/** Recuento real de lo que este navegador guarda en IndexedDB; null mientras carga o si falla */
+function useDeviceSummary(): { summary: DeviceSummary | null; failed: boolean } {
+  const [summary, setSummary] = useState<DeviceSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      indexedDBStorage.getAllTracks(),
+      indexedDBStorage.getAllPlaylists(),
+      indexedDBStorage.getRecordedSessions(),
+    ])
+      .then(([tracks, playlists, sessions]) => {
+        if (!active) return;
+        const stats = computeLibraryStats(tracks);
+        setSummary({ tracks: stats.totalTracks, hours: stats.totalHours, playlists: playlists.length, sessions: sessions.length });
+      })
+      .catch((error) => {
+        console.warn('[Profile] Could not read local data summary:', error);
+        if (active) setFailed(true);
+      });
+    return () => { active = false; };
+  }, []);
+
+  return { summary, failed };
+}
 
 export const Profile: React.FC = () => {
   const { t } = useTranslation();
-  const { user, loading } = useAuth();
-  const [authOpen, setAuthOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { summary, failed } = useDeviceSummary();
+
+  const readouts = [
+    { key: 'tracks', label: t('profile.device_tracks'), value: summary?.tracks, to: '/library' },
+    { key: 'hours', label: t('profile.device_hours'), value: summary ? `${summary.hours} h` : undefined, to: '/library' },
+    { key: 'playlists', label: t('profile.device_playlists'), value: summary?.playlists, to: '/playlists' },
+    { key: 'sessions', label: t('profile.sessions'), value: summary?.sessions, to: '/sessions' },
+  ];
 
   return (
-    <div className="profile-container">
-      
-      {user ? (
-        <ProfilePanel />
-      ) : (
-        <div className="profile-header-card">
-          <StateView
-            status="empty"
-            icon={UserRound}
-            title={loading ? t('states.loading') : t('profile.sign_in_required_title')}
-            description={t('profile.sign_in_required_desc')}
-            action={!loading && (
-              <Button onClick={() => setAuthOpen(true)}>
-                <LogIn size={16} />
-                {t('auth.sign_in')}
-              </Button>
-            )}
-          />
-          <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
-        </div>
-      )}
+    <ConsoleTemplate className="sd-profile">
+      <ProfilePanel />
 
-      <div className="profile-content-grid">
-        
-        {/* Achievements Section */}
-        <div className="profile-section">
-          <h2 className="profile-section-title">{t('profile.achievements')}</h2>
-          <Card>
-            <CardBody className="profile-achievements-list">
-              {MOCK_PROFILE.achievements.map(ach => (
-                <div key={ach.id} className="achievement-item">
-                  <div className="achievement-icon">
-                    <Award size={24} />
-                  </div>
-                  <div>
-                    <div className="achievement-title">{ach.title}</div>
-                    <div className="achievement-desc">{ach.description}</div>
-                  </div>
-                </div>
-              ))}
-            </CardBody>
-          </Card>
-        </div>
+      <div className="sd-profile__grid">
+        {user && (
+          <Panel title={t('profile.edit')} description={t('settings.account_desc')} className="sd-profile__edit">
+            <ProfileForm />
+          </Panel>
+        )}
 
-        {/* History Section */}
-        <div className="profile-section">
-          <h2 className="profile-section-title">{t('profile.history')}</h2>
-          <Card>
-            <CardBody className="profile-history-list">
-              {MOCK_PROFILE.history.map(item => (
-                <div key={item.id} className="history-item">
-                  <div className="history-bullet"></div>
-                  <div className="history-content">
-                    <div className="history-action">{item.action}</div>
-                    <div className="history-target">{item.target}</div>
-                  </div>
-                  <div className="history-date">
-                    <Clock size={12} />
-                    {item.date}
-                  </div>
-                </div>
-              ))}
-            </CardBody>
-          </Card>
-        </div>
-
+        <Panel
+          title={t('profile.device_title')}
+          description={failed ? t('profile.device_error') : t('profile.device_desc')}
+          className="sd-profile__device"
+        >
+          <ul className="sd-profile-readouts" aria-busy={summary == null && !failed}>
+            {readouts.map((item) => (
+              <li key={item.key}>
+                <button type="button" className="sd-profile-readout" onClick={() => navigate(item.to)}>
+                  <span className="sd-profile-readout__value sd-num">
+                    {item.value ?? <span className="sd-profile-readout__placeholder">—</span>}
+                  </span>
+                  <span className="sd-profile-readout__label">
+                    {item.label}
+                    <Icon icon={ArrowUpRight} size="sm" className="sd-profile-readout__arrow" />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       </div>
-
-    </div>
+    </ConsoleTemplate>
   );
 };

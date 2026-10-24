@@ -54,6 +54,8 @@ function setShortcutsEnabled(enabled: boolean): void {
 function apply(next: AppSettings, previous: AppSettings | null): void {
   applyAppearanceToRoot(next, document.documentElement);
   if (i18n.language !== next.language) void i18n.changeLanguage(next.language);
+  // El idioma del documento sigue al de la interfaz (lectores de pantalla, separación silábica)
+  document.documentElement.lang = next.language;
   audioEngine.setPreferredBufferSize(next.bufferSize);
   djStore.setPitchRange(next.pitchRange);
   djStore.setCueMode(next.cueMode);

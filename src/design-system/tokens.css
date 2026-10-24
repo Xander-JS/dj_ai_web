@@ -1,0 +1,136 @@
+/* ==========================================================================
+   SYSTEM DJ — Design System v2 (foundations)
+   Tokens con prefijo --sd-* para la nueva identidad visual. Conviven con los
+   tokens heredados de index.css hasta que cada pantalla se migre.
+   Mundo visual: póster plano — fondo papel, tinta negra, naranja de acción y
+   campos planos salvia, amarillo ácido y negro. Sin degradados, cristal ni
+   sombras en reposo; las superficies se separan por cambio de color.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-300.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-900.woff2') format('woff2');
+}
+
+:root {
+  /* TYPOGRAPHY — una sola familia; los pesos hacen la jerarquía */
+  --sd-font: 'Kanit', system-ui, sans-serif;
+  --sd-weight-light: 300;
+  --sd-weight-regular: 400;
+  --sd-weight-medium: 500;
+  --sd-weight-black: 900;
+
+  /* Cinco pasos de tamaño visibles: póster, sección, declaración, cuerpo, nota */
+  /* El cartel se ajusta al ancho de su contenedor (container-type: inline-size) */
+  --sd-text-poster: 21.1cqi;
+  --sd-text-section: clamp(2.5rem, 7.4vw, 7.5rem);
+  --sd-text-statement: clamp(1.375rem, 2.3vw, 2.25rem);
+  --sd-text-body: clamp(1rem, 0.95rem + 0.25vw, 1.1875rem);
+  --sd-text-note: 0.9375rem;
+
+  --sd-leading-display: 0.86;
+  --sd-leading-statement: 1.25;
+  --sd-leading-body: 1.55;
+  --sd-tracking-display: -0.03em;
+
+  /* SPACE — un par de márgenes exteriores para toda la página */
+  --sd-margin: clamp(1rem, 2.4vw, 2.25rem);
+  --sd-gap-1: 0.5rem;
+  --sd-gap-2: 0.75rem;
+  --sd-gap-3: 1rem;
+  --sd-gap-4: 1.5rem;
+  --sd-gap-5: 2.5rem;
+  --sd-gap-6: 4rem;
+  --sd-section-gap: clamp(5rem, 11vw, 10rem);
+
+  /* SHAPE — un radio grande para paneles; las acciones son píldoras */
+  --sd-radius-panel: 2rem;
+  --sd-radius-pill: 999px;
+
+  /* CONTROLS */
+  --sd-control-height: 2.75rem;
+  --sd-control-height-lg: 3.75rem;
+  --sd-focus-width: 3px;
+  --sd-focus-offset: 3px;
+
+  /* MOTION — curvas exponenciales de salida; sin rebotes */
+  --sd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --sd-duration-fast: 140ms;
+  --sd-duration-base: 240ms;
+  --sd-duration-slow: 700ms;
+
+  /* COLOR — modo claro (predeterminado) */
+  --sd-paper: #ffffff;
+  --sd-surface: #f3f3f1;
+  --sd-ink: #000000;
+  --sd-ink-soft: #545454;
+  --sd-accent: #fe7141;
+  --sd-accent-hover: #ff5a22;
+  --sd-accent-ink: #000000;
+  --sd-field-sage: #d1ddd3;
+  --sd-field-acid: #f0ff1c;
+  --sd-field-ink: #000000;
+  --sd-field-ink-contrast: #f4f4f4;
+  --sd-field-paper: #ffffff;
+  --sd-inverse: #000000;
+  --sd-inverse-ink: #f4f4f4;
+  --sd-inverse-ink-soft: #b9b9b9;
+  --sd-focus: #000000;
+  --sd-selection: #f0ff1c;
+}
+
+html[data-scroll-mode='document'] {
+  scrollbar-color: var(--sd-ink-soft) var(--sd-paper);
+}
+
+[data-theme='dark'] {
+  --sd-paper: #0f0f0f;
+  --sd-surface: #1b1b1b;
+  --sd-ink: #f4f4f4;
+  --sd-ink-soft: #b4b4b4;
+  /* Los campos planos conservan su color y su tinta negra en ambos temas */
+  --sd-inverse: #1d1d1d;
+  --sd-inverse-ink: #f4f4f4;
+  --sd-inverse-ink-soft: #b4b4b4;
+  --sd-focus: #f0ff1c;
+}
+
+/* Texto solo para lectores de pantalla */
+.sd-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

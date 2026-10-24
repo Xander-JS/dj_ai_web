@@ -1,0 +1,47 @@
+.sd-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sd-gap-1);
+  padding: var(--sd-gap-4) 0;
+}
+
+.sd-empty-state__icon {
+  margin-bottom: var(--sd-gap-1);
+  color: var(--sd-ink);
+}
+
+.sd-empty-state__title {
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.3;
+  color: var(--sd-ink);
+  text-wrap: balance;
+}
+
+.sd-empty-state__description {
+  max-width: 44ch;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
+  text-wrap: pretty;
+}
+
+.sd-empty-state__action {
+  margin-top: var(--sd-gap-2);
+}
+
+.sd-empty-state--loading .sd-empty-state__icon {
+  animation: sd-empty-state-spin 1s linear infinite;
+}
+
+@keyframes sd-empty-state-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-empty-state--loading .sd-empty-state__icon {
+    animation: none;
+  }
+}

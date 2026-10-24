@@ -1,5 +1,8 @@
 .sd-landing {
   --sd-nav-height: 4.75rem;
+  /* Home, Login y Sign Up son la identidad de marca: no siguen el acento elegido en Ajustes */
+  --sd-accent: var(--sd-brand-accent);
+  --sd-accent-hover: var(--sd-brand-accent-hover);
 
   position: relative;
   min-height: 100svh;

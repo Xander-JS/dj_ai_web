@@ -43,6 +43,12 @@
   padding: 0 2rem;
 }
 
+.sd-button--sm {
+  min-height: var(--sd-control-height-sm);
+  padding: 0 1rem;
+  font-size: var(--sd-text-note);
+}
+
 .sd-button--accent {
   background-color: var(--sd-accent);
   color: var(--sd-accent-ink);
@@ -70,8 +76,9 @@
   color: var(--sd-ink);
 }
 
+/* --sd-ghost-hover lo redefine un contenedor cuyo fondo ya es --sd-surface */
 .sd-button--ghost:hover:not(:disabled) {
-  background-color: var(--sd-surface);
+  background-color: var(--sd-ghost-hover, var(--sd-surface));
 }
 
 /* Sobre un campo de color, la tinta del botón sigue la del campo */

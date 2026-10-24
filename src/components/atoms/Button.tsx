@@ -5,7 +5,8 @@ import './Button.css';
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** accent: acción principal · ink: acción secundaria rellena · ghost: acción terciaria sin relleno */
   variant?: 'accent' | 'ink' | 'ghost';
-  size?: 'md' | 'lg';
+  /** sm: barras y filas densas de la consola · md: predeterminado · lg: llamadas a la acción */
+  size?: 'sm' | 'md' | 'lg';
 }
 
 // Botón píldora del Design System v2: una sola forma para todas las acciones

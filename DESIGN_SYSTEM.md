@@ -6,7 +6,7 @@
 >
 > **Method.** Static inspection of the source on branch `refactor/ui-home` (2026-10-24). Nothing was rendered in a browser for this document. Values marked *not verified* could not be confirmed from code alone.
 >
-> **Update (2026-10-24).** Home (console `/dashboard`), Library, Playlists and Sessions now use this system through `ConsoleTemplate`; the shell's Header and Sidebar were restyled. See §15. Settings, Profile and the notifications panel followed the same day (§16). Mixer and PlayerBar remain legacy.
+> **Update (2026-10-24).** Home (console `/dashboard`), Library, Playlists and Sessions now use this system through `ConsoleTemplate`; the shell's Header and Sidebar were restyled. See §15. Settings, Profile and the notifications panel followed the same day (§16). Accent palette, motion preference, bulk selection and the sidebar panel: §17. Mixer and PlayerBar remain legacy.
 >
 > **Related files.** `docs/DESIGN.md` is an earlier design-intent spec (YAML front matter + prose) for the same system. It is consistent with the code in most respects; known differences are listed in §12.5. When the two disagree, **the code and this document win**.
 
@@ -845,4 +845,42 @@ Added on 2026-10-24. Same poster world as §15, with one composition per screen.
 - `tokens.css` adds a `[data-theme='light']` scope so a nested element can render light tokens inside the dark theme (the theme preview tiles use `data-theme` on a `<span>`).
 - Miniature radii outside the panel/inset/pill scale, all on sub-2rem elements: theme preview inner panel `8px`, keycaps `0.5rem`, beat cells and meter segments `0.25rem`. The popover uses `1.5rem` (inset `1rem` + its `0.5rem` list padding, concentric).
 - Fixed `3.5rem` Kanit 900 for the deck letters (Shortcuts) and the language codes inside fixed-size tiles, where the fluid section step would overflow.
-- Accent swatches use `hsl(hue, 70%, 55%)` from `ACCENT_HUES`, the same value `appearance.ts` writes to `--color-accent`; accent and density only affect the legacy Mixer, decks and PlayerBar, and their descriptions say so.
+- Accent swatches render the real `--sd-accent` through a `data-accent` scope (§17.1). Density still only affects the legacy Mixer, decks and PlayerBar.
+
+---
+
+## 17. Accent palette, motion preference, selection and the sidebar panel
+
+Added on 2026-10-24.
+
+### 17.1 Accent palette (Settings → Appearance)
+
+- `--sd-accent` / `--sd-accent-hover` now come from `data-accent` on `<html>` (written by `applyAppearanceToRoot`). Values live in `tokens.css` under `[data-accent='…']`; the same attribute on any element scopes that accent locally (the swatches in Settings use it, like the `data-theme` preview tiles).
+- Palette (same value in both themes, like the fields; every accent keeps black ink at ≥ 5.4:1): `orange` `#fe7141` (default, = `--sd-brand-accent`), `blue` `#5b8cff`, `cyan` `#1fc8e3`, `violet` `#a681ff`, `magenta` `#ff5cc8`, `neon` (shown as *Green*) `#2fd67a`, `amber` `#ffb21e`.
+- **Brand pages keep the orange:** `.sd-landing` (Home, Login, Sign Up) resets `--sd-accent*` to `--sd-brand-accent*`. The chosen accent applies to the console shell and screens.
+- Legacy Mixer/decks/PlayerBar still read `--hue-primary` (`ACCENT_HUES`, an approximate hue per accent).
+- Persistence: `settingsStore` now writes `settingsVersion: 2`. A stored `violet` without a version (the old legacy default, never visible in v2) migrates to `orange`; any other stored accent is kept.
+- New token `--sd-indicator` (= accent; field ink inside `.sd-field-sage|acid|accent`): the "lit" part of a control — `Switch` thumb when on, `Fader` and `ProgressBar` fill, Library energy bar, the sidebar's active LED. Buttons keep their variants; selected rows stay sage.
+
+### 17.2 Motion preference
+
+- `settings.animations` (default on) → `data-animations="on|off"` on `<html>`. JS: `useAnimationsEnabled()` in `design-system/motionPreference.ts` (preference **and** not `prefers-reduced-motion`); CSS: `:root[data-animations='off'] …` plus the reduced-motion media query.
+- Governed today: the sidebar light (§17.4) and the selection bar's entrance. New optional animations must check the same hook/attribute and be listed in `ANIMATED_SURFACES` (Settings) with an `settings.animations_list.*` label.
+- `settings.experimentalInterface` (default off) → `data-interface="standard|experimental"`. Only the flag exists; turning it on persists, verifies the stored value (`settingsStore.readPersisted()`) and reloads once. No alternative layout is implemented.
+
+### 17.3 New components
+
+| Level | Component | Notes |
+|---|---|---|
+| Molecule | `SelectMenu` | Replaces native `<select>` where the OS list broke the identity (Library playlist target and Camelot edit, Playlists add-track). Trigger reuses `SelectField` classes; the list is a portal panel framed by a 2px ink border (same family as the notifications popover, radius `1.25rem`), flips above near the bottom edge, clamps to the viewport, optional search (≥ 9 options), two-line options with ellipsis, combobox/listbox ARIA with arrows, Home/End, PageUp/Down, typeahead, Escape/Tab. Sessions and the legacy Deck keep native selects. |
+| Molecule | `ConfirmDialog` | Destructive confirmation (`alertdialog`, portal, Cancel focused, Escape cancels, focus trap and restore). Styles moved from `Library.css`. |
+| Organism | `LibrarySelectionBar` | Inverse-field contextual bar: count, select all (scope stated when filtered), deselect, add to playlist, reanalyze, delete. |
+| Organism | `AnalysisQueuePanel` | Surface strip with real progress while `bulkAnalysisQueue` runs; sage (all good) or acid (errors) summary with readouts and per-track error rows when it finishes. |
+
+Selection rules: a row checkbox is a real `role="checkbox"` button; the header one is tri-state (`mixed`). Selection is limited to visible rows (changing filter/search drops hidden ones); Shift+click selects a range. ARIA form-control roles (`checkbox`, `switch`, `radio`, `combobox`, `listbox`, `option`) are now exempt from the global keyboard shortcuts, like native inputs.
+
+### 17.4 Sidebar panel (exception to §13.1 rule 5)
+
+The console sidebar is a raised hardware panel: `--sd-surface` ground, `--sd-radius-panel`, a 1px inset edge (`ink` 10%), one short offset shadow, and a speaker-grille dot texture (`radial-gradient` dots, `ink` 11%, 7px pitch). This is the only console surface with a resting shadow and texture, requested explicitly for the shell. Hover on items steps up to paper; the active item stays the ink pill with an `--sd-indicator` LED.
+
+Cursor light (governed by §17.2): pointer movement writes `--sd-light-x/y` (registered `@property`, 140ms transition) once per animation frame — no React state. Under the cursor the grille dots turn accent with a 9% accent wash, and a 1.5px masked edge lights up near the pointer. Hidden for touch pointers, `(hover: none)`, reduced motion and `data-animations='off'`; the static panel is unchanged in those cases.

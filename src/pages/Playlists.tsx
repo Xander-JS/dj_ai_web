@@ -6,9 +6,9 @@ import { Button } from '../components/atoms/Button';
 import { IconButton } from '../components/atoms/IconButton';
 import { Icon } from '../components/atoms/Icon';
 import { TextField } from '../components/atoms/TextField';
-import { SelectField } from '../components/atoms/SelectField';
 import { EmptyState } from '../components/molecules/EmptyState';
 import { Notice } from '../components/molecules/Notice';
+import { SelectMenu } from '../components/molecules/SelectMenu';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { notificationCenter } from '../services/notifications/notificationCenter';
@@ -346,22 +346,22 @@ export const Playlists: React.FC = () => {
                   />
                 ) : (
                   <div className="sd-playlist-detail__add">
-                    <SelectField
-                      aria-label={t('playlists.add_track')}
+                    <SelectMenu
+                      label={t('playlists.add_track')}
+                      placeholder={availableToAdd.length === 0 ? t('playlists.all_tracks_added') : t('playlists.select_track')}
                       value={trackToAdd}
                       disabled={availableToAdd.length === 0}
-                      onChange={(e) => setTrackToAdd(e.target.value)}
+                      searchPlaceholder={availableToAdd.length > 8 ? t('playlists.search_tracks') : undefined}
+                      noResultsLabel={t('states.empty_title')}
+                      menuMinWidth={320}
+                      options={availableToAdd.map((tr) => ({
+                        value: tr.id,
+                        label: tr.title,
+                        description: tr.artist || t('dj.unknown_artist'),
+                      }))}
+                      onChange={setTrackToAdd}
                       wrapperClassName="sd-playlist-detail__add-select"
-                    >
-                      <option value="">
-                        {availableToAdd.length === 0 ? t('playlists.all_tracks_added') : t('playlists.select_track')}
-                      </option>
-                      {availableToAdd.map((tr) => (
-                        <option key={tr.id} value={tr.id}>
-                          {tr.artist ? `${tr.title} — ${tr.artist}` : tr.title}
-                        </option>
-                      ))}
-                    </SelectField>
+                    />
                     <Button variant="ink" disabled={!trackToAdd} onClick={handleAddTrack}>
                       <Icon icon={Plus} size="md" />
                       {t('playlists.add_track')}

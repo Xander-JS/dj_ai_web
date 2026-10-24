@@ -183,7 +183,53 @@
     "manual_invalid_bpm": "El BPM debe ser un número entre {{min}} y {{max}}.",
     "manual_invalid_energy": "La energía debe ser un número entero entre {{min}} y {{max}}.",
     "manual_invalid_camelot": "Selecciona una tonalidad Camelot válida.",
-    "manual_save_error": "No se pudieron guardar los metadatos de \"{{title}}\": {{error}}"
+    "manual_save_error": "No se pudieron guardar los metadatos de \"{{title}}\": {{error}}",
+    "bulk": {
+      "region": "Acciones sobre la selección",
+      "select_all": "Seleccionar todas ({{count}})",
+      "select_visible": "Seleccionar las {{count}} visibles",
+      "deselect_all": "Deseleccionar",
+      "scope_filtered": "Solo cuenta las pistas de la vista filtrada",
+      "reanalyze": "Reanalizar",
+      "delete": "Eliminar",
+      "select_row": "Seleccionar «{{title}}»",
+      "select_all_rows": "Seleccionar todas las pistas visibles",
+      "queue_added": "{{count}} pista(s) añadida(s) a la cola de análisis.",
+      "queue_duplicates": "{{count}} pista(s) ya estaban en la cola y no se duplicaron.",
+      "delete_title": "Eliminar {{count}} pista(s)",
+      "delete_confirm": "Se eliminarán {{count}} pista(s) de la biblioteca local y de las playlists que las contengan. Esta acción no se puede deshacer.",
+      "deleting": "Eliminando…",
+      "delete_success": "{{count}} pista(s) eliminada(s) de la biblioteca local.",
+      "delete_partial": "Se eliminaron {{deleted}} de {{total}} pistas. {{failed}} no se pudieron eliminar y siguen seleccionadas: {{errors}}",
+      "delete_failed": "No se pudo eliminar ninguna de las {{total}} pistas: {{errors}}",
+      "search_playlists": "Buscar playlist"
+    },
+    "queue": {
+      "region": "Cola de análisis",
+      "running": "Reanalizando {{done}} de {{total}}",
+      "current": "Ahora: {{title}}",
+      "background_hint": "Puedes seguir usando la consola; al terminar verás el resumen aquí y en las notificaciones.",
+      "stop": "Detener cola",
+      "stopping": "Se detendrá al terminar la pista actual.",
+      "summary_title": "Reanálisis terminado",
+      "summary_stopped_title": "Cola detenida",
+      "stat_analyzed": "Analizadas",
+      "stat_failed": "Con error",
+      "stat_skipped": "Omitidas",
+      "stat_total": "Total",
+      "failures_title": "Pistas con error",
+      "skipped_title": "Pistas omitidas",
+      "error_unknown": "El análisis falló sin detalle del error.",
+      "unsupported": "Formato no compatible",
+      "reason_deleted": "Eliminada antes de terminar",
+      "reason_stopped": "Cola detenida antes de su turno",
+      "reason_cancelled": "Análisis cancelado",
+      "show_all": "Ver las {{count}}",
+      "show_less": "Ver menos",
+      "dismiss": "Cerrar resumen",
+      "status_queued": "En cola",
+      "status_queued_title": "Esperando turno en la cola de análisis"
+    }
   },
   "playlists": {
     "title": "Mis Playlists",
@@ -207,7 +253,8 @@
     "empty_playlist_title": "Esta playlist está vacía",
     "empty_playlist_desc": "Añade pistas con el selector superior o desde la vista Biblioteca.",
     "no_library_title": "Tu biblioteca está vacía",
-    "no_library_desc": "Importa archivos MP3 o WAV en la Biblioteca para añadirlos a playlists."
+    "no_library_desc": "Importa archivos MP3 o WAV en la Biblioteca para añadirlos a playlists.",
+    "search_tracks": "Buscar por título o artista"
   },
   "player": {
     "play": "Reproducir",
@@ -399,7 +446,8 @@
       "account": "Cuenta",
       "library": "Biblioteca",
       "system": "Sistema"
-    }
+    },
+    "analysis_queue_finished": "Cola de análisis terminada: {{analyzed}} analizada(s), {{failed}} con error, {{skipped}} omitida(s) de {{total}}."
   },
   "states": {
     "loading": "Cargando...",
@@ -440,12 +488,15 @@
     "profile_error": "No se pudo guardar el perfil.",
     "profile_username_taken": "Ese nombre de usuario ya está en uso.",
     "accent_title": "Color de acento",
-    "accent_desc": "Color de resalte del Mixer, los decks y la barra de reproducción.",
+    "accent_desc": "Color de las acciones principales, los pilotos y los campos de acento de la consola. Home, Login y Sign Up conservan el naranja de SYSTEM DJ.",
     "accent": {
       "cyan": "Cian",
       "violet": "Violeta",
-      "neon": "Neón",
-      "orange": "Naranja"
+      "neon": "Verde",
+      "orange": "Naranja SYSTEM DJ",
+      "blue": "Azul eléctrico",
+      "magenta": "Magenta",
+      "amber": "Ámbar"
     },
     "density_title": "Densidad de la interfaz",
     "density_desc": "Compacta reduce los espacios del Mixer, los decks y la barra de reproducción.",
@@ -536,7 +587,7 @@
     "applied": "Aplicado",
     "tab_desc": {
       "general": "Tu identidad en SYSTEM DJ. El audio nunca sale de este dispositivo.",
-      "appearance": "Tema de la consola y color de resalte de los decks.",
+      "appearance": "Tema, color de acento, densidad y movimiento de la consola.",
       "language": "Idioma de menús, avisos y mensajes.",
       "audio": "Cómo mezcla el crossfader y cuánto pueden moverse pitch y SYNC.",
       "playback": "Duración de las transiciones automáticas y comportamiento de CUE.",
@@ -585,8 +636,26 @@
       "off": "Desactivado",
       "tracks": "Pistas",
       "tracks_size": "Música",
-      "auto_analyze": "Análisis al importar"
-    }
+      "auto_analyze": "Análisis al importar",
+      "animations": "Animaciones"
+    },
+    "accent_default": "Predeterminado",
+    "motion_title": "Movimiento",
+    "animations_title": "Animaciones",
+    "animations_desc": "Efectos de movimiento decorativos. Desactivarlos no cambia ninguna función de la consola.",
+    "animations_scope": "Incluye",
+    "animations_list": {
+      "sidebar": "Luz de la barra lateral que sigue al cursor",
+      "selection_bar": "Entrada de la barra de selección de la Biblioteca"
+    },
+    "animations_reduced": "Tu sistema pide reducir el movimiento: las animaciones quedan desactivadas aunque las actives aquí.",
+    "lab_title": "Laboratorio",
+    "experimental_title": "Modo de interfaz experimental",
+    "experimental_desc": "Reserva una disposición alternativa de la consola, sin la barra de navegación habitual. Todavía no está disponible: al activarlo la página se recarga y seguirás viendo la interfaz actual.",
+    "experimental_tag": "En preparación",
+    "experimental_on_note": "Activado. La nueva disposición llegará en una próxima versión.",
+    "experimental_reloading": "Guardado. Recargando la página…",
+    "experimental_not_saved": "Este navegador no permitió guardar la preferencia, así que la página no se recargará."
   },
   "profile": {
     "title": "Mi Perfil",

@@ -111,7 +111,7 @@
 .sd-track-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--sd-row-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -122,14 +122,69 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--sd-gap-2);
-  min-height: 3.5rem;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  min-height: var(--sd-row-min-height);
+  padding: var(--sd-row-pad-y) 0.5rem var(--sd-row-pad-y) 1rem;
   border-radius: var(--sd-radius-inset);
   transition: background-color var(--sd-duration-fast) var(--sd-ease-out);
 }
 
 .sd-track-row:hover {
   background-color: var(--sd-paper);
+}
+
+/* Fila que carga en el deck: el botón principal estira su área a toda la fila con ::after;
+   meta y Play quedan por encima (Play es su propio botón, no anidado: un clic, una acción) */
+.sd-track-row--interactive {
+  position: relative;
+}
+
+.sd-track-row__load {
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sd-track-row__load::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.sd-track-row__load:focus-visible {
+  outline: none;
+}
+
+.sd-track-row--interactive:has(.sd-track-row__load:focus-visible) {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 0;
+}
+
+.sd-track-row--interactive:hover,
+.sd-track-row--interactive:has(.sd-track-row__load:focus-visible) {
+  background-color: var(--sd-paper);
+  box-shadow: inset 3px 0 0 var(--sd-indicator);
+}
+
+.sd-track-row--interactive:active:not(:has(.sd-track-row__play:active)) {
+  background-color: color-mix(in srgb, var(--sd-paper) 70%, var(--sd-indicator));
+}
+
+.sd-track-row--interactive .sd-track-row__meta {
+  pointer-events: none;
+}
+
+.sd-track-row__play {
+  position: relative;
+  z-index: 1;
+  /* Aire extra entre la duración y Play, sobre el hueco común de la fila */
+  margin-left: var(--sd-gap-1);
 }
 
 .sd-track-row__info {
@@ -156,15 +211,28 @@
   color: var(--sd-ink-soft);
 }
 
+/* Columnas de ancho fijo: BPM, tonalidad y duración caen en la misma vertical en todas las filas */
 .sd-track-row__meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: 5rem 3rem 3.25rem;
   align-items: center;
   gap: 0.375rem;
 }
 
+.sd-track-row__slot {
+  display: flex;
+  min-width: 0;
+}
+
+/* Cada etiqueta ocupa su hueco entero: mismo ancho y mismos bordes en todas las filas */
+.sd-track-row__slot .sd-tag {
+  flex: 1;
+  justify-content: center;
+}
+
 .sd-track-row__duration {
-  min-width: 3.25rem;
   font-size: var(--sd-text-note);
+  line-height: 1;
   text-align: right;
   color: var(--sd-ink-soft);
 }

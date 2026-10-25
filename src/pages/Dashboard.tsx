@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, Clock, FolderPlus, Music, Play } from 'lucide-react';
+import { ArrowRight, Clock, FolderPlus, Music, Pause, Play } from 'lucide-react';
 import { Button } from '../components/atoms/Button';
 import { IconButton } from '../components/atoms/IconButton';
 import { Icon } from '../components/atoms/Icon';
@@ -9,11 +9,14 @@ import { Tag } from '../components/atoms/Tag';
 import { EmptyState } from '../components/molecules/EmptyState';
 import { Panel } from '../components/molecules/Panel';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { useSmoothScroll } from '../design-system/smoothScroll';
 import { VINYL_IMAGE } from '../components/organisms/landingAssets';
 import { SmartRecommendationCard } from '../components/dashboard/SmartRecommendationCard';
+import { resolveReferenceDeck, type ReferenceDeck } from '../components/dashboard/referenceDeck';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary } from '../services/localLibraryImport';
 import { analysisSyncManager } from '../services/analysis';
+import { toastStore } from '../services/notifications/toastService';
 import { useDJStore } from '../store/useDJStore';
 import { computeLibraryStats, getRecentlyAddedTracks } from '../utils/libraryStats';
 import type { Track } from '../types/track';
@@ -23,12 +26,17 @@ const RECENT_TRACKS_LIMIT = 4;
 
 export const Dashboard: React.FC = () => {
   const { t } = useTranslation();
-  const { loadTrackToDeckA } = useDJStore();
+  const { deckA, deckB, loadTrackToDeck, playDeck, togglePlayDeck } = useDJStore();
   const navigate = useNavigate();
+  // Deck elegido en «Recomendaciones de mezcla»; el clic en una pista reciente carga en él
+  const [selectedDeck, setSelectedDeck] = useState<ReferenceDeck | null>(null);
+  const targetDeck = resolveReferenceDeck(selectedDeck, Boolean(deckA.track), Boolean(deckB.track));
+  const targetDeckState = targetDeck === 'A' ? deckA : deckB;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const bandTitleId = useId();
+  const smoothScrollRef = useSmoothScroll<HTMLDivElement>();
 
   // Carga desde IndexedDB y suscripción a resultados de análisis para mantener las métricas al día
   useEffect(() => {
@@ -74,6 +82,26 @@ export const Dashboard: React.FC = () => {
   const stats = useMemo(() => computeLibraryStats(localTracks), [localTracks]);
   const recentTracks = useMemo(() => getRecentlyAddedTracks(localTracks, RECENT_TRACKS_LIMIT), [localTracks]);
 
+  const handleLoadRecent = async (track: Track, deck: ReferenceDeck = targetDeck): Promise<boolean> => {
+    const loaded = await loadTrackToDeck(deck, track);
+    const params = { title: track.title, deck: `Deck ${deck}` };
+    // Confirmación discreta en la esquina: no desplaza la lista de recientes
+    if (loaded) toastStore.show('success', t('library.load_success', params));
+    else toastStore.show('error', t('library.load_error', params));
+    return loaded;
+  };
+
+  // Play en la lista: carga en el deck elegido en Recomendaciones y lo reproduce cuando la carga
+  // termina; si la pista ya está en ese deck, Play/Pausa sin recargarla ni reiniciarla
+  const handlePlayRecent = async (track: Track) => {
+    const deck = targetDeck;
+    if (targetDeckState.track?.id === track.id) {
+      await togglePlayDeck(deck);
+      return;
+    }
+    if (await handleLoadRecent(track, deck)) await playDeck(deck);
+  };
+
   const readouts = [
     { value: String(stats.totalTracks), label: t('dashboard.library_tracks') },
     { value: String(stats.analyzedTracks), label: t('dashboard.analyzed_tracks') },
@@ -81,7 +109,7 @@ export const Dashboard: React.FC = () => {
   ];
 
   return (
-    <ConsoleTemplate className="sd-home">
+    <ConsoleTemplate ref={smoothScrollRef} className="sd-home sd-scroll-area">
       <input
         type="file"
         ref={fileInputRef}
@@ -131,7 +159,12 @@ export const Dashboard: React.FC = () => {
 
       <div className="sd-home-grid">
         {/* Pistas añadidas recientemente a la biblioteca local */}
-        <Panel title={t('dashboard.recent')} icon={Clock} className="sd-home-recent">
+        <Panel
+          title={t('dashboard.recent')}
+          icon={Clock}
+          className="sd-home-recent"
+          description={recentTracks.length > 0 ? t('dashboard.recent_target', { deck: targetDeck }) : undefined}
+        >
           {recentTracks.length === 0 ? (
             <EmptyState
               icon={Music}
@@ -142,27 +175,48 @@ export const Dashboard: React.FC = () => {
             <ul className="sd-track-list">
               {recentTracks.map((track) => {
                 const isAnalyzed = track.analysis?.status === 'analyzed';
+                const artist = track.artist || t('dj.unknown_artist');
+                const isPreviewing = targetDeckState.track?.id === track.id && targetDeckState.playbackState === 'playing';
                 return (
-                  <li key={track.id} className="sd-track-row">
-                    <div className="sd-track-row__info">
-                      <span className="sd-track-row__title">{track.title}</span>
-                      <span className="sd-track-row__artist">{track.artist || t('dj.unknown_artist')}</span>
-                    </div>
+                  <li key={track.id} className="sd-track-row sd-track-row--interactive">
+                    {/* Botón principal: su área se extiende a toda la fila; Play queda por encima */}
+                    <button
+                      type="button"
+                      className="sd-track-row__load"
+                      aria-label={t('dashboard.recent_load_aria', { title: track.title, artist, deck: targetDeck })}
+                      title={t('dashboard.recent_load_hint', { deck: targetDeck })}
+                      onClick={() => {
+                        // Ya asignada a ese deck: no se recarga, así el clic nunca detiene ni reinicia la reproducción
+                        if (targetDeckState.track?.id !== track.id) void handleLoadRecent(track);
+                      }}
+                    >
+                      <span className="sd-track-row__info">
+                        <span className="sd-track-row__title">{track.title}</span>
+                        <span className="sd-track-row__artist">{artist}</span>
+                      </span>
+                    </button>
+                    {/* Huecos fijos para BPM, tonalidad y duración: alineados entre filas aunque falte un dato */}
                     <div className="sd-track-row__meta">
-                      {isAnalyzed && track.analysis.bpm ? (
-                        <Tag tone="paper" className="sd-num">{Math.round(track.analysis.bpm)} BPM</Tag>
-                      ) : null}
-                      {isAnalyzed && track.analysis.key ? (
-                        <Tag tone="paper">{track.analysis.key}</Tag>
-                      ) : null}
+                      <span className="sd-track-row__slot sd-track-row__slot--bpm">
+                        {isAnalyzed && track.analysis.bpm ? (
+                          <Tag tone="paper" className="sd-num">{Math.round(track.analysis.bpm)} BPM</Tag>
+                        ) : null}
+                      </span>
+                      <span className="sd-track-row__slot sd-track-row__slot--key">
+                        {isAnalyzed && track.analysis.key ? (
+                          <Tag tone="paper">{track.analysis.key}</Tag>
+                        ) : null}
+                      </span>
                       <span className="sd-track-row__duration sd-num">{track.durationFormatted}</span>
                     </div>
                     <IconButton
-                      icon={<Icon icon={Play} size="sm" />}
-                      label={t('library.load_deck_a')}
+                      icon={<Icon icon={isPreviewing ? Pause : Play} size="sm" />}
+                      label={t(isPreviewing ? 'dashboard.recent_pause_aria' : 'dashboard.recent_play_aria', { title: track.title })}
+                      aria-pressed={isPreviewing}
                       size="sm"
                       variant="ink"
-                      onClick={() => void loadTrackToDeckA(track)}
+                      className="sd-track-row__play"
+                      onClick={() => void handlePlayRecent(track)}
                     />
                   </li>
                 );
@@ -171,7 +225,7 @@ export const Dashboard: React.FC = () => {
           )}
         </Panel>
 
-        <SmartRecommendationCard />
+        <SmartRecommendationCard selectedDeck={selectedDeck} onSelectedDeckChange={setSelectedDeck} />
       </div>
     </ConsoleTemplate>
   );

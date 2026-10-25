@@ -6,8 +6,9 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
   icon: ReactNode;
   /** Nombre accesible obligatorio: el botón no tiene texto visible */
   label: string;
-  /** ghost: sin relleno (predeterminado) · surface: relleno neutro · ink: relleno de tinta, para el estado activo */
-  variant?: 'ghost' | 'surface' | 'ink';
+  /** ghost: sin relleno (predeterminado) · surface: relleno neutro · ink: relleno de tinta, para el estado activo
+   *  · accent: la acción principal de la región */
+  variant?: 'ghost' | 'surface' | 'ink' | 'accent';
   /** sm: filas y barras densas de la consola */
   size?: 'sm' | 'md';
 }

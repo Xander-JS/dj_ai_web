@@ -59,6 +59,16 @@
   background-color: var(--sd-ink-soft);
 }
 
+.sd-icon-button--accent,
+.sd-icon-button--accent:disabled {
+  background-color: var(--sd-accent);
+  color: var(--sd-accent-ink);
+}
+
+.sd-icon-button--accent:hover:not(:disabled) {
+  background-color: var(--sd-accent-hover);
+}
+
 @media (pointer: coarse) {
   .sd-icon-button {
     width: 3rem;

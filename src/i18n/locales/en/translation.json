@@ -220,7 +220,8 @@
       "analysis_failed": "Analysis failed",
       "bpm_updated": "BPM updated",
       "metadata_updated": "Metadata updated",
-      "save_failed": "Could not save"
+      "save_failed": "Could not save",
+      "duplicates": "{{count}} tracks were already in the library and were skipped"
     },
     "bulk": {
       "region": "Selection actions",
@@ -894,7 +895,8 @@
     "limit_reached": "Maximum {{max}} references",
     "no_compatible": "No compatible tracks found. Analyze more tracks (BPM and key) and try again.",
     "generated_name": "Mix from {{title}}",
-    "generated_name_pair": "Mix {{start}} → {{end}}"
+    "generated_name_pair": "Mix {{start}} → {{end}}",
+    "already_generated": "This reference mix has already been generated"
   },
   "landing": {
     "brand": "SYSTEM DJ",

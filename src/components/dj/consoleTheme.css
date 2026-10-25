@@ -1,0 +1,70 @@
+/* ==========================================================================
+   SYSTEM DJ — Console hardware tokens
+   Superficies, serigrafía y luces de la consola (Mixer y decks). Se derivan de los
+   tokens globales y del atributo data-theme de <html>: no es un sistema de temas aparte.
+   ========================================================================== */
+
+.mixer-page-container {
+  /* Tono de cada canal: A sigue al acento elegido, B al secundario, Master al blanco frío */
+  --console-tone-a: var(--color-primary-500);
+  --console-tone-b: var(--color-secondary-500);
+  --console-tone-master: hsl(190, 85%, 50%);
+
+  /* Panel de aluminio claro */
+  --console-panel: hsl(var(--hue-neutral), 8%, 86%);
+  --console-panel-edge: hsl(var(--hue-neutral), 10%, 72%);
+  --console-panel-tint: linear-gradient(180deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.25));
+  --console-recess: hsl(var(--hue-neutral), 10%, 78%);
+  --console-recess-shadow: inset 0 1px 3px rgb(0 0 0 / 0.25), inset 0 -1px 0 rgb(255 255 255 / 0.6);
+  --console-slot: hsl(var(--hue-neutral), 12%, 18%);
+  --console-ink: hsl(var(--hue-neutral), 20%, 14%);
+  --console-ink-soft: hsl(var(--hue-neutral), 10%, 36%);
+  --console-tick: hsl(var(--hue-neutral), 10%, 45%);
+  --console-led-off: hsl(var(--hue-neutral), 8%, 70%);
+  --console-glow: 0.45;
+  --console-screen: hsl(var(--hue-neutral), 18%, 12%);
+  --console-raised-shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 6px 18px -8px rgb(0 0 0 / 0.35);
+  --console-meter-green: hsl(142, 70%, 42%);
+  --console-meter-amber: hsl(38, 92%, 50%);
+  --console-meter-red: hsl(352, 85%, 52%);
+}
+
+/* Grafito con reflejos metálicos y luces de neón */
+[data-theme='dark'] .mixer-page-container {
+  --console-panel: hsl(var(--hue-neutral), 10%, 11%);
+  --console-panel-edge: hsl(var(--hue-neutral), 10%, 22%);
+  --console-panel-tint: linear-gradient(180deg, rgb(18 19 24 / 0.86), rgb(10 11 14 / 0.94));
+  --console-recess: hsl(var(--hue-neutral), 12%, 7%);
+  --console-recess-shadow: inset 0 2px 6px rgb(0 0 0 / 0.7), inset 0 -1px 0 rgb(255 255 255 / 0.05);
+  --console-slot: hsl(var(--hue-neutral), 14%, 4%);
+  --console-ink: hsl(0, 0%, 94%);
+  --console-ink-soft: hsl(var(--hue-neutral), 10%, 66%);
+  --console-tick: hsl(var(--hue-neutral), 10%, 52%);
+  --console-led-off: hsl(var(--hue-neutral), 10%, 20%);
+  --console-glow: 0.8;
+  --console-screen: hsl(var(--hue-neutral), 20%, 5%);
+  --console-raised-shadow: 0 1px 0 rgb(255 255 255 / 0.06) inset, 0 10px 24px -10px rgb(0 0 0 / 0.9);
+}
+
+.console-tone-a {
+  --console-tone: var(--console-tone-a);
+}
+
+.console-tone-b {
+  --console-tone: var(--console-tone-b);
+}
+
+.console-tone-master {
+  --console-tone: var(--console-tone-master);
+}
+
+/* Serigrafía: etiquetas pequeñas en mayúsculas, como las impresas en el panel */
+.console-legend {
+  font-size: 10px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: var(--console-ink-soft);
+  white-space: nowrap;
+}

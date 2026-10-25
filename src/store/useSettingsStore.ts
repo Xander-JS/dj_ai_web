@@ -34,6 +34,8 @@ export type AutoTransitionBeats = 8 | 16 | 32;
 export type CueMode = 'cdj' | 'standard';
 /** Intensidad del visualizador de la barra de reproducción (opacidad y ganancia de la onda). */
 export type VisualizerIntensity = 'subtle' | 'balanced' | 'vivid';
+/** Diseño del disco giratorio de los decks (public/assets/mixer/disk/rotating-disc-*.png). */
+export type JogDisc = 'a' | 'b' | 'c';
 
 export interface AppSettings {
   theme: ThemeMode;
@@ -56,6 +58,8 @@ export interface AppSettings {
   /** Animaciones decorativas de la interfaz; `prefers-reduced-motion` las desactiva igualmente. */
   animations: boolean;
   visualizerIntensity: VisualizerIntensity;
+  /** Disco que muestran ambos decks; solo es apariencia, no afecta al transporte. */
+  jogDisc: JogDisc;
   /** Reserva la futura disposición alternativa de la consola; todavía no cambia la interfaz. */
   experimentalInterface: boolean;
 }
@@ -75,6 +79,7 @@ export const ACCENT_HUES: Record<AccentColor, number> = {
   amber: 39,
 };
 export const VISUALIZER_INTENSITIES: readonly VisualizerIntensity[] = ['subtle', 'balanced', 'vivid'];
+export const JOG_DISCS: readonly JogDisc[] = ['a', 'b', 'c'];
 export const CROSSFADER_CURVES: readonly CrossfaderCurve[] = ['constant-power', 'linear', 'cut'];
 export const PITCH_RANGES: readonly PitchRange[] = [0.06, 0.08, 0.16];
 export const BUFFER_SIZES: readonly AudioBufferSize[] = [256, 512, 1024];
@@ -100,6 +105,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoAnalyzeOnImport: true,
   animations: true,
   visualizerIntensity: 'balanced',
+  jogDisc: 'b',
   experimentalInterface: false,
 };
 
@@ -150,6 +156,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     autoAnalyzeOnImport: typeof source.autoAnalyzeOnImport === 'boolean' ? source.autoAnalyzeOnImport : d.autoAnalyzeOnImport,
     animations: typeof source.animations === 'boolean' ? source.animations : d.animations,
     visualizerIntensity: pick(source.visualizerIntensity, VISUALIZER_INTENSITIES, d.visualizerIntensity),
+    jogDisc: pick(source.jogDisc, JOG_DISCS, d.jogDisc),
     experimentalInterface: typeof source.experimentalInterface === 'boolean' ? source.experimentalInterface : d.experimentalInterface,
   };
 }

@@ -11,4 +11,5 @@ export interface Playlist {
   trackIds: string[];                // Ids de pistas del almacén `tracks`, en orden
   createdAt: number;                 // Timestamp de creación
   updatedAt: number;                 // Timestamp de última modificación
+  seedTrackIds?: string[];           // Semillas (inicio, cierre) si la generó el Modo referencia
 }

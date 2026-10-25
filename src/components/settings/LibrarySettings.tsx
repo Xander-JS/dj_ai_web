@@ -48,6 +48,7 @@ export const LibrarySettings: React.FC<LibrarySettingsProps> = ({ storage, onSto
     try {
       djStore.unloadDeck('A');
       djStore.unloadDeck('B');
+      djStore.clearSessionCapture();
       seedStore.clearSeeds();
       await indexedDBStorage.clearAll();
       resetSettings();

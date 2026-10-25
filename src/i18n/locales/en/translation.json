@@ -478,7 +478,8 @@
     "bar_sync_block_master_not_playing": "Play Deck {{master}}: BAR SYNC needs the Master playing.",
     "bar_sync_block_self_playing": "Pause this deck: BAR SYNC prepares a stopped or paused slave deck.",
     "bar_sync_block_tempo_mismatch": "The tempos do not match ({{self_bpm}} vs {{master_bpm}} BPM). Turn on SYNC first: with different tempos the phase is lost within a few bars and the kick doubles.",
-    "bar_sync_reason_rejected_tempo_mismatch": "BAR SYNC requires the same effective BPM on both decks. Turn on SYNC before preparing the bar."
+    "bar_sync_reason_rejected_tempo_mismatch": "BAR SYNC requires the same effective BPM on both decks. Turn on SYNC before preparing the bar.",
+    "pitch_fader": "Deck {{deck}} pitch fader"
   },
   "mixer": {
     "channel": "CH {{num}}",
@@ -497,7 +498,34 @@
     "curve_cp_short": "CP",
     "curve_lin_short": "LIN",
     "curve_cut_short": "CUT",
-    "mute": "MUTE"
+    "mute": "MUTE",
+    "console_title": "Mixing console",
+    "status_live": "Live",
+    "status_standby": "Standby",
+    "eq": "Equalizer",
+    "volume": "Volume",
+    "filter_lpf": "LPF",
+    "filter_hpf": "HPF",
+    "filter_lpf_value": "Low-pass {{value}}%",
+    "filter_hpf_value": "High-pass {{value}}%",
+    "filter_off": "Filter neutral",
+    "cue_pfl_title": "Channel pre-fader listen (PFL)",
+    "state_empty": "No track",
+    "state_loading": "Loading",
+    "state_playing": "Playing",
+    "state_paused": "Paused",
+    "signal_present": "signal present",
+    "signal_absent": "no signal",
+    "meter_channel": "Channel {{num}} level",
+    "meter_master": "Master level",
+    "spectrum_label": "Master mix spectrum",
+    "no_signal": "No signal",
+    "muted": "Muted",
+    "mute_on_title": "Master muted: press to restore the output",
+    "mute_off_title": "Mute the Master output",
+    "crossfader_title": "Crossfader",
+    "crossfader_label": "Crossfader between Deck A and Deck B",
+    "crossfader_value": "Deck A {{a}}%, Deck B {{b}}%"
   },
   "notifications": {
     "unread": "{{count}} unread notification(s)",
@@ -721,7 +749,8 @@
       "tracks": "Tracks",
       "tracks_size": "Music",
       "auto_analyze": "Analyze on import",
-      "animations": "Animations"
+      "animations": "Animations",
+      "disc": "Disc"
     },
     "accent_default": "Default",
     "motion_title": "Motion",
@@ -731,7 +760,8 @@
     "animations_list": {
       "sidebar": "Sidebar light that follows the cursor",
       "selection_bar": "Library selection bar entrance",
-      "player_visualizer": "Energy wave in the player bar"
+      "player_visualizer": "Energy wave in the player bar",
+      "mixer": "Mixer disc spin and knob and fader motion"
     },
     "animations_reduced": "Your system asks for reduced motion: animations stay off even if you turn them on here.",
     "lab_title": "Lab",
@@ -754,7 +784,19 @@
     "shortcuts_nav_binding_invalid": "Use a letter or a number together with Shift.",
     "shortcuts_nav_binding_duplicate": "Shift + {{key}} already opens another section.",
     "shortcuts_nav_binding_saved": "Shift + {{key}} assigned.",
-    "shortcuts_section": "Section"
+    "shortcuts_section": "Section",
+    "disc_title": "Deck disc",
+    "disc_desc": "Design of the spinning disc shown on Deck A and Deck B. It only changes its look: playback, BPM, cues and SYNC are not affected.",
+    "disc": {
+      "a": "Optical disc",
+      "b": "Neon vinyl",
+      "c": "Classic vinyl"
+    },
+    "disc_hint": {
+      "a": "Silver and iridescent",
+      "b": "Grooves with teal highlights",
+      "c": "Yellow studio label"
+    }
   },
   "profile": {
     "title": "My Profile",

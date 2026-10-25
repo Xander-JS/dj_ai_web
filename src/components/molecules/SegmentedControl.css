@@ -27,7 +27,8 @@
     color var(--sd-duration-fast) var(--sd-ease-out);
 }
 
-.sd-segmented__option:hover:not(:disabled) {
+/* El hover solo aviva las opciones sin elegir: la elegida conserva su papel sobre tinta */
+.sd-segmented__option:not([aria-pressed='true']):hover:not(:disabled) {
   color: var(--sd-ink);
 }
 

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, Play, ListMusic, Pencil, Trash2, ChevronUp, ChevronDown, X, Check, Music } from 'lucide-react';
+import { Plus, Play, Pause, Shuffle, ListMusic, Pencil, Trash2, ChevronUp, ChevronDown, X, Check, Music } from 'lucide-react';
 import { Button } from '../components/atoms/Button';
 import { IconButton } from '../components/atoms/IconButton';
 import { Icon } from '../components/atoms/Icon';
@@ -10,6 +10,7 @@ import { EmptyState } from '../components/molecules/EmptyState';
 import { Notice } from '../components/molecules/Notice';
 import { SelectMenu } from '../components/molecules/SelectMenu';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { useSmoothScroll } from '../design-system/smoothScroll';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { notificationCenter } from '../services/notifications/notificationCenter';
 import {
@@ -22,6 +23,7 @@ import {
   MAX_PLAYLIST_NAME_LENGTH,
 } from '../services/playlists/playlistService';
 import { useDJStore } from '../store/useDJStore';
+import { playerQueue, usePlayerQueue } from '../services/player/playerService';
 import { formatDuration } from '../utils/formatters';
 import type { Playlist } from '../types/playlist';
 import type { Track } from '../types/track';
@@ -44,13 +46,19 @@ function playlistInitial(name: string): string {
 
 export const Playlists: React.FC = () => {
   const { t } = useTranslation();
+  const tableScrollRef = useSmoothScroll<HTMLDivElement>();
   const navigate = useNavigate();
-  const { loadTrackToDeckA } = useDJStore();
+  const { deckA, togglePlayDeckA } = useDJStore();
+  const queue = usePlayerQueue();
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Al llegar desde «Generar mix» la playlist creada viene en el estado de navegación
+  const location = useLocation();
+  const [activeId, setActiveId] = useState<string | null>(
+    () => (location.state as { playlistId?: string } | null)?.playlistId ?? null
+  );
 
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -169,13 +177,33 @@ export const Playlists: React.FC = () => {
     setTrackToAdd('');
   };
 
-  const handlePlay = async () => {
-    const first = activeTracks[0];
-    if (!first) return;
-    const loaded = await loadTrackToDeckA(first);
-    if (!loaded) {
-      notificationCenter.push({ type: 'error', messageKey: 'library.load_error', params: { title: first.title, deck: 'Deck A' } });
+  // Reproducción por la cola compartida (Deck A): antes solo se cargaba la primera pista y
+  // nunca se llamaba a Play, por eso una playlist (también de una sola pista) no sonaba.
+  const contextId = activePlaylist ? `playlist:${activePlaylist.id}` : null;
+  const currentEntry = queue.entries[queue.currentIndex] ?? null;
+  const isActiveContext = contextId !== null && queue.contextId === contextId && currentEntry !== null;
+  const isContextLoaded = isActiveContext && deckA.track?.id === currentEntry.track.id;
+  const isContextPlaying = isContextLoaded && deckA.playbackState === 'playing';
+  const isShuffleActive = isActiveContext && queue.shuffle;
+
+  const handlePlay = () => {
+    if (activeTracks.length === 0) return;
+    // La playlist ya está en el reproductor: Play/Pausa sin reiniciar la cola
+    if (isContextLoaded) {
+      void togglePlayDeckA();
+      return;
     }
+    void playerQueue.playTracks(activeTracks, { shuffle: false, contextId });
+  };
+
+  const handleShuffle = () => {
+    if (activeTracks.length === 0) return;
+    // Sonando esta playlist, el botón alterna el modo sin cortar la pista en curso
+    if (isActiveContext) {
+      playerQueue.toggleShuffle();
+      return;
+    }
+    void playerQueue.playTracks(activeTracks, { shuffle: true, contextId });
   };
 
   if (!isLoaded) {
@@ -306,10 +334,23 @@ export const Playlists: React.FC = () => {
                     </Notice>
                   ) : (
                     <div className="sd-playlist-detail__actions">
-                      <Button variant="accent" disabled={activeTracks.length === 0} onClick={handlePlay}>
-                        <Icon icon={Play} size="md" />
-                        {t('common.play')}
-                      </Button>
+                      {/* Solo icono: Play y Pausa ocupan el mismo cuadrado y la fila no se mueve */}
+                      <IconButton
+                        icon={<Icon icon={isContextPlaying ? Pause : Play} size="md" className={clsx(!isContextPlaying && 'sd-playlist-detail__play-glyph')} />}
+                        variant="accent"
+                        label={isContextPlaying ? t('playlists.pause_playlist') : t('playlists.play_sequential')}
+                        disabled={activeTracks.length === 0}
+                        onClick={handlePlay}
+                      />
+                      <IconButton
+                        icon={<Icon icon={Shuffle} size="md" />}
+                        variant={isShuffleActive ? 'ink' : 'surface'}
+                        label={isShuffleActive ? t('playlists.shuffle_on') : t('playlists.shuffle_play')}
+                        aria-pressed={isShuffleActive}
+                        disabled={activeTracks.length === 0}
+                        className={clsx('sd-playlist-detail__shuffle', isShuffleActive && 'is-on')}
+                        onClick={handleShuffle}
+                      />
                       <IconButton
                         icon={<Icon icon={Pencil} size="md" />}
                         variant="surface"
@@ -370,7 +411,7 @@ export const Playlists: React.FC = () => {
                 )}
 
                 {activeTracks.length > 0 ? (
-                  <div className="sd-playlist-detail__table-wrap">
+                  <div ref={tableScrollRef} className="sd-playlist-detail__table-wrap sd-scroll-area">
                     <table className="sd-table sd-playlist-table">
                       <thead>
                         <tr>

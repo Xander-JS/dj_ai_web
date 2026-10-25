@@ -69,7 +69,7 @@
   align-items: center;
   gap: var(--sd-gap-2);
   width: 100%;
-  padding: 0.5rem;
+  padding: var(--sd-row-pad-y) 0.5rem;
   border-radius: var(--sd-radius-inset);
   font-family: var(--sd-font);
   text-align: left;
@@ -193,6 +193,11 @@
   margin-top: var(--sd-gap-1);
 }
 
+/* El triángulo de Play pesa a la izquierda: se compensa ópticamente (como en la barra) */
+.sd-playlist-detail__play-glyph {
+  transform: translateX(1px);
+}
+
 .sd-playlist-detail__rename {
   flex: 1 1 16rem;
   max-width: 26rem;
@@ -279,4 +284,21 @@
   .sd-playlist-item {
     transition-duration: 0ms;
   }
+}
+
+/* Aleatorio activo en la playlist que suena: tinta llena y el piloto del acento debajo */
+.sd-playlist-detail__shuffle.is-on {
+  position: relative;
+}
+
+.sd-playlist-detail__shuffle.is-on::after {
+  content: '';
+  position: absolute;
+  bottom: -0.375rem;
+  left: 50%;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-indicator);
+  transform: translateX(-50%);
 }

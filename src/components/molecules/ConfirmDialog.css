@@ -1,0 +1,69 @@
+/* ==========================================================================
+   Diálogo de confirmación (borrados de la Biblioteca). Va en un portal en <body>:
+   declara su propia familia y no depende del ámbito .sd-console.
+   ========================================================================== */
+.sd-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--sd-margin);
+  background-color: var(--sd-scrim);
+  font-family: var(--sd-font);
+  font-weight: var(--sd-weight-regular);
+  -webkit-font-smoothing: antialiased;
+  animation: sd-confirm-in var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+  width: min(100%, 28rem);
+  padding: var(--sd-panel-padding);
+  border-radius: var(--sd-radius-panel);
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+}
+
+[data-theme='dark'] .sd-confirm {
+  background-color: var(--sd-surface);
+  --sd-ghost-hover: var(--sd-paper);
+}
+
+.sd-confirm__title {
+  margin: 0;
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-black);
+  line-height: 0.95;
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.sd-confirm__description {
+  margin: 0;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+  overflow-wrap: anywhere;
+}
+
+.sd-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sd-gap-1);
+  margin-top: var(--sd-gap-1);
+}
+
+@keyframes sd-confirm-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-confirm-overlay {
+    animation: none;
+  }
+}

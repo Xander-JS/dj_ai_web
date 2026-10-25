@@ -18,3 +18,15 @@ export {
   type AnalysisUpdateListener,
 } from './AnalysisSyncManager.ts';
 
+
+export {
+  AnalysisQueue,
+  summarizeQueue,
+  type AnalysisQueueSnapshot,
+  type QueueItem,
+  type QueueOutcome,
+  type QueueResult,
+  type QueueSkipReason,
+} from './AnalysisQueue.ts';
+
+export { bulkAnalysisQueue } from './bulkAnalysisQueue.ts';

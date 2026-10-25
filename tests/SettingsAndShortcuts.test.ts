@@ -7,10 +7,14 @@
 import 'fake-indexeddb/auto';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
+  ACCENT_COLORS,
+  ACCENT_HUES,
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
+  SETTINGS_VERSION,
   SettingsStore,
   sanitizeSettings,
   type SettingsStorage,
@@ -101,6 +105,32 @@ describe('SettingsStore — saneamiento y persistencia', () => {
     assert.equal(new SettingsStore(storage).getSnapshot().autoTransitionBeats, 32);
   });
 
+  it('migra el violeta heredado sin versión al naranja y respeta los demás acentos', () => {
+    const legacyDefault = new SettingsStore(memoryStorage({ [SETTINGS_STORAGE_KEY]: JSON.stringify({ accentColor: 'violet', theme: 'dark' }) }));
+    assert.equal(legacyDefault.getSnapshot().accentColor, 'orange');
+    assert.equal(legacyDefault.getSnapshot().theme, 'dark');
+    const legacyChoice = new SettingsStore(memoryStorage({ [SETTINGS_STORAGE_KEY]: JSON.stringify({ accentColor: 'neon' }) }));
+    assert.equal(legacyChoice.getSnapshot().accentColor, 'neon');
+
+    // Una elección de violeta guardada con la versión actual se conserva tras recargar
+    const storage = memoryStorage();
+    new SettingsStore(storage).update({ accentColor: 'violet' });
+    assert.equal(JSON.parse(storage.data[SETTINGS_STORAGE_KEY]).settingsVersion, SETTINGS_VERSION);
+    assert.equal(new SettingsStore(storage).getSnapshot().accentColor, 'violet');
+  });
+
+  it('persiste Animaciones y el modo experimental, legibles antes de recargar', () => {
+    const storage = memoryStorage();
+    const store = new SettingsStore(storage);
+    store.update({ animations: false, experimentalInterface: true });
+    assert.equal(store.readPersisted()?.experimentalInterface, true);
+    const reloaded = new SettingsStore(storage).getSnapshot();
+    assert.equal(reloaded.animations, false);
+    assert.equal(reloaded.experimentalInterface, true);
+    // Sin almacenamiento no hay nada que leer: el modo experimental no debe recargar
+    assert.equal(new SettingsStore(null).readPersisted(), null);
+  });
+
   it('funciona sin almacenamiento disponible', () => {
     const store = new SettingsStore(null);
     store.update({ autoAnalyzeOnImport: false });
@@ -117,12 +147,25 @@ describe('Apariencia — tokens en el elemento raíz', () => {
       style: { setProperty: (name: string, value: string) => { properties[name] = value; } },
     } as unknown as HTMLElement;
 
-    applyAppearanceToRoot({ theme: 'dark', density: 'compact', accentColor: 'cyan' }, root);
+    applyAppearanceToRoot({ theme: 'dark', density: 'compact', accentColor: 'cyan', animations: false, experimentalInterface: true }, root);
 
     assert.equal(attributes['data-theme'], 'dark');
     assert.equal(attributes['data-density'], 'compact');
-    assert.equal(properties['--hue-primary'], '190');
-    assert.equal(properties['--color-accent'], 'hsl(190, 70%, 55%)');
+    assert.equal(attributes['data-accent'], 'cyan');
+    assert.equal(attributes['data-animations'], 'off');
+    assert.equal(attributes['data-interface'], 'experimental');
+    assert.equal(properties['--hue-primary'], String(ACCENT_HUES.cyan));
+    assert.equal(properties['--color-accent'], 'var(--sd-accent)');
+  });
+
+  it('cada acento tiene su bloque de tokens y el naranja es el predeterminado', () => {
+    const tokens = fs.readFileSync(new URL('../src/design-system/tokens.css', import.meta.url), 'utf8');
+    for (const color of ACCENT_COLORS) {
+      assert.match(tokens, new RegExp(`\\[data-accent='${color}'\\]\\s*\\{[^}]*--sd-accent:`), `falta [data-accent='${color}']`);
+    }
+    assert.equal(DEFAULT_SETTINGS.accentColor, 'orange');
+    assert.equal(DEFAULT_SETTINGS.animations, true);
+    assert.equal(DEFAULT_SETTINGS.experimentalInterface, false);
   });
 });
 
@@ -214,7 +257,13 @@ describe('Atajos de teclado — manejadores', () => {
     onKeyDown(key('Space', { target: { tagName: 'INPUT' } }));
     onKeyDown(key('KeyQ', { target: { tagName: 'DIV', isContentEditable: true } }));
     onKeyDown(key('Space', { defaultPrevented: true }));
+    // Casillas y selectores ARIA (Biblioteca, Playlists) usan Espacio como un control nativo
+    onKeyDown(key('Space', { target: { tagName: 'BUTTON', getAttribute: (name: string) => (name === 'role' ? 'checkbox' : null) } }));
+    onKeyDown(key('Space', { target: { tagName: 'BUTTON', getAttribute: (name: string) => (name === 'role' ? 'combobox' : null) } }));
     assert.deepEqual(calls, []);
+    // Un botón corriente sigue sin bloquear el atajo de reproducción
+    onKeyDown(key('Space', { target: { tagName: 'BUTTON', getAttribute: () => null } }));
+    assert.deepEqual(calls, ['play:A']);
   });
 });
 

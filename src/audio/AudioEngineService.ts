@@ -770,6 +770,24 @@ export class AudioEngineService implements IAudioEngineService {
     return this.rmsToVUMeterLevel(this.getMasterRMS());
   }
 
+  /** Número de bandas de frecuencia que entrega `readMasterSpectrum` (0 si el motor no arrancó). */
+  public getMasterSpectrumSize(): number {
+    return this.masterAnalyserNode?.frequencyBinCount ?? 0;
+  }
+
+  /**
+   * Copia en `target` el espectro de la mezcla Master (0–255 por banda) desde el analizador
+   * en derivación que ya alimenta el VU Master. Solo lectura: no crea nodos ni toca el grafo.
+   * Devuelve false (sin escribir) si el motor no está iniciado o ningún deck suena.
+   */
+  public readMasterSpectrum(target: Uint8Array<ArrayBuffer>): boolean {
+    if (!this.masterAnalyserNode || (!this.isDeckPlaying('A') && !this.isDeckPlaying('B'))) {
+      return false;
+    }
+    this.masterAnalyserNode.getByteFrequencyData(target);
+    return true;
+  }
+
   /**
    * Permite inspeccionar el grafo DSP de un canal (uso en pruebas de topología).
    */

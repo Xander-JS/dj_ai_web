@@ -1,0 +1,48 @@
+.sd-tempo-band {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-2);
+  padding-top: clamp(4rem, 9vw, 8rem);
+  overflow: hidden;
+}
+
+.sd-tempo-band__row {
+  display: flex;
+  gap: var(--sd-gap-2);
+  width: max-content;
+  list-style: none;
+}
+
+.sd-tempo-band__tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  padding: clamp(1rem, 1.6vw, 1.5rem) clamp(1.25rem, 2.2vw, 2rem);
+  border-radius: var(--sd-radius-panel);
+  color: var(--sd-field-ink);
+}
+
+.sd-tempo-band__tile--accent { background-color: var(--sd-accent); }
+.sd-tempo-band__tile--sage { background-color: var(--sd-field-sage); }
+.sd-tempo-band__tile--acid { background-color: var(--sd-field-acid); }
+
+.sd-tempo-band__tile--inverse {
+  background-color: var(--sd-inverse);
+  color: var(--sd-inverse-ink);
+}
+
+.sd-tempo-band__value {
+  /* La lectura llena la pieza: escala de sección, no de etiqueta */
+  font-size: var(--sd-text-section);
+  font-weight: var(--sd-weight-black);
+  line-height: var(--sd-leading-display);
+  letter-spacing: var(--sd-tracking-display);
+  white-space: nowrap;
+}
+
+.sd-tempo-band__label {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+}

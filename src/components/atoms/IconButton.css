@@ -1,0 +1,88 @@
+.sd-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--sd-control-height);
+  height: var(--sd-control-height);
+  border-radius: var(--sd-radius-pill);
+  color: var(--sd-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
+}
+
+/* --sd-ghost-hover lo redefine un contenedor cuyo fondo ya es --sd-surface */
+.sd-icon-button:hover {
+  background-color: var(--sd-ghost-hover, var(--sd-surface));
+}
+
+.sd-icon-button:active {
+  transform: scale(0.92);
+}
+
+.sd-icon-button:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: var(--sd-focus-offset);
+}
+
+.sd-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  background-color: transparent;
+  transform: none;
+}
+
+.sd-icon-button--sm {
+  width: var(--sd-control-height-sm);
+  height: var(--sd-control-height-sm);
+}
+
+.sd-icon-button--surface,
+.sd-icon-button--surface:disabled {
+  background-color: var(--sd-surface);
+}
+
+.sd-icon-button--surface:hover:not(:disabled) {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sd-icon-button--ink,
+.sd-icon-button--ink:disabled {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sd-icon-button--ink:hover:not(:disabled) {
+  background-color: var(--sd-ink-soft);
+}
+
+.sd-icon-button--accent,
+.sd-icon-button--accent:disabled {
+  background-color: var(--sd-accent);
+  color: var(--sd-accent-ink);
+}
+
+.sd-icon-button--accent:hover:not(:disabled) {
+  background-color: var(--sd-accent-hover);
+}
+
+@media (pointer: coarse) {
+  .sd-icon-button {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .sd-icon-button--sm {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-icon-button {
+    transition-duration: 0ms;
+  }
+}

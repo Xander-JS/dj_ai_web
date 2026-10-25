@@ -1,0 +1,44 @@
+.sd-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sd-gap-3) var(--sd-gap-5);
+  flex-wrap: wrap;
+}
+
+.sd-page-header__copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-1);
+  min-width: 0;
+  flex: 1 1 24rem;
+}
+
+/* Título de pantalla: el paso «declaración» en Kanit Black, como los títulos de panel de Home */
+.sd-page-header__title {
+  margin: 0;
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-black);
+  line-height: 0.95;
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
+  text-wrap: balance;
+  color: var(--sd-ink);
+}
+
+.sd-page-header__description {
+  max-width: 62ch;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+  color: var(--sd-ink-soft);
+  text-wrap: pretty;
+}
+
+.sd-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-1);
+  flex-wrap: wrap;
+}

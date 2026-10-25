@@ -1,0 +1,64 @@
+.sd-navbar {
+  position: relative;
+  z-index: 5;
+}
+
+.sd-navbar__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sd-gap-3);
+  min-height: var(--sd-nav-height);
+  padding: 0 var(--sd-margin);
+}
+
+.sd-navbar__brand {
+  display: inline-flex;
+  border-radius: var(--sd-radius-pill);
+  transition: opacity var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-navbar__brand:hover {
+  opacity: 0.75;
+}
+
+.sd-navbar__brand:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: var(--sd-focus-offset);
+}
+
+.sd-navbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-1);
+}
+
+.sd-navbar__actions .sd-language-switch {
+  margin-right: var(--sd-gap-1);
+}
+
+/* Pantallas estrechas: la marca conserva el disco y su nombre accesible; las acciones no se recortan */
+@media (max-width: 560px) {
+  .sd-navbar .sd-wordmark__name {
+    position: absolute;
+    width: 1px;
+    height: 1px; /* taste-skill-ignore: solo-lectores, no es un filete */
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .sd-navbar__actions {
+    gap: 2px;
+  }
+
+  .sd-navbar__actions .sd-button {
+    padding: 0 0.875rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .sd-navbar__inner {
+    flex-wrap: wrap;
+    padding-block: var(--sd-gap-2);
+  }
+}

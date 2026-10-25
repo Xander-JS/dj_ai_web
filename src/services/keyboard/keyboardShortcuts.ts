@@ -9,6 +9,8 @@
  * - CUE es momentáneo: keydown inicia el CUE/CUP y keyup lo libera; perder el foco lo cancela.
  * - ← / → mueven el crossfader; mientras se mantiene una tecla selectora de mezcla
  *   (GAIN, HI, MID, LOW, FILTER de cada deck, reasignables) ajustan ese parámetro.
+ * - Shift + tecla de sección (1–7 por defecto, reasignables) abre Inicio, Biblioteca,
+ *   Playlists, Mixer, Sesiones, Ajustes o Mi perfil; se resuelve antes que las selectoras de mezcla.
  * - Al desactivar los atajos se retiran los oyentes, sin coste residual.
  */
 
@@ -21,6 +23,31 @@ export type ShortcutAction =
   | { type: 'crossfader'; direction: -1 | 1 }
   | { type: 'hotcue'; deckId: DeckId; slot: number }
   | { type: 'mix'; deckId: DeckId; param: MixParam; direction: -1 | 1 };
+
+/** Secciones principales de la consola alcanzables con Shift + tecla, en el orden de la barra lateral. */
+export type NavSection = 'home' | 'library' | 'playlists' | 'mixer' | 'sessions' | 'settings' | 'profile';
+export const NAV_SECTIONS: readonly NavSection[] = ['home', 'library', 'playlists', 'mixer', 'sessions', 'settings', 'profile'];
+/** Ruta de cada sección (la clave de traducción es `navigation.<sección>`). */
+export const NAV_SECTION_PATHS: Record<NavSection, string> = {
+  home: '/dashboard',
+  library: '/library',
+  playlists: '/playlists',
+  mixer: '/mixer',
+  sessions: '/sessions',
+  settings: '/settings',
+  profile: '/profile',
+};
+/** Tecla de cada sección como `KeyboardEvent.code`; siempre se combina con Shift. */
+export type NavigationBindings = Record<NavSection, string>;
+export const DEFAULT_NAVIGATION_BINDINGS: NavigationBindings = {
+  home: 'Digit1',
+  library: 'Digit2',
+  playlists: 'Digit3',
+  mixer: 'Digit4',
+  sessions: 'Digit5',
+  settings: 'Digit6',
+  profile: 'Digit7',
+};
 
 /** Paso del crossfader por pulsación (escala 0–100). */
 export const CROSSFADER_KEY_STEP = 5;
@@ -89,6 +116,38 @@ export function validateBinding(
   return null;
 }
 
+/**
+ * Teclas de navegación: letra o dígito, distinta de las demás secciones. Como siempre van con
+ * Shift no chocan con los atajos fijos (Shift + Espacio es Espacio, que no es válida) ni con las
+ * selectoras de mezcla, que se usan sin Shift.
+ */
+export function validateNavigationBinding(
+  bindings: NavigationBindings,
+  section: NavSection,
+  code: string,
+): Exclude<BindingError, 'reserved'> | null {
+  if (!/^(Key[A-Z]|Digit[0-9])$/.test(code)) return 'invalid';
+  if (NAV_SECTIONS.some((other) => other !== section && bindings[other] === code)) return 'duplicate';
+  return null;
+}
+
+export function sanitizeNavigationBindings(raw: unknown): NavigationBindings {
+  const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<NavSection, unknown>>;
+  const result = { ...DEFAULT_NAVIGATION_BINDINGS };
+  for (const section of NAV_SECTIONS) {
+    const code = source[section];
+    if (typeof code === 'string') result[section] = code;
+  }
+  const valid = NAV_SECTIONS.every((section) => validateNavigationBinding(result, section, result[section]) === null);
+  return valid ? result : { ...DEFAULT_NAVIGATION_BINDINGS };
+}
+
+/** Sección asociada a Shift + tecla, o null. */
+export function resolveNavigationShortcut(event: ShortcutKeyEvent, bindings: NavigationBindings): NavSection | null {
+  if (!event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return null;
+  return NAV_SECTIONS.find((section) => bindings[section] === event.code) ?? null;
+}
+
 /** Normaliza asignaciones guardadas: una entrada inválida o repetida vuelve a su tecla por defecto. */
 export function sanitizeShortcutBindings(raw: unknown): ShortcutBindings {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<MixShortcutId, unknown>>;
@@ -155,12 +214,17 @@ export function resolveShortcut(event: ShortcutKeyEvent, heldSelector: MixShortc
   return null;
 }
 
-/** Evita disparar atajos mientras el usuario escribe o maneja un control nativo. */
+/** Controles ARIA que usan Espacio/flechas como un control nativo (casillas, selectores, listas). */
+const FORM_CONTROL_ROLES = new Set(['checkbox', 'switch', 'radio', 'combobox', 'listbox', 'option']);
+
+/** Evita disparar atajos mientras el usuario escribe o maneja un control nativo (o su equivalente ARIA). */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as HTMLElement).tagName !== 'string') return false;
   const element = target as HTMLElement;
   const tag = element.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable === true;
+  const role = typeof element.getAttribute === 'function' ? element.getAttribute('role') : null;
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable === true
+    || (role !== null && FORM_CONTROL_ROLES.has(role));
 }
 
 /** Acciones del DJ que consumen los atajos (inyectables en pruebas). */
@@ -176,6 +240,8 @@ export interface ShortcutTarget {
   setHotCue(deckId: DeckId, slot: number): unknown;
   getMixValue(deckId: DeckId, param: MixParam): number;
   setMixValue(deckId: DeckId, param: MixParam, value: number): void;
+  /** Abre una sección de la consola; sin él los atajos de navegación no hacen nada. */
+  navigate?(section: NavSection): void;
 }
 
 interface ShortcutEventLike extends ShortcutKeyEvent {
@@ -189,6 +255,7 @@ interface ShortcutEventLike extends ShortcutKeyEvent {
 export function createShortcutHandlers(
   target: ShortcutTarget,
   getBindings: () => ShortcutBindings = () => DEFAULT_SHORTCUT_BINDINGS,
+  getNavigationBindings: () => NavigationBindings = () => DEFAULT_NAVIGATION_BINDINGS,
 ): {
   onKeyDown: (event: ShortcutEventLike) => void;
   onKeyUp: (event: ShortcutEventLike) => void;
@@ -207,6 +274,15 @@ export function createShortcutHandlers(
     // Un control enfocado que ya gestionó la tecla (p. ej. el botón CUE) tiene prioridad
     if (event.defaultPrevented || isEditableTarget(event.target)) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
+
+    // Antes que las selectoras: Shift + 5 abre una sección aunque 5 sea una selectora de mezcla
+    const section = target.navigate ? resolveNavigationShortcut(event, getNavigationBindings()) : null;
+    if (section) {
+      event.preventDefault();
+      if (!event.repeat) target.navigate!(section);
+      return;
+    }
+
     const bindings = getBindings();
 
     if (findMixShortcut(bindings, event.code)) {
@@ -280,8 +356,9 @@ export function installKeyboardShortcuts(
   target: ShortcutTarget,
   getBindings?: () => ShortcutBindings,
   win: Window = window,
+  getNavigationBindings?: () => NavigationBindings,
 ): () => void {
-  const { onKeyDown, onKeyUp, onBlur } = createShortcutHandlers(target, getBindings);
+  const { onKeyDown, onKeyUp, onBlur } = createShortcutHandlers(target, getBindings, getNavigationBindings);
   win.addEventListener('keydown', onKeyDown);
   win.addEventListener('keyup', onKeyUp);
   win.addEventListener('blur', onBlur);

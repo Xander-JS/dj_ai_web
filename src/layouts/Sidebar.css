@@ -1,47 +1,221 @@
-.sidebar-nav-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-decoration: none;
+/* ==========================================================================
+   Navegación lateral de la consola (Design System v2).
+   Un panel de hardware levantado sobre el papel: superficie un paso por encima,
+   filo de 1px, sombra corta y la rejilla perforada de un altavoz como textura.
+   Con Animaciones activadas, la rejilla se ilumina bajo el cursor con el acento
+   (luz localizada + filo reactivo); sin ellas, el panel queda igual pero quieto.
+   ========================================================================== */
+
+/* Posición de la luz: propiedades registradas para que el foco persiga al cursor con suavidad */
+@property --sd-light-x {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
 }
 
-.sidebar-nav-item:hover {
-  background-color: var(--bg-surface-hover);
-  color: var(--text-primary);
-}
-
-.sidebar-nav-item.active {
-  color: var(--color-primary-500);
-  background-color: var(--bg-surface-active);
+@property --sd-light-y {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
 }
 
 .sidebar-aside {
-  padding: var(--space-4) 0;
+  padding: var(--sd-gap-2) var(--sd-gap-1) var(--sd-gap-3) var(--sd-gap-3);
+}
+
+.sidebar-panel {
+  /* Filo y rejilla: tinta muy diluida, legible en ambos temas */
+  --sd-sidebar-edge: color-mix(in srgb, var(--sd-ink) 10%, transparent);
+  --sd-sidebar-dot: color-mix(in srgb, var(--sd-ink) 11%, transparent);
+  --sd-sidebar-grille: radial-gradient(circle at center, var(--sd-sidebar-dot) 0.85px, transparent 1.35px);
+  --sd-light-radius: 7.5rem;
+
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--sd-gap-2) 0;
+  border-radius: var(--sd-radius-panel);
+  background-color: var(--sd-surface);
+  /* Profundidad moderada: filo interior + una sombra corta con desplazamiento, sin halo */
+  box-shadow:
+    inset 0 0 0 1px var(--sd-sidebar-edge),
+    0 1px 2px rgb(0 0 0 / 0.06),
+    0 12px 28px -20px rgb(0 0 0 / 0.45);
+  contain: paint;
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    --sd-light-x var(--sd-duration-fast) var(--sd-ease-out),
+    --sd-light-y var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sidebar-panel.is-light-snapping {
+  transition: background-color var(--sd-duration-base) var(--sd-ease-out);
+}
+
+[data-theme='dark'] .sidebar-panel {
+  box-shadow:
+    inset 0 0 0 1px var(--sd-sidebar-edge),
+    0 14px 30px -18px rgb(0 0 0 / 0.9);
+}
+
+/* Rejilla perforada en reposo */
+.sidebar-panel::before,
+.sidebar-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--sd-sidebar-grille);
+  background-size: 7px 7px;
+  background-position: 3px 3px;
+  pointer-events: none;
+}
+
+/* Rejilla iluminada: las perforaciones bajo el cursor toman el acento, con un charco de luz tenue */
+.sidebar-panel::after {
+  background-image:
+    radial-gradient(circle at center, var(--sd-accent) 0.85px, transparent 1.35px),
+    radial-gradient(circle var(--sd-light-radius) at var(--sd-light-x) var(--sd-light-y), color-mix(in srgb, var(--sd-accent) 9%, transparent), transparent 75%);
+  background-size: 7px 7px, 100% 100%;
+  background-position: 3px 3px, 0 0;
+  -webkit-mask-image: radial-gradient(circle var(--sd-light-radius) at var(--sd-light-x) var(--sd-light-y), #000 0%, rgb(0 0 0 / 0.35) 45%, transparent 100%);
+  mask-image: radial-gradient(circle var(--sd-light-radius) at var(--sd-light-x) var(--sd-light-y), #000 0%, rgb(0 0 0 / 0.35) 45%, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--sd-duration-base) var(--sd-ease-out);
+}
+
+/* Filo reactivo: el borde se enciende solo en el tramo cercano al cursor */
+.sidebar-panel__edge {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: radial-gradient(circle calc(var(--sd-light-radius) * 0.9) at var(--sd-light-x) var(--sd-light-y), var(--sd-accent), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sidebar-panel[data-light='on']::after,
+.sidebar-panel[data-light='on'] .sidebar-panel__edge {
+  opacity: 1;
+}
+
+/* Sin animaciones (Ajustes o sistema) o sin hover: la luz no existe; el panel conserva su diseño */
+:root[data-animations='off'] .sidebar-panel::after,
+:root[data-animations='off'] .sidebar-panel__edge {
+  display: none;
+}
+
+@media (hover: none), (prefers-reduced-motion: reduce) {
+  .sidebar-panel::after,
+  .sidebar-panel__edge {
+    display: none;
+  }
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: 0 var(--space-2);
+  gap: 0.25rem;
+  padding: 0 var(--sd-gap-2);
+}
+
+/* Píldoras de navegación; la activa en tinta con un piloto del acento encendido */
+.sidebar-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-2);
+  min-height: var(--sd-control-height);
+  padding: 0 1rem;
+  border-radius: var(--sd-radius-pill);
+  color: var(--sd-ink-soft);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sidebar-nav-label {
+  color: var(--sd-ink);
+  transition: color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+/* Sobre la superficie del panel el hover sube al papel */
+.sidebar-nav-item:hover {
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+}
+
+.sidebar-nav-item.active {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sidebar-nav-item.active .sidebar-nav-label {
+  color: var(--sd-paper);
+}
+
+.sidebar-nav-item.active::after {
+  content: '';
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: auto;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-indicator);
+}
+
+.sidebar-nav-item:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 2px;
 }
 
 /* Tablet: the sidebar collapses into an icon rail; labels stay available to assistive tech */
 @media (max-width: 1024px) {
   .sidebar-aside {
-    padding: var(--space-3) 0;
+    padding: var(--sd-gap-2) 0.375rem var(--sd-gap-3);
+  }
+
+  .sidebar-panel {
+    --sd-light-radius: 5rem;
+
+    border-radius: var(--sd-radius-panel);
+  }
+
+  .sidebar-nav {
+    align-items: center;
+    padding: 0;
   }
 
   .sidebar-nav-item {
     justify-content: center;
-    min-height: var(--touch-target-min);
-    padding: var(--space-2);
+    width: var(--sd-control-height);
+    min-height: var(--sd-control-height);
+    padding: 0;
+  }
+
+  .sidebar-nav-item.active::after {
+    position: absolute;
+    top: 0.3125rem;
+    right: 0.3125rem;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    margin: 0;
   }
 
   .sidebar-nav-label {
@@ -51,5 +225,19 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+}
+
+@media (pointer: coarse) {
+  .sidebar-nav-item {
+    min-height: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-panel,
+  .sidebar-nav-item,
+  .sidebar-nav-label {
+    transition-duration: 0ms;
   }
 }

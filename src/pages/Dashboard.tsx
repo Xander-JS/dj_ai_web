@@ -1,15 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Play, Music, FolderPlus } from 'lucide-react';
-import { Card, CardBody } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { IconButton } from '../components/ui/IconButton';
-import { StateView } from '../components/ui/StateView';
+import { ArrowRight, Clock, FolderPlus, Music, Pause, Play } from 'lucide-react';
+import { Button } from '../components/atoms/Button';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
+import { Tag } from '../components/atoms/Tag';
+import { EmptyState } from '../components/molecules/EmptyState';
+import { Panel } from '../components/molecules/Panel';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { useSmoothScroll } from '../design-system/smoothScroll';
+import { VINYL_IMAGE } from '../components/organisms/landingAssets';
 import { SmartRecommendationCard } from '../components/dashboard/SmartRecommendationCard';
+import { resolveReferenceDeck, type ReferenceDeck } from '../components/dashboard/referenceDeck';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary } from '../services/localLibraryImport';
 import { analysisSyncManager } from '../services/analysis';
+import { toastStore } from '../services/notifications/toastService';
 import { useDJStore } from '../store/useDJStore';
 import { computeLibraryStats, getRecentlyAddedTracks } from '../utils/libraryStats';
 import type { Track } from '../types/track';
@@ -19,11 +26,17 @@ const RECENT_TRACKS_LIMIT = 4;
 
 export const Dashboard: React.FC = () => {
   const { t } = useTranslation();
-  const { loadTrackToDeckA } = useDJStore();
+  const { deckA, deckB, loadTrackToDeck, playDeck, togglePlayDeck } = useDJStore();
   const navigate = useNavigate();
+  // Deck elegido en «Recomendaciones de mezcla»; el clic en una pista reciente carga en él
+  const [selectedDeck, setSelectedDeck] = useState<ReferenceDeck | null>(null);
+  const targetDeck = resolveReferenceDeck(selectedDeck, Boolean(deckA.track), Boolean(deckB.track));
+  const targetDeckState = targetDeck === 'A' ? deckA : deckB;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const bandTitleId = useId();
+  const smoothScrollRef = useSmoothScroll<HTMLDivElement>();
 
   // Carga desde IndexedDB y suscripción a resultados de análisis para mantener las métricas al día
   useEffect(() => {
@@ -69,124 +82,151 @@ export const Dashboard: React.FC = () => {
   const stats = useMemo(() => computeLibraryStats(localTracks), [localTracks]);
   const recentTracks = useMemo(() => getRecentlyAddedTracks(localTracks, RECENT_TRACKS_LIMIT), [localTracks]);
 
+  const handleLoadRecent = async (track: Track, deck: ReferenceDeck = targetDeck): Promise<boolean> => {
+    const loaded = await loadTrackToDeck(deck, track);
+    const params = { title: track.title, deck: `Deck ${deck}` };
+    // Confirmación discreta en la esquina: no desplaza la lista de recientes
+    if (loaded) toastStore.show('success', t('library.load_success', params));
+    else toastStore.show('error', t('library.load_error', params));
+    return loaded;
+  };
+
+  // Play en la lista: carga en el deck elegido en Recomendaciones y lo reproduce cuando la carga
+  // termina; si la pista ya está en ese deck, Play/Pausa sin recargarla ni reiniciarla
+  const handlePlayRecent = async (track: Track) => {
+    const deck = targetDeck;
+    if (targetDeckState.track?.id === track.id) {
+      await togglePlayDeck(deck);
+      return;
+    }
+    if (await handleLoadRecent(track, deck)) await playDeck(deck);
+  };
+
+  const readouts = [
+    { value: String(stats.totalTracks), label: t('dashboard.library_tracks') },
+    { value: String(stats.analyzedTracks), label: t('dashboard.analyzed_tracks') },
+    { value: `${stats.totalHours} h`, label: t('dashboard.library_hours') },
+  ];
+
   return (
-    <div className="dashboard-container">
+    <ConsoleTemplate ref={smoothScrollRef} className="sd-home sd-scroll-area">
       <input
         type="file"
         ref={fileInputRef}
         multiple
         accept=".mp3,.wav,audio/mpeg,audio/wav,audio/mp3"
-        style={{ display: 'none' }}
+        hidden
         onChange={(e) => handleImportFiles(e.target.files)}
       />
 
-      {/* Header Area */}
-      <div className="dashboard-header">
-        <div>
-          <h2 className="dashboard-title">{t('dashboard.welcome')}</h2>
-          <p className="dashboard-subtitle">
-            DJ_System v1.0
-          </p>
-        </div>
-        <div className="dashboard-actions">
-          <Button variant="outline" onClick={() => navigate('/mixer')}>{t('common.mix')}</Button>
-          <Button
-            variant="primary"
-            disabled={isImporting}
-            title={t('library.import_btn')}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <FolderPlus size={18} />
-            {isImporting ? t('library.importing') : t('dashboard.quick_actions')}
-          </Button>
-        </div>
-      </div>
+      {/* Cabina: qué es esta pantalla, las dos acciones principales y el estado de la biblioteca */}
+      <section className="sd-home-band sd-field-sage" aria-labelledby={bandTitleId}>
+        <picture className="sd-home-band__visual" aria-hidden="true">
+          <source srcSet={VINYL_IMAGE.webp} type="image/webp" />
+          <img src={VINYL_IMAGE.src} width={VINYL_IMAGE.width} height={VINYL_IMAGE.height} alt="" loading="lazy" decoding="async" />
+        </picture>
 
-      {/* Grid Content */}
-      <div className="dashboard-grid">
+        <div className="sd-home-band__copy">
+          <h2 id={bandTitleId} className="sd-home-band__title">{t('dashboard.title')}</h2>
+          <p className="sd-home-band__subtitle">{t('dashboard.subtitle')}</p>
+          <div className="sd-home-band__actions">
+            <Button variant="accent" size="lg" onClick={() => navigate('/mixer')}>
+              {t('common.mix')}
+              <Icon icon={ArrowRight} size="md" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="lg"
+              disabled={isImporting}
+              aria-busy={isImporting}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon icon={FolderPlus} size="md" />
+              {isImporting ? t('library.importing') : t('library.import_btn')}
+            </Button>
+          </div>
+        </div>
 
-        {/* Recently added local tracks */}
-        <Card elevated>
-          <CardBody>
-            <div className="dashboard-section-header">
-              <h3 className="dashboard-section-title">{t('dashboard.recent')}</h3>
+        <dl className="sd-home-band__readouts">
+          {readouts.map((item) => (
+            <div key={item.label} className="sd-home-readout">
+              <dt className="sd-home-readout__label">{item.label}</dt>
+              <dd className="sd-home-readout__value sd-num">{item.value}</dd>
             </div>
-            {recentTracks.length === 0 ? (
-              <StateView
-                status="empty"
-                icon={Music}
-                title={t('dashboard.recent_empty_title')}
-                description={t('dashboard.recent_empty_desc')}
-              />
-            ) : (
-              <div className="dashboard-track-list">
-                {recentTracks.map(track => {
-                  const isAnalyzed = track.analysis?.status === 'analyzed';
-                  return (
-                    <div key={track.id} className="track-item">
-                      <div className="track-info">
-                        <div className="track-cover-mini"></div>
-                        <div>
-                          <div className="track-title">{track.title}</div>
-                          <div className="track-meta">
-                            <span>{track.artist || t('dj.unknown_artist')}</span>
-                            {isAnalyzed && track.analysis.bpm ? (
-                              <>
-                                <span>•</span>
-                                <span>{Math.round(track.analysis.bpm)} BPM</span>
-                              </>
-                            ) : null}
-                            {isAnalyzed && track.analysis.key ? (
-                              <>
-                                <span>•</span>
-                                <span>{track.analysis.key}</span>
-                              </>
-                            ) : null}
-                            <span>•</span>
-                            <span>{track.durationFormatted}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <IconButton
-                        icon={<Play size={16} />}
-                        size="sm"
-                        variant="ghost"
-                        title={t('library.load_deck_a')}
-                        aria-label={t('library.load_deck_a')}
-                        onClick={() => void loadTrackToDeckA(track)}
-                      />
+          ))}
+        </dl>
+      </section>
+
+      <div className="sd-home-grid">
+        {/* Pistas añadidas recientemente a la biblioteca local */}
+        <Panel
+          title={t('dashboard.recent')}
+          icon={Clock}
+          className="sd-home-recent"
+          description={recentTracks.length > 0 ? t('dashboard.recent_target', { deck: targetDeck }) : undefined}
+        >
+          {recentTracks.length === 0 ? (
+            <EmptyState
+              icon={Music}
+              title={t('dashboard.recent_empty_title')}
+              description={t('dashboard.recent_empty_desc')}
+            />
+          ) : (
+            <ul className="sd-track-list">
+              {recentTracks.map((track) => {
+                const isAnalyzed = track.analysis?.status === 'analyzed';
+                const artist = track.artist || t('dj.unknown_artist');
+                const isPreviewing = targetDeckState.track?.id === track.id && targetDeckState.playbackState === 'playing';
+                return (
+                  <li key={track.id} className="sd-track-row sd-track-row--interactive">
+                    {/* Botón principal: su área se extiende a toda la fila; Play queda por encima */}
+                    <button
+                      type="button"
+                      className="sd-track-row__load"
+                      aria-label={t('dashboard.recent_load_aria', { title: track.title, artist, deck: targetDeck })}
+                      title={t('dashboard.recent_load_hint', { deck: targetDeck })}
+                      onClick={() => {
+                        // Ya asignada a ese deck: no se recarga, así el clic nunca detiene ni reinicia la reproducción
+                        if (targetDeckState.track?.id !== track.id) void handleLoadRecent(track);
+                      }}
+                    >
+                      <span className="sd-track-row__info">
+                        <span className="sd-track-row__title">{track.title}</span>
+                        <span className="sd-track-row__artist">{artist}</span>
+                      </span>
+                    </button>
+                    {/* Huecos fijos para BPM, tonalidad y duración: alineados entre filas aunque falte un dato */}
+                    <div className="sd-track-row__meta">
+                      <span className="sd-track-row__slot sd-track-row__slot--bpm">
+                        {isAnalyzed && track.analysis.bpm ? (
+                          <Tag tone="paper" className="sd-num">{Math.round(track.analysis.bpm)} BPM</Tag>
+                        ) : null}
+                      </span>
+                      <span className="sd-track-row__slot sd-track-row__slot--key">
+                        {isAnalyzed && track.analysis.key ? (
+                          <Tag tone="paper">{track.analysis.key}</Tag>
+                        ) : null}
+                      </span>
+                      <span className="sd-track-row__duration sd-num">{track.durationFormatted}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardBody>
-        </Card>
+                    <IconButton
+                      icon={<Icon icon={isPreviewing ? Pause : Play} size="sm" />}
+                      label={t(isPreviewing ? 'dashboard.recent_pause_aria' : 'dashboard.recent_play_aria', { title: track.title })}
+                      aria-pressed={isPreviewing}
+                      size="sm"
+                      variant="ink"
+                      className="sd-track-row__play"
+                      onClick={() => void handlePlayRecent(track)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
 
-        {/* Stats & Smart Recommendations */}
-        <div className="dashboard-stats-col">
-
-          <Card>
-            <CardBody className="dashboard-stats-card">
-              <div className="stat-card">
-                <span className="stat-value">{stats.totalTracks}</span>
-                <span className="stat-label">{t('dashboard.library_tracks')}</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.analyzedTracks}</span>
-                <span className="stat-label">{t('dashboard.analyzed_tracks')}</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.totalHours}h</span>
-                <span className="stat-label">{t('dashboard.library_hours')}</span>
-              </div>
-            </CardBody>
-          </Card>
-
-          <SmartRecommendationCard />
-
-        </div>
+        <SmartRecommendationCard selectedDeck={selectedDeck} onSelectedDeckChange={setSelectedDeck} />
       </div>
-    </div>
+    </ConsoleTemplate>
   );
 };

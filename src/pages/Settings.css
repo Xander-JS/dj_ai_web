@@ -1,95 +1,747 @@
-.settings-container {
-  display: flex;
-  height: 100%;
-  padding: var(--space-6);
-  gap: var(--space-8);
+/* ==========================================================================
+   Ajustes: selector de categorías a la izquierda (como el selector de canal
+   de una mesa) y una vista por categoría con sus lecturas de valor vigente.
+   ========================================================================== */
+
+.sd-settings__layout {
+  display: grid;
+  grid-template-columns: minmax(13rem, 15.5rem) minmax(0, 1fr);
+  /* Navegación y vista arrancan a la misma altura: el borde superior de ambas columnas se
+     alinea con el título de la categoría (los títulos recortan su interlineado superior) */
+  align-items: start;
+  gap: var(--sd-gap-6);
+  /* Ocupa el alto del área de trabajo: solo el contenido de la categoría se desplaza */
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
 }
 
-.settings-sidebar {
-  width: 250px;
+/* --------------------------------------------------------------------------
+   Columna de categorías
+   -------------------------------------------------------------------------- */
+.sd-settings__aside {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--sd-gap-2);
+  min-width: 0;
 }
 
-.settings-tab {
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+/* Ambos títulos recortan el aire sobre las mayúsculas: el borde superior de su caja es el de
+   la letra, así «Ajustes» y el título de la categoría quedan a la misma altura sea cual sea su tamaño */
+.sd-settings__title,
+.sd-settings__view-title {
+  text-box-trim: trim-start;
+  text-box-edge: cap alphabetic;
+}
+
+.sd-settings__title {
+  margin: 0;
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-black);
+  line-height: 0.95;
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.sd-settings__intro {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
+  text-wrap: pretty;
+}
+
+.sd-settings__tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: var(--sd-gap-2);
+}
+
+.sd-settings__tab {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--sd-gap-2);
+  min-height: var(--sd-control-height);
+  padding: 0 1.125rem;
+  border-radius: var(--sd-radius-pill);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--sd-ink-soft);
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
 }
 
-.settings-tab:hover {
-  background-color: var(--bg-surface-hover);
-  color: var(--text-primary);
+.sd-settings__tab:hover {
+  background-color: var(--sd-surface);
+  color: var(--sd-ink);
 }
 
-.settings-tab.active {
-  background-color: var(--color-primary-500);
-  color: var(--text-inverse);
+.sd-settings__tab:active {
+  transform: scale(0.98);
 }
 
-.settings-content {
-  flex: 1;
-  max-width: 800px;
-  background-color: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  padding: var(--space-8);
+.sd-settings__tab.is-active {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sd-settings__tab:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 2px;
+}
+
+.sd-settings__tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   Vista de la categoría
+   -------------------------------------------------------------------------- */
+/* Zona desplazable de la categoría: alto de la columna y barra al borde de la columna,
+   así la vista conserva su ancho máximo */
+.sd-settings__view-scroll {
+  align-self: stretch;
+  min-width: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.settings-section-title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin-top: 0;
-  margin-bottom: var(--space-6);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border-base);
-}
-
-.settings-group {
-  margin-bottom: var(--space-8);
+.sd-settings__view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--sd-gap-4);
+  min-width: 0;
+  max-width: 64rem;
+  container-type: inline-size;
 }
 
-.settings-group-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-medium);
-  margin: 0 0 var(--space-2) 0;
+.sd-settings__view-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sd-gap-3);
 }
 
-.settings-option-card {
+.sd-settings__view-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-1);
+  min-width: 0;
+}
+
+.sd-settings__view-title {
+  margin: 0;
+  font-size: max(2.5rem, min(var(--sd-text-section), 9cqi));
+  font-weight: var(--sd-weight-black);
+  line-height: var(--sd-leading-display);
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.sd-settings__view-desc {
+  max-width: 60ch;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+  color: var(--sd-ink-soft);
+  text-wrap: pretty;
+}
+
+/* Reserva la altura del sello para que su aparición no desplace la cabecera */
+.sd-settings__applied {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 7rem;
+  min-height: 1.75rem;
+}
+
+/* Lecturas de valor vigente: pantallas de consola sobre la superficie */
+.sd-settings-readouts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sd-gap-1);
+  margin: var(--sd-gap-1) 0 0;
+}
+
+.sd-settings-readout {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  flex: 0 1 auto;
+  min-width: 8.5rem;
+  max-width: 100%;
+  padding: 0.75rem 1.125rem 0.875rem;
+  border-radius: var(--sd-radius-inset);
+  background-color: var(--sd-surface);
+}
+
+.sd-settings-readout__label {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.25;
+  color: var(--sd-ink-soft);
+}
+
+/* La cifra entra desde abajo y sale por arriba, recortada como un contador mecánico */
+.sd-settings-readout__value {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-black);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.sd-settings-readout__text {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.sd-settings__view-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+  min-width: 0;
+}
+
+/* Filas de ajustes: separadas por aire, sin filetes */
+.sd-settings__view-body .sd-panel__body {
+  gap: var(--sd-gap-5);
+}
+
+.sd-settings__view-body .sd-panel__header + .sd-panel__body {
+  margin-top: var(--sd-gap-1);
+}
+
+.sd-settings__muted {
+  font-size: var(--sd-text-note);
+  color: var(--sd-ink-soft);
+}
+
+.sd-settings__value-line {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  color: var(--sd-ink);
+}
+
+/* Fader de tolerancia de SYNC con su lectura grande */
+.sd-settings__fader-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sd-gap-4);
+  width: 100%;
+  max-width: 36rem;
+}
+
+.sd-settings__fader-row .sd-fader {
+  flex: 1;
+}
+
+.sd-settings__fader-value {
+  min-width: 4.5ch;
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-black);
+  line-height: 2.25rem;
+  letter-spacing: -0.02em;
+  text-align: right;
+}
+
+/* --------------------------------------------------------------------------
+   Muestras de tema, idioma y acento
+   -------------------------------------------------------------------------- */
+.sd-theme-preview,
+.sd-language-preview {
+  display: flex;
+  width: 11.5rem;
+  height: 7.25rem;
+}
+
+.sd-theme-preview {
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background-color: var(--sd-paper);
+}
+
+.sd-theme-preview__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 12px;
+}
+
+.sd-theme-preview__mark {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink);
+  box-shadow: inset 0 0 0 3px var(--sd-ink), inset 0 0 0 6px var(--sd-accent);
+}
+
+.sd-theme-preview__body {
+  display: grid;
+  grid-template-columns: 32% 1fr;
+  gap: 6px;
+  flex: 1;
+}
+
+.sd-theme-preview__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sd-theme-preview__pill {
+  height: 9px;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-surface);
+}
+
+.sd-theme-preview__pill--active {
+  background-color: var(--sd-ink);
+}
+
+.sd-theme-preview__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 8px;
+  background-color: var(--sd-surface);
+}
+
+.sd-theme-preview__line {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink);
+}
+
+.sd-theme-preview__line--short {
+  width: 55%;
+  background-color: var(--sd-ink-soft);
+}
+
+.sd-theme-preview__button {
+  width: 46%;
+  height: 12px;
+  margin-top: auto;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-accent);
+}
+
+.sd-language-preview {
+  align-items: flex-end;
+  padding: 0.75rem 1rem;
+  background-color: var(--sd-paper);
+}
+
+.sd-language-preview__code {
+  font-size: 3.5rem;
+  font-weight: var(--sd-weight-black);
+  line-height: var(--sd-leading-display);
+  letter-spacing: var(--sd-tracking-display);
+  color: var(--sd-ink);
+}
+
+.sd-choice-tile.is-checked .sd-language-preview {
+  background-color: var(--sd-field-acid);
+}
+
+.sd-choice-tile.is-checked .sd-language-preview__code {
+  color: var(--sd-field-ink);
+}
+
+.sd-accent-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: var(--sd-accent);
+}
+
+/* Movimiento: qué cubre la preferencia, como etiquetas; crece con cada animación nueva */
+.sd-settings__motion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-2);
+}
+
+.sd-settings__motion-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.sd-settings__motion-label {
+  margin-right: 0.25rem;
+  font-size: var(--sd-text-note);
+  color: var(--sd-ink-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Atajos
+   -------------------------------------------------------------------------- */
+.sd-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+}
+
+.sd-shortcuts.is-disabled .sd-shortcut-decks {
+  opacity: 0.55;
+}
+
+.sd-keycaps {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Tecla: papel con el canto inferior marcado (recorrido de la tecla), legible en ambos temas */
+.sd-keycap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem 3px;
+  border-radius: 0.5rem;
+  background-color: var(--sd-paper);
+  box-shadow: inset 0 -3px 0 var(--sd-ink-soft);
+  color: var(--sd-ink);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sd-keycap--strong {
+  box-shadow: inset 0 -3px 0 var(--sd-ink);
+  font-weight: var(--sd-weight-black);
+}
+
+.sd-shortcut-decks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sd-gap-4);
+  transition: opacity var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-shortcut-deck {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sd-gap-3);
+}
+
+/* Letra del deck como la serigrafía de un reproductor */
+.sd-shortcut-deck__name {
+  font-size: 3.5rem;
+  font-weight: var(--sd-weight-black);
+  line-height: var(--sd-leading-display);
+  letter-spacing: var(--sd-tracking-display);
+  color: var(--sd-ink);
+}
+
+/* Una rejilla por deck: la columna de teclas mide lo que su tecla más ancha */
+.sd-shortcut-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 0.625rem var(--sd-gap-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-shortcut {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.sd-shortcut__action {
+  font-size: var(--sd-text-note);
+  line-height: 1.35;
+  color: var(--sd-ink);
+}
+
+.sd-bindings {
+  overflow-x: auto;
+}
+
+.sd-bindings__table th {
+  position: static;
+  background-color: transparent;
+}
+
+.sd-bindings__table tbody tr:hover td {
+  background-color: transparent;
+}
+
+.sd-bindings__param {
+  font-weight: var(--sd-weight-black);
+  letter-spacing: 0.02em;
+  color: var(--sd-ink);
+}
+
+.sd-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 9.5rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--sd-radius-inset);
+  color: var(--sd-ink);
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    box-shadow var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-binding:hover {
+  background-color: var(--sd-paper);
+}
+
+.sd-binding:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 1px;
+}
+
+.sd-binding__plus {
+  padding: 0 0.125rem;
+  font-size: var(--sd-text-note);
+  color: var(--sd-ink-soft);
+}
+
+/* Esperando tecla: tinta llena y un aro que respira hasta que llegue la pulsación */
+.sd-binding.is-listening {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+  animation: sd-binding-listen 1.2s var(--sd-ease-out) infinite;
+}
+
+.sd-binding__prompt {
+  padding: 0 0.5rem;
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  white-space: nowrap;
+}
+
+@keyframes sd-binding-listen {
+  0% { box-shadow: 0 0 0 0 var(--sd-ink); }
+  100% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* --------------------------------------------------------------------------
+   Biblioteca
+   -------------------------------------------------------------------------- */
+.sd-storage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+}
+
+.sd-storage__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--sd-gap-3);
+  margin: 0;
+}
+
+.sd-storage__figure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.sd-storage__figure dt {
+  font-size: var(--sd-text-note);
+  color: var(--sd-ink-soft);
+}
+
+.sd-storage__figure dd {
+  margin: 0;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.3;
+}
+
+/* Borrado total: campo ácido (requiere atención), al final y con su consecuencia en palabras */
+.sd-danger-zone {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4);
-  background-color: var(--bg-base);
-  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+  gap: var(--sd-gap-3) var(--sd-gap-5);
+  padding: var(--sd-panel-padding);
+  border-radius: var(--sd-radius-panel);
 }
 
-.settings-option-title {
-  font-weight: var(--font-weight-medium);
-}
-
-.settings-option-desc {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-.settings-button-group {
+.sd-danger-zone__copy {
   display: flex;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: 0.375rem;
+  flex: 1 1 22rem;
+  min-width: 0;
 }
 
-.settings-placeholder {
-  color: var(--text-secondary);
+.sd-danger-zone__title {
+  margin: 0;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-black);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.sd-danger-zone__description {
+  max-width: 60ch;
+  font-size: var(--sd-text-note);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
+}
+
+/* --------------------------------------------------------------------------
+   General (cuenta)
+   -------------------------------------------------------------------------- */
+.sd-account__identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sd-gap-3) var(--sd-gap-4);
+}
+
+.sd-account__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.sd-account__name {
+  overflow: hidden;
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-black);
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sd-account__email {
+  overflow: hidden;
+  font-size: var(--sd-text-note);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sd-ink-soft);
+}
+
+.sd-account__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-1);
+}
+
+/* --------------------------------------------------------------------------
+   Diálogos de confirmación
+   -------------------------------------------------------------------------- */
+.sd-settings__dialog-text {
+  font-size: var(--sd-text-note);
+  line-height: 1.5;
+  color: var(--sd-ink-soft);
+  text-wrap: pretty;
+}
+
+.sd-settings__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--sd-gap-1);
+}
+
+/* --------------------------------------------------------------------------
+   Tableta: las categorías pasan a filas sobre la vista
+   -------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .sd-settings__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--sd-gap-4);
+  }
+
+  .sd-settings__aside {
+    position: static;
+  }
+
+  /* Todas las categorías a la vista: la fila salta de línea en vez de esconder pestañas */
+  .sd-settings__tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-top: 0;
+  }
+
+  .sd-settings__tab {
+    flex: none;
+    font-size: var(--sd-text-note);
+  }
+}
+
+@container (max-width: 40rem) {
+  .sd-shortcut-decks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sd-settings__view-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sd-settings__applied {
+    justify-content: flex-start;
+    min-height: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .sd-settings__tab {
+    min-height: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-settings__tab,
+  .sd-binding,
+  .sd-shortcut-decks {
+    transition-duration: 0ms;
+  }
+
+  .sd-binding.is-listening {
+    animation: none;
+  }
 }

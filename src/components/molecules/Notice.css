@@ -1,0 +1,36 @@
+.sd-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-2);
+  min-height: var(--sd-control-height);
+  padding: 0.5rem 0.5rem 0.5rem 1.125rem;
+  border-radius: var(--sd-radius-inset);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.45;
+}
+
+.sd-notice--warning,
+.sd-notice--info {
+  background-color: var(--sd-surface);
+  color: var(--sd-ink);
+  --sd-ghost-hover: var(--sd-paper);
+}
+
+.sd-notice__icon {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+}
+
+.sd-notice__body {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0;
+  overflow-wrap: anywhere;
+}
+
+.sd-notice__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sd-gap-1);
+}

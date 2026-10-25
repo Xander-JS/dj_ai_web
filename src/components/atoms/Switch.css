@@ -1,0 +1,93 @@
+.sd-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 3.25rem;
+  height: 1.875rem;
+}
+
+/* El checkbox real cubre el control: recibe clic, foco y teclado */
+.sd-switch__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.sd-switch__track {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 3px;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-field-bg, var(--sd-surface));
+  box-shadow: inset 0 0 0 2px var(--sd-ink-soft);
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    box-shadow var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-switch__thumb {
+  width: calc(1.875rem - 6px);
+  height: calc(1.875rem - 6px);
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink-soft);
+  transition:
+    transform var(--sd-duration-base) var(--sd-ease-out),
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    width var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-switch__input:hover:not(:disabled) + .sd-switch__track {
+  box-shadow: inset 0 0 0 2px var(--sd-ink);
+}
+
+/* Al pulsar, el pomo se estira como un fader que arranca */
+.sd-switch__input:active:not(:disabled) + .sd-switch__track .sd-switch__thumb {
+  width: calc(1.875rem + 2px);
+}
+
+/* Encendido: pista de tinta y pomo encendido en el acento, como el piloto de un canal activo */
+.sd-switch__input:checked + .sd-switch__track {
+  background-color: var(--sd-ink);
+  box-shadow: inset 0 0 0 2px var(--sd-ink);
+}
+
+.sd-switch__input:checked + .sd-switch__track .sd-switch__thumb {
+  background-color: var(--sd-indicator);
+  transform: translateX(calc(3.25rem - 1.875rem));
+}
+
+/* Sobre un campo de color el piloto pasa a tinta, igual que la pista: el pomo vuelve al papel */
+:is(.sd-field-sage, .sd-field-acid, .sd-field-accent) .sd-switch__input:checked + .sd-switch__track .sd-switch__thumb {
+  background-color: var(--sd-paper);
+}
+
+.sd-switch__input:checked:active:not(:disabled) + .sd-switch__track .sd-switch__thumb {
+  transform: translateX(calc(3.25rem - 1.875rem - 8px));
+}
+
+.sd-switch__input:focus-visible + .sd-switch__track {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 2px;
+}
+
+.sd-switch__input:disabled {
+  cursor: not-allowed;
+}
+
+.sd-switch__input:disabled + .sd-switch__track {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-switch__track,
+  .sd-switch__thumb {
+    transition-duration: 0ms;
+  }
+}

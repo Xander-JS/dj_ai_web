@@ -1,0 +1,375 @@
+/* ==========================================================================
+   SYSTEM DJ — Design System v2 (foundations)
+   Tokens con prefijo --sd-* para la nueva identidad visual. Conviven con los
+   tokens heredados de index.css hasta que cada pantalla se migre.
+   Mundo visual: póster plano — fondo papel, tinta negra, naranja de acción y
+   campos planos salvia, amarillo ácido y negro. Sin degradados, cristal ni
+   sombras en reposo; las superficies se separan por cambio de color.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-300.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Kanit';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('/assets/fonts/kanit-900.woff2') format('woff2');
+}
+
+:root {
+  /* TYPOGRAPHY — una sola familia; los pesos hacen la jerarquía */
+  --sd-font: 'Kanit', system-ui, sans-serif;
+  --sd-weight-light: 300;
+  --sd-weight-regular: 400;
+  --sd-weight-medium: 500;
+  --sd-weight-black: 900;
+
+  /* Cinco pasos de tamaño visibles: póster, sección, declaración, cuerpo, nota */
+  /* El cartel se ajusta al ancho de su contenedor (container-type: inline-size) */
+  --sd-text-poster: 21.1cqi;
+  --sd-text-section: clamp(2.5rem, 7.4vw, 7.5rem);
+  --sd-text-statement: clamp(1.375rem, 2.3vw, 2.25rem);
+  --sd-text-body: clamp(1rem, 0.95rem + 0.25vw, 1.1875rem);
+  --sd-text-note: 0.9375rem;
+
+  --sd-leading-display: 0.86;
+  --sd-leading-statement: 1.25;
+  --sd-leading-body: 1.55;
+  --sd-tracking-display: -0.03em;
+
+  /* SPACE — un par de márgenes exteriores para toda la página */
+  --sd-margin: clamp(1rem, 2.4vw, 2.25rem);
+  --sd-gap-1: 0.5rem;
+  --sd-gap-2: 0.75rem;
+  --sd-gap-3: 1rem;
+  --sd-gap-4: 1.5rem;
+  --sd-gap-5: 2.5rem;
+  --sd-gap-6: 4rem;
+  --sd-section-gap: clamp(5rem, 11vw, 10rem);
+
+  /* SHAPE — un radio grande para paneles; las acciones son píldoras */
+  --sd-radius-panel: 2rem;
+  /* Superficies anidadas dentro de un panel (filas, avisos): radio concéntrico al del panel */
+  --sd-radius-inset: 1rem;
+  --sd-radius-pill: 999px;
+
+  /* Relleno interior de los paneles de la consola */
+  --sd-panel-padding: clamp(1.25rem, 2vw, 1.75rem);
+
+  /* ROWS — filas de listas y tablas de la consola (la densidad compacta los reduce) */
+  --sd-row-min-height: 3.5rem;
+  --sd-row-pad-y: 0.5rem;
+  --sd-row-gap: 0.25rem;
+  --sd-cell-pad-x: 0.75rem;
+
+  /* CONTROLS */
+  --sd-control-height-sm: 2.25rem; /* tablas y barras densas de la consola */
+  --sd-control-height: 2.75rem;
+  --sd-control-height-lg: 3.75rem;
+  --sd-focus-width: 3px;
+  --sd-focus-offset: 3px;
+
+  /* MOTION — curvas exponenciales de salida; sin rebotes */
+  --sd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --sd-duration-fast: 140ms;
+  --sd-duration-base: 240ms;
+  --sd-duration-slow: 700ms;
+
+  /* COLOR — modo claro (predeterminado) */
+  --sd-paper: #ffffff;
+  --sd-surface: #f3f3f1;
+  --sd-ink: #000000;
+  --sd-ink-soft: #545454;
+  /* Naranja de la identidad: fijo en Home/Login/Sign Up y predeterminado del acento de la consola */
+  --sd-brand-accent: #fe7141;
+  --sd-brand-accent-hover: #ff5a22;
+  --sd-accent: var(--sd-brand-accent);
+  --sd-accent-hover: var(--sd-brand-accent-hover);
+  --sd-accent-ink: #000000;
+  /* Piloto encendido de un control (pomo del interruptor, relleno de faders y progreso, LED de
+     navegación): sigue al acento; sobre un campo de color pasa a tinta para no desaparecer */
+  --sd-indicator: var(--sd-accent);
+  --sd-field-sage: #d1ddd3;
+  --sd-field-acid: #f0ff1c;
+  --sd-field-ink: #000000;
+  --sd-field-ink-contrast: #f4f4f4;
+  --sd-field-paper: #ffffff;
+  --sd-inverse: #000000;
+  --sd-inverse-ink: #f4f4f4;
+  --sd-inverse-ink-soft: #b9b9b9;
+  --sd-inverse-surface: #2b2b2b;
+  /* Tinta secundaria sobre los campos de color: casi negra para mantener AA sobre el naranja */
+  --sd-field-ink-soft: #2b2b2b;
+  --sd-focus: #000000;
+  --sd-selection: #f0ff1c;
+  /* Velo bajo los diálogos: oscurece sin desenfocar */
+  --sd-scrim: rgb(0 0 0 / 0.5);
+}
+
+html[data-scroll-mode='document'] {
+  scrollbar-color: var(--sd-ink-soft) var(--sd-paper);
+}
+
+/* Zona desplazable (Inicio, Biblioteca, Playlist, Ajustes, avisos): barra fina con su hueco
+   siempre reservado; sin desbordamiento queda invisible y al aparecer no desplaza nada.
+   Se combina con useSmoothScroll (design-system/smoothScroll.ts) para la rueda suavizada */
+.sd-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+/* Ámbito de tema anidado: un elemento con data-theme="light" vuelve a los valores claros
+   aunque el documento esté en oscuro (vistas previas del selector de tema en Ajustes) */
+[data-theme='light'] {
+  --sd-paper: #ffffff;
+  --sd-surface: #f3f3f1;
+  --sd-ink: #000000;
+  --sd-ink-soft: #545454;
+  --sd-inverse: #000000;
+  --sd-inverse-ink-soft: #b9b9b9;
+  --sd-inverse-surface: #2b2b2b;
+  --sd-focus: #000000;
+}
+
+[data-theme='dark'] {
+  --sd-paper: #0f0f0f;
+  --sd-surface: #1b1b1b;
+  --sd-ink: #f4f4f4;
+  --sd-ink-soft: #b4b4b4;
+  /* Los campos planos conservan su color y su tinta negra en ambos temas */
+  --sd-inverse: #1d1d1d;
+  --sd-inverse-ink: #f4f4f4;
+  --sd-inverse-ink-soft: #b4b4b4;
+  --sd-inverse-surface: #303030;
+  --sd-focus: #f0ff1c;
+}
+
+/* ==========================================================================
+   Densidad compacta (Ajustes → Apariencia, data-density en <html>). Solo actúa
+   dentro del shell de la consola (.desktop-layout): Home pública, Login y Sign Up
+   y los paneles en portal (SelectMenu, diálogos) conservan la escala estándar.
+   Reduce huecos, rellenos, filas y alturas de control; la tipografía no cambia.
+   ========================================================================== */
+[data-density='compact'] .desktop-layout {
+  --sd-gap-1: 0.375rem;
+  --sd-gap-2: 0.5rem;
+  --sd-gap-3: 0.75rem;
+  --sd-gap-4: 1rem;
+  --sd-gap-5: 1.5rem;
+  --sd-gap-6: 2.5rem;
+  --sd-margin: clamp(0.75rem, 1.6vw, 1.5rem);
+  --sd-panel-padding: clamp(0.875rem, 1.4vw, 1.25rem);
+  --sd-row-min-height: 2.75rem;
+  --sd-row-pad-y: 0.25rem;
+  --sd-row-gap: 0.125rem;
+  --sd-cell-pad-x: 0.5rem;
+  --sd-control-height-sm: 2rem;
+  --sd-control-height: 2.25rem;
+  --sd-control-height-lg: 3rem;
+}
+
+/* Punteros táctiles: la densidad compacta no encoge los objetivos de toque */
+@media (pointer: coarse) {
+  [data-density='compact'] .desktop-layout {
+    --sd-control-height-sm: 2.25rem;
+    --sd-control-height: 2.75rem;
+    --sd-control-height-lg: 3.75rem;
+  }
+}
+
+/* Transición Estándar ⇄ Compacta: los tokens de densidad se registran como longitudes para
+   que el cambio de data-density se interpole en lugar de saltar. Cada valor transiciona donde
+   se declara (<html> los heredados de index.css, .desktop-layout los v2); los descendientes
+   heredan el valor intermedio, así que ningún componente necesita su propia transición.
+   .desktop-layout consume --sd-density-transition junto a sus filas en DesktopLayout.css,
+   que también anima las alturas de cabecera y barra y apaga todo con movimiento reducido. */
+@property --sd-gap-1 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-2 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-3 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-4 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-5 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-6 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-margin { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-panel-padding { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-row-min-height { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-row-pad-y { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-row-gap { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-cell-pad-x { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-control-height-sm { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-control-height { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-control-height-lg { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-2 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-3 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-4 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-5 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-6 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-8 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --size-sm { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --size-md { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --size-lg { syntax: '<length>'; inherits: true; initial-value: 0px; }
+
+:root {
+  transition:
+    --space-2 var(--sd-duration-base) var(--sd-ease-out),
+    --space-3 var(--sd-duration-base) var(--sd-ease-out),
+    --space-4 var(--sd-duration-base) var(--sd-ease-out),
+    --space-5 var(--sd-duration-base) var(--sd-ease-out),
+    --space-6 var(--sd-duration-base) var(--sd-ease-out),
+    --space-8 var(--sd-duration-base) var(--sd-ease-out),
+    --size-sm var(--sd-duration-base) var(--sd-ease-out),
+    --size-md var(--sd-duration-base) var(--sd-ease-out),
+    --size-lg var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.desktop-layout {
+  --sd-density-transition:
+    --sd-gap-1 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-2 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-3 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-4 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-5 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-6 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-margin var(--sd-duration-base) var(--sd-ease-out),
+    --sd-panel-padding var(--sd-duration-base) var(--sd-ease-out),
+    --sd-row-min-height var(--sd-duration-base) var(--sd-ease-out),
+    --sd-row-pad-y var(--sd-duration-base) var(--sd-ease-out),
+    --sd-row-gap var(--sd-duration-base) var(--sd-ease-out),
+    --sd-cell-pad-x var(--sd-duration-base) var(--sd-ease-out),
+    --sd-control-height-sm var(--sd-duration-base) var(--sd-ease-out),
+    --sd-control-height var(--sd-duration-base) var(--sd-ease-out),
+    --sd-control-height-lg var(--sd-duration-base) var(--sd-ease-out);
+}
+
+:root[data-animations='off'] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   Acento elegido en Ajustes → Apariencia (data-accent en <html>, appearance.ts).
+   Mismo valor en ambos temas, como los campos. Todos admiten tinta negra encima
+   con AA (≥ 5.4:1); el hover sube un paso de saturación, como el naranja.
+   Un elemento con data-accent muestra ese acento aunque el documento use otro
+   (muestras del selector en Ajustes).
+   ========================================================================== */
+[data-accent='orange'] {
+  --sd-accent: var(--sd-brand-accent);
+  --sd-accent-hover: var(--sd-brand-accent-hover);
+}
+
+[data-accent='blue'] {
+  --sd-accent: #5b8cff;
+  --sd-accent-hover: #4479ff;
+}
+
+[data-accent='cyan'] {
+  --sd-accent: #1fc8e3;
+  --sd-accent-hover: #00b3d1;
+}
+
+[data-accent='violet'] {
+  --sd-accent: #a681ff;
+  --sd-accent-hover: #9166ff;
+}
+
+[data-accent='magenta'] {
+  --sd-accent: #ff5cc8;
+  --sd-accent-hover: #ff3db8;
+}
+
+[data-accent='neon'] {
+  --sd-accent: #2fd67a;
+  --sd-accent-hover: #14c264;
+}
+
+[data-accent='amber'] {
+  --sd-accent: #ffb21e;
+  --sd-accent-hover: #ff9f00;
+}
+
+/* ==========================================================================
+   Campos planos (consola). Un contenedor adopta un campo y remapea las tintas
+   de sus descendientes: botones, campos y etiquetas siguen la Field Ink Rule
+   sin variantes propias. Mismo color en ambos temas.
+   ========================================================================== */
+.sd-field-sage,
+.sd-field-acid,
+.sd-field-accent {
+  --sd-ink: var(--sd-field-ink);
+  --sd-ink-soft: var(--sd-field-ink-soft);
+  --sd-paper: var(--sd-field-paper);
+  --sd-surface: rgb(0 0 0 / 0.08);
+  --sd-focus: var(--sd-field-ink);
+  --sd-ghost-hover: rgb(0 0 0 / 0.08);
+  --sd-field-bg: var(--sd-field-paper);
+  --sd-progress-track: rgb(0 0 0 / 0.12);
+  --sd-indicator: var(--sd-field-ink);
+
+  color: var(--sd-ink);
+}
+
+.sd-field-sage {
+  background-color: var(--sd-field-sage);
+}
+
+.sd-field-acid {
+  background-color: var(--sd-field-acid);
+}
+
+/* Sobre el campo naranja la acción usa el botón de tinta, nunca el naranja (One Accent Rule) */
+.sd-field-accent {
+  background-color: var(--sd-accent);
+}
+
+.sd-field-inverse {
+  --sd-ink: var(--sd-inverse-ink);
+  --sd-ink-soft: var(--sd-inverse-ink-soft);
+  --sd-paper: var(--sd-inverse);
+  --sd-surface: var(--sd-inverse-surface);
+  --sd-focus: var(--sd-field-acid);
+  --sd-field-bg: var(--sd-inverse-surface);
+
+  background-color: var(--sd-inverse);
+  color: var(--sd-ink);
+}
+
+/* Texto solo para lectores de pantalla */
+.sd-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

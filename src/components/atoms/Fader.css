@@ -1,0 +1,160 @@
+.sd-fader {
+  --sd-fader-cap-width: 1.25rem;
+
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.sd-fader__rail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 2.25rem;
+}
+
+/* La pista se recorta a medio pomo de cada extremo para que el relleno acabe bajo su centro */
+.sd-fader__track {
+  position: absolute;
+  inset-inline: calc(var(--sd-fader-cap-width) / 2);
+  height: 0.5rem;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-progress-track, var(--sd-surface));
+}
+
+.sd-fader__fill {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: var(--sd-fader-percent);
+  border-radius: inherit;
+  background-color: var(--sd-indicator);
+}
+
+.sd-fader__input {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.sd-fader__input::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.sd-fader__input::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+
+/* Pomo de fader: píldora vertical de tinta con aro de papel, legible sobre el relleno */
+.sd-fader__input::-webkit-slider-thumb {
+  width: var(--sd-fader-cap-width);
+  height: 2rem;
+  margin-top: calc((2.25rem - 2rem) / 2);
+  border: 3px solid var(--sd-paper);
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: transform var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-fader__input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--sd-fader-cap-width);
+  height: 2rem;
+  border: 3px solid var(--sd-paper);
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink);
+  transition: transform var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-fader__input:active::-webkit-slider-thumb {
+  transform: scaleY(1.1);
+}
+
+.sd-fader__input:active::-moz-range-thumb {
+  transform: scaleY(1.1);
+}
+
+.sd-fader__input:focus-visible {
+  outline: none;
+}
+
+.sd-fader__input:focus-visible::-webkit-slider-thumb {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 1px;
+}
+
+.sd-fader__input:focus-visible::-moz-range-thumb {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 1px;
+}
+
+.sd-fader__input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Serigrafía de escala: cifras alineadas bajo su posición en la pista */
+.sd-fader__ticks {
+  position: relative;
+  height: 1.25rem;
+  margin-inline: calc(var(--sd-fader-cap-width) / 2);
+}
+
+.sd-fader__tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-regular);
+  line-height: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--sd-ink-soft);
+  transition: color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-fader__tick.is-current {
+  font-weight: var(--sd-weight-medium);
+  color: var(--sd-ink);
+}
+
+@media (pointer: coarse) {
+  .sd-fader {
+    --sd-fader-cap-width: 1.75rem;
+  }
+
+  .sd-fader__rail {
+    height: 2.75rem;
+  }
+
+  .sd-fader__input::-webkit-slider-thumb {
+    height: 2.5rem;
+    margin-top: calc((2.75rem - 2.5rem) / 2);
+  }
+
+  .sd-fader__input::-moz-range-thumb {
+    height: 2.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-fader__input::-webkit-slider-thumb,
+  .sd-fader__tick {
+    transition-duration: 0ms;
+  }
+
+  .sd-fader__input::-moz-range-thumb {
+    transition-duration: 0ms;
+  }
+}

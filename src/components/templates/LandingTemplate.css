@@ -1,0 +1,60 @@
+.sd-landing {
+  --sd-nav-height: 4.75rem;
+  /* Home, Login y Sign Up son la identidad de marca: no siguen el acento elegido en Ajustes */
+  --sd-accent: var(--sd-brand-accent);
+  --sd-accent-hover: var(--sd-brand-accent-hover);
+
+  position: relative;
+  /* Mismo marco centrado que la consola (--layout-frame-width) */
+  width: var(--layout-frame-width);
+  min-height: 100svh;
+  margin-inline: auto;
+  overflow-x: clip;
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+  font-family: var(--sd-font);
+  font-weight: var(--sd-weight-light);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color var(--sd-duration-base) var(--sd-ease-out), color var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-landing ::selection {
+  background-color: var(--sd-selection);
+  color: #000000;
+}
+
+.sd-landing h1,
+.sd-landing h2,
+.sd-landing h3 {
+  font-family: var(--sd-font);
+}
+
+.sd-landing__main:focus {
+  outline: none;
+}
+
+/* Enlace de salto: invisible hasta recibir el foco del teclado */
+.sd-landing__skip {
+  position: absolute;
+  top: var(--sd-gap-2);
+  left: var(--sd-margin);
+  z-index: 20;
+  width: 1px;
+  height: 1px; /* taste-skill-ignore: solo-lectores, no es un filete */
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.sd-landing__skip:focus-visible {
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.25rem;
+  clip: auto;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+  font-weight: var(--sd-weight-medium);
+  outline: var(--sd-focus-width) solid var(--sd-accent);
+  outline-offset: var(--sd-focus-offset);
+}

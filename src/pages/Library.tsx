@@ -1,27 +1,41 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
-  Search, CheckSquare, Square, 
+  Search, CheckSquare, Square, MinusSquare,
   UploadCloud, FolderPlus, Trash2, AlertCircle, CheckCircle2, 
-  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle, ListPlus,
-  Target, WandSparkles, ArrowLeftRight, Link2, Pencil, Check
+  Disc, X, HardDrive, Sparkles, RefreshCw, Loader2, Clock, AlertTriangle,
+  Target, WandSparkles, ArrowLeftRight, Link2, Pencil, Check, Music
 } from 'lucide-react';
-import { Input } from '../components/ui/Input';
-import { Button } from '../components/ui/Button';
-import { IconButton } from '../components/ui/IconButton';
-import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/atoms/Button';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
+import { Tag } from '../components/atoms/Tag';
+import { TextField } from '../components/atoms/TextField';
+import { SegmentedControl } from '../components/molecules/SegmentedControl';
+import { SelectMenu } from '../components/molecules/SelectMenu';
+import { ConfirmDialog } from '../components/molecules/ConfirmDialog';
+import { PageHeader } from '../components/molecules/PageHeader';
+import { Notice } from '../components/molecules/Notice';
+import { EmptyState } from '../components/molecules/EmptyState';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { useSmoothScroll } from '../design-system/smoothScroll';
+import { DURATION, EASE_OUT } from '../design-system/motion';
+import { useAnimationsEnabled } from '../design-system/motionPreference';
+import { LibrarySelectionBar } from '../components/organisms/LibrarySelectionBar';
+import { AnalysisQueuePanel } from '../components/organisms/AnalysisQueuePanel';
 import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
 import { settingsStore } from '../store/useSettingsStore';
 import type { ExtractedAudio } from '../services/youtubeService';
-import { formatBytes, formatDate } from '../utils/formatters';
+import { formatDate } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
 import { useSeedStore } from '../store/useSeedStore';
 import { buildPlaylistFromSeeds, MAX_SEED_TRACKS } from '../engine/playlistBuilder';
 import { notificationCenter } from '../services/notifications/notificationCenter';
-import { analysisSyncManager } from '../services/analysis';
+import { toastStore } from '../services/notifications/toastService';
+import { analysisSyncManager, bulkAnalysisQueue } from '../services/analysis';
 import { playlistService, addTracksToPlaylist } from '../services/playlists/playlistService';
 import { camelotToKey, keyToCamelot } from '../audio/analysis/camelotMapper';
 import {
@@ -35,11 +49,16 @@ import {
 } from '../utils/trackAnalysis';
 import type { Track, AnalysisStatus, ManualAnalysisField, MusicalKeyCamelot } from '../types/track';
 import type { Playlist } from '../types/playlist';
-import '../components/ui/Table.css';
+import {
+  filterLibraryRows,
+  isLinkTrack,
+  isLocalTrack,
+  type SourceFilter,
+} from '../utils/libraryFilters';
 import './Library.css';
 import { clsx } from 'clsx';
+import { AnimatePresence, motion } from 'framer-motion';
 
-export type FilterType = 'all' | 'local' | 'audio' | 'video';
 
 export interface UnifiedRowTrack {
   id: string;
@@ -55,7 +74,6 @@ export interface UnifiedRowTrack {
   analysisError?: string;
   durationFormatted: string;
   type: 'audio' | 'video';
-  fileSizeFormatted?: string;
   dateAddedFormatted?: string;
   rawLocalTrack: Track;
 }
@@ -85,56 +103,68 @@ export interface AnalysisStatusBadgeProps {
   status: AnalysisStatus;
   error?: string;
   onAnalyze?: () => void;
+  /** Esperando turno en la cola de reanálisis */
+  queued?: boolean;
 }
 
 export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
   status,
   error,
   onAnalyze,
+  queued = false,
 }) => {
   const { t } = useTranslation();
 
   const getStatusConfig = () => {
+    if (queued) {
+      return {
+        icon: <Icon icon={Clock} size="xs" />,
+        label: t('library.queue.status_queued'),
+        title: t('library.queue.status_queued_title'),
+        className: 'sd-status--queued',
+        isInteractive: false,
+      };
+    }
     switch (status) {
       case 'analyzing':
         return {
-          icon: <Loader2 size={12} className="spin-anim" />,
+          icon: <Icon icon={Loader2} size="xs" className="sd-status__spin" />,
           label: t('library.status_analyzing'),
           title: t('library.status_analyzing_title'),
-          className: 'status-badge-analyzing',
+          className: 'sd-status--analyzing',
           isInteractive: false,
         };
       case 'analyzed':
         return {
-          icon: <CheckCircle2 size={12} />,
+          icon: <Icon icon={CheckCircle2} size="xs" />,
           label: t('library.status_analyzed'),
           title: t('library.status_analyzed_title'),
-          className: 'status-badge-analyzed',
+          className: 'sd-status--analyzed',
           isInteractive: Boolean(onAnalyze),
         };
       case 'failed':
         return {
-          icon: <AlertCircle size={12} />,
+          icon: <Icon icon={AlertCircle} size="xs" />,
           label: t('library.status_failed'),
           title: error ? `${t('library.status_failed_title')}: ${error}` : t('library.status_failed_title'),
-          className: 'status-badge-failed',
+          className: 'sd-status--failed',
           isInteractive: Boolean(onAnalyze),
         };
       case 'unsupported':
         return {
-          icon: <AlertTriangle size={12} />,
+          icon: <Icon icon={AlertTriangle} size="xs" />,
           label: t('library.status_unsupported'),
           title: error || t('library.status_unsupported_title'),
-          className: 'status-badge-unsupported',
+          className: 'sd-status--unsupported',
           isInteractive: Boolean(onAnalyze),
         };
       case 'pending':
       default:
         return {
-          icon: <Clock size={12} />,
+          icon: <Icon icon={Clock} size="xs" />,
           label: t('library.status_pending'),
           title: t('library.status_pending_title'),
-          className: 'status-badge-pending',
+          className: 'sd-status--pending',
           isInteractive: Boolean(onAnalyze),
         };
     }
@@ -147,7 +177,7 @@ export const AnalysisStatusBadge: React.FC<AnalysisStatusBadgeProps> = ({
       role="status"
       aria-label={config.title}
       title={config.title}
-      className={clsx('status-badge', config.className, config.isInteractive && 'interactive')}
+      className={clsx('sd-status', config.className, config.isInteractive && 'sd-status--interactive')}
       onClick={config.isInteractive ? onAnalyze : undefined}
     >
       {config.icon}
@@ -160,11 +190,13 @@ export const Library: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const tableScrollRef = useSmoothScroll<HTMLDivElement>();
+  const animationsEnabled = useAnimationsEnabled();
   const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB, analyzeTrack } = useDJStore();
   const { seedTrackIds, toggleSeed, removeSeed, swapSeeds, clearSeeds } = useSeedStore();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<SourceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
 
@@ -178,6 +210,11 @@ export const Library: React.FC = () => {
   } | null>(null);
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  // Ancla del rango con Mayús + clic
+  const selectionAnchorRef = useRef<string | null>(null);
+  const queue = useSyncExternalStore(bulkAnalysisQueue.subscribe, bulkAnalysisQueue.getSnapshot);
   const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -188,6 +225,8 @@ export const Library: React.FC = () => {
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({ bpm: '', camelot: '', energy: '' });
   const [initialMetadataDraft, setInitialMetadataDraft] = useState<MetadataDraft>({ bpm: '', camelot: '', energy: '' });
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+  // Resalte breve del Modo referencia cuando cambian sus pistas
+  const [isSeedBarUpdated, setIsSeedBarUpdated] = useState(false);
 
   // Playlists locales disponibles como destino para las pistas seleccionadas
   useEffect(() => {
@@ -250,7 +289,6 @@ export const Library: React.FC = () => {
     if (!fileList || fileList.length === 0) return;
 
     setIsImporting(true);
-    setFeedback(null);
 
     const files = Array.from(fileList);
     const { successCount, errors, importedTracks } = await importFilesToLocalLibrary(
@@ -264,24 +302,16 @@ export const Library: React.FC = () => {
       importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
     }
 
+    // Resultado como aviso instantáneo en la esquina: no desplaza la cabecera ni la tabla
     if (successCount > 0 && errors.length === 0) {
-      setFeedback({
-        type: 'success',
-        text: t('library.import_success', { count: successCount }),
-      });
+      toastStore.show('success', t('library.toast.imported'));
     } else if (successCount > 0 && errors.length > 0) {
-      setFeedback({
-        type: 'warning',
-        text: t('library.import_partial_warning', {
-          success: t('library.import_success', { count: successCount }),
-          warnings: errors.join(', '),
-        }),
-      });
+      toastStore.show('warning', t('library.import_partial_warning', {
+        success: t('library.toast.imported'),
+        warnings: errors.join(', '),
+      }));
     } else if (errors.length > 0) {
-      setFeedback({
-        type: 'error',
-        text: errors.join(' | '),
-      });
+      toastStore.show('error', errors.join(' | '));
     }
   };
 
@@ -298,7 +328,7 @@ export const Library: React.FC = () => {
       return { ok: false, error: errors.join(' | ') || undefined };
     }
 
-    setFeedback({ type: 'success', text: t('library.import_success', { count: successCount }) });
+    toastStore.show('success', t('library.toast.imported'));
     if (settingsStore.getSnapshot().autoAnalyzeOnImport) {
       importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
     }
@@ -345,34 +375,13 @@ export const Library: React.FC = () => {
       const result = await analyzeTrack(track, force);
 
       if (result.status === 'failed') {
-        setFeedback({
-          type: 'warning',
-          text: t('library.analysis_failed_warning', {
-            title: track.title,
-            error: result.analysisError || t('states.error_desc'),
-          }),
-        });
+        toastStore.show('warning', t('library.toast.analysis_failed'));
       } else if (result.status === 'analyzed') {
-        const bpmStr = result.bpm ? `${result.bpm} BPM` : '';
-        const keyStr = result.key ? `${result.key}` : '';
-        setFeedback({
-          type: 'success',
-          text: t('library.analysis_success', {
-            title: track.title,
-            bpm: bpmStr,
-            key: keyStr,
-          }),
-        });
+        toastStore.show('success', t(force ? 'library.toast.reanalyzed' : 'library.toast.analyzed'));
       }
     } catch (err) {
       console.error('[Library] Error al solicitar análisis:', err);
-      setFeedback({
-        type: 'error',
-        text: t('library.analysis_error', {
-          title: track.title,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      });
+      toastStore.show('error', t('library.toast.analysis_failed'));
     }
   };
 
@@ -398,19 +407,10 @@ export const Library: React.FC = () => {
       removeSeed(track.id);
 
       await refreshLocalTracks();
-      setFeedback({
-        type: 'success',
-        text: t('library.delete_success', {
-          title: track.title,
-          defaultValue: `Pista "${track.title}" eliminada de la biblioteca local.`,
-        }),
-      });
+      toastStore.show('success', t('library.toast.deleted'));
     } catch (err) {
       console.error('[Library] Error al eliminar pista:', err);
-      setFeedback({
-        type: 'error',
-        text: t('library.delete_error', { error: err instanceof Error ? err.message : String(err) }),
-      });
+      toastStore.show('error', t('library.delete_error', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
@@ -443,7 +443,7 @@ export const Library: React.FC = () => {
         : invalid === 'energy'
           ? t('library.manual_invalid_energy', { min: MANUAL_ENERGY_MIN, max: MANUAL_ENERGY_MAX })
           : t('library.manual_invalid_camelot');
-      setFeedback({ type: 'error', text });
+      toastStore.show('error', text);
       return;
     }
 
@@ -455,15 +455,10 @@ export const Library: React.FC = () => {
         throw new Error(t('states.error_desc'));
       }
       setEditingTrackId(null);
-      setFeedback({ type: 'success', text: t('library.manual_saved', { title: track.title }) });
+      toastStore.show('success', t(edits.bpm !== undefined ? 'library.toast.bpm_updated' : 'library.toast.metadata_updated'));
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        text: t('library.manual_save_error', {
-          title: track.title,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      });
+      console.error('[Library] Error al guardar metadatos:', err);
+      toastStore.show('error', t('library.toast.save_failed'));
     } finally {
       setIsSavingMetadata(false);
     }
@@ -487,25 +482,16 @@ export const Library: React.FC = () => {
       const loaded = await loadFn(trackToLoad);
       const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
       if (loaded) {
-        setFeedback({
-          type: 'success',
-          text: t('library.load_success', { title: trackToLoad.title, deck: deckLabel }),
-        });
+        toastStore.show('success', t('library.toast.added_to_deck', { deck: deckLabel }));
       } else {
-        setFeedback({
-          type: 'error',
-          text: t('library.load_error', { title: trackToLoad.title, deck: deckLabel }),
-        });
+        toastStore.show('error', t('library.toast.load_failed', { deck: deckLabel }));
       }
     } catch (err) {
       const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
-      setFeedback({
-        type: 'error',
-        text: t('library.load_exception_error', {
-          deck: deckLabel,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      });
+      toastStore.show('error', t('library.load_exception_error', {
+        deck: deckLabel,
+        error: err instanceof Error ? err.message : String(err),
+      }));
     }
   };
 
@@ -517,7 +503,7 @@ export const Library: React.FC = () => {
         id: lt.id,
         title: lt.title,
         artist: lt.artist || t('dj.unknown_artist'),
-        album: lt.fileMeta?.fileName || '-',
+        album: lt.album || '-',
         bpm: hasMetrics ? lt.analysis.bpm : undefined,
         key: hasMetrics ? lt.analysis.key : undefined,
         camelot: hasMetrics
@@ -529,29 +515,35 @@ export const Library: React.FC = () => {
         analysisError: lt.analysis?.analysisError,
         durationFormatted: lt.durationFormatted,
         type: lt.type,
-        fileSizeFormatted: lt.fileMeta?.fileSize ? formatBytes(lt.fileMeta.fileSize) : undefined,
         dateAddedFormatted: lt.dateAdded ? formatDate(lt.dateAdded) : undefined,
         rawLocalTrack: lt,
       };
     });
 
-  // Filtrado reactivo por tipo y búsqueda
-  const filteredTracks = unifiedTracks.filter((track) => {
-    // Filtro por categoría ('all' y 'local' muestran la biblioteca local completa)
-    if (filter === 'audio' && track.type !== 'audio') return false;
-    if (filter === 'video' && track.type !== 'video') return false;
+  // Filtrado reactivo por origen y búsqueda
+  const filteredTracks = filterLibraryRows(unifiedTracks, filter, 'all', searchQuery);
+  const localCount = localTracks.filter(isLocalTrack).length;
+  const linkCount = localTracks.filter(isLinkTrack).length;
+  // Un filtro de origen solo reduce la vista si hay pistas del otro origen
+  const isFiltered = (filter === 'local' && localCount < localTracks.length)
+    || (filter === 'link' && linkCount < localTracks.length)
+    || searchQuery.trim() !== '';
 
-    // Filtro por texto de búsqueda
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = track.title.toLowerCase().includes(q);
-      const matchArtist = track.artist.toLowerCase().includes(q);
-      const matchAlbum = track.album.toLowerCase().includes(q);
-      return matchTitle || matchArtist || matchAlbum;
-    }
+  // La selección solo abarca pistas visibles: al cambiar la vista se descartan las que quedan ocultas,
+  // para que ninguna acción masiva alcance pistas que el usuario ya no ve
+  const selectedRows = filteredTracks.filter((track) => selectedTracks.has(track.id));
+  const allVisibleSelected = filteredTracks.length > 0 && selectedRows.length === filteredTracks.length;
+  const queuedIds = new Set(queue.pending.map((item) => item.trackId));
 
-    return true;
-  });
+  const changeView = (nextFilter: SourceFilter, nextQuery: string) => {
+    setFilter(nextFilter);
+    setSearchQuery(nextQuery);
+    const visibleIds = new Set(filterLibraryRows(unifiedTracks, nextFilter, 'all', nextQuery).map((track) => track.id));
+    setSelectedTracks((prev) => {
+      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  };
 
   // Pistas de referencia resueltas en orden (1.ª = inicio, 2.ª = cierre); se ignoran ids ya eliminados
   const seedTracks = seedTrackIds
@@ -561,12 +553,12 @@ export const Library: React.FC = () => {
   const handleToggleSeed = (track: Track) => {
     const result = toggleSeed(track.id);
     if (result.action === 'replaced') {
-      const replaced = localTracks.find((tr) => tr.id === result.replacedId);
-      setFeedback({
-        type: 'warning',
-        text: t('seed.replaced', { max: MAX_SEED_TRACKS, removed: replaced?.title ?? '', added: track.title }),
-      });
+      toastStore.show('warning', t('seed.limit_reached', { max: MAX_SEED_TRACKS }));
+    } else {
+      toastStore.show('success', t('seed.updated'));
     }
+    // toggleSeed siempre modifica las referencias (añade, quita o reemplaza)
+    setIsSeedBarUpdated(true);
   };
 
   // Modo referencia: secuencia la biblioteca desde las semillas y guarda el resultado como playlist
@@ -576,7 +568,7 @@ export const Library: React.FC = () => {
     try {
       const result = buildPlaylistFromSeeds({ seedTracks, candidates: localTracks });
       if (result.trackIds.length <= seedTracks.length) {
-        setFeedback({ type: 'warning', text: t('seed.no_compatible') });
+        notificationCenter.push({ type: 'warning', messageKey: 'seed.no_compatible' });
         return;
       }
       const name = seedTracks.length === 2
@@ -589,7 +581,8 @@ export const Library: React.FC = () => {
         messageKey: 'notifications.seed_mix_generated',
         params: { name: created.name, count: result.trackIds.length },
       });
-      navigate('/playlists');
+      // La vista de Playlists abre directamente la playlist recién generada
+      navigate('/playlists', { state: { playlistId: created.id } });
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -603,8 +596,8 @@ export const Library: React.FC = () => {
   // Añade las pistas seleccionadas (en el orden de la tabla) a la playlist elegida
   const handleAddSelectedToPlaylist = async () => {
     const playlist = playlists.find((p) => p.id === targetPlaylistId);
-    if (!playlist || selectedTracks.size === 0) return;
-    const ids = unifiedTracks.filter((tr) => selectedTracks.has(tr.id)).map((tr) => tr.id);
+    if (!playlist || selectedRows.length === 0) return;
+    const ids = selectedRows.map((tr) => tr.id);
     try {
       const before = playlist.trackIds.length;
       const updated = await playlistService.update(playlist.id, (p) => addTracksToPlaylist(p, ids));
@@ -615,7 +608,7 @@ export const Library: React.FC = () => {
           ? t('library.playlist_add_success', { count: added, name: playlist.name })
           : t('library.playlist_add_none', { name: playlist.name }),
       });
-      setSelectedTracks(new Set());
+      clearSelection();
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -624,220 +617,323 @@ export const Library: React.FC = () => {
     }
   };
 
-  const toggleSelection = (id: string) => {
-    const newSelected = new Set(selectedTracks);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
+  // Clic: alterna una pista · Mayús + clic: marca el tramo desde la última pista pulsada
+  const toggleSelection = (id: string, extendRange = false) => {
+    const anchor = selectionAnchorRef.current;
+    const ids = filteredTracks.map((track) => track.id);
+    const from = anchor ? ids.indexOf(anchor) : -1;
+    const to = ids.indexOf(id);
+    const next = new Set(selectedTracks);
+    if (extendRange && from !== -1 && to !== -1 && from !== to) {
+      for (const rangeId of ids.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(rangeId);
+    } else if (next.has(id)) {
+      next.delete(id);
     } else {
-      newSelected.add(id);
+      next.add(id);
     }
-    setSelectedTracks(newSelected);
+    selectionAnchorRef.current = id;
+    setSelectedTracks(next);
   };
 
+  const selectAllVisible = () => {
+    setSelectedTracks(new Set(filteredTracks.map((track) => track.id)));
+  };
+
+  const clearSelection = () => {
+    selectionAnchorRef.current = null;
+    setSelectedTracks(new Set());
+  };
+
+  // Reanálisis masivo: las pistas pasan a la cola y se procesan una a una en segundo plano
+  const handleBulkReanalyze = () => {
+    const { added, duplicates } = bulkAnalysisQueue.enqueue(
+      selectedRows.map((track) => ({ trackId: track.id, title: track.title })),
+    );
+    clearSelection();
+    if (duplicates > 0) {
+      const parts = [
+        added > 0 ? t('library.bulk.queue_added', { count: added }) : '',
+        t('library.bulk.queue_duplicates', { count: duplicates }),
+      ];
+      setFeedback({ type: 'warning', text: parts.filter(Boolean).join(' ') });
+    }
+  };
+
+  // Borrado masivo: mismo mecanismo que el individual, pista a pista, con el resultado real
+  const handleBulkDelete = async () => {
+    const targets = selectedRows.map((track) => track.rawLocalTrack);
+    if (targets.length === 0) return;
+    setIsDeleting(true);
+    const failedIds: string[] = [];
+    const errors: string[] = [];
+    for (const track of targets) {
+      try {
+        if (analysisSyncManager.isAnalyzing(track.id)) analysisSyncManager.cancelAnalysis(track.id);
+        await indexedDBStorage.deleteTrack(track.id);
+        removeSeed(track.id);
+      } catch (err) {
+        failedIds.push(track.id);
+        errors.push(`${track.title}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    // deleteTrack también retira las pistas de las playlists; avisar a las vistas suscritas
+    if (failedIds.length < targets.length) playlistService.notifyExternalChange();
+    await refreshLocalTracks();
+    setSelectedTracks(new Set(failedIds));
+    selectionAnchorRef.current = null;
+    setIsDeleting(false);
+    setBulkDeleteOpen(false);
+
+    const deleted = targets.length - failedIds.length;
+    if (failedIds.length === 0) {
+      setFeedback({ type: 'success', text: t('library.bulk.delete_success', { count: deleted }) });
+    } else if (deleted > 0) {
+      setFeedback({
+        type: 'warning',
+        text: t('library.bulk.delete_partial', { deleted, total: targets.length, failed: failedIds.length, errors: errors.join(' | ') }),
+      });
+    } else {
+      setFeedback({ type: 'error', text: t('library.bulk.delete_failed', { total: targets.length, errors: errors.join(' | ') }) });
+    }
+  };
+
+  const filterOptions: { value: SourceFilter; label: React.ReactNode }[] = [
+    { value: 'all', label: t('library.filter_all') },
+    {
+      value: 'local',
+      label: (
+        <>
+          <Icon icon={HardDrive} size="sm" />
+          {t('library.filter_local')}
+          <span className="sd-num">({localCount})</span>
+        </>
+      ),
+    },
+    {
+      value: 'link',
+      label: (
+        <>
+          <Icon icon={Link2} size="sm" />
+          {t('library.filter_link')}
+          <span className="sd-num">({linkCount})</span>
+        </>
+      ),
+    },
+  ];
+
   return (
-    <div 
-      className="library-container"
+    <ConsoleTemplate
+      fill
+      className="sd-library"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Input de archivo invisible */}
-      <input 
+      <input
         type="file"
         ref={fileInputRef}
         multiple
         accept=".mp3,.wav,audio/mpeg,audio/wav,audio/mp3"
-        style={{ display: 'none' }}
+        hidden
         onChange={(e) => handleImportFiles(e.target.files)}
       />
 
-      <div className="library-header">
-        <div className="library-title-row">
-          <h2 className="library-title">{t('library.title')}</h2>
-          
-          <div className="library-header-actions">
-            <Button 
-              variant="primary"
-              disabled={isImporting}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <FolderPlus size={18} />
-              {isImporting ? t('library.importing') : t('library.import_btn')}
-            </Button>
-            <Button variant="outline" onClick={() => setYoutubeModalOpen(true)}>
-              <Link2 size={18} />
-              {t('library.import_youtube_btn')}
-            </Button>
-          </div>
-        </div>
+      <div className="sd-library__header">
+        <PageHeader
+          title={t('library.title')}
+          actions={
+            <>
+              <Button
+                variant="accent"
+                disabled={isImporting}
+                aria-busy={isImporting}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon icon={FolderPlus} size="md" />
+                {isImporting ? t('library.importing') : t('library.import_btn')}
+              </Button>
+              <Button variant="ghost" onClick={() => setYoutubeModalOpen(true)}>
+                <Icon icon={Link2} size="md" />
+                {t('library.import_youtube_btn')}
+              </Button>
+            </>
+          }
+        />
 
         {/* Zona visual interactiva de Drag & Drop */}
-        <div 
-          className={clsx('library-dropzone', isDragging && 'active')}
+        <div
+          role="button"
+          tabIndex={0}
+          className={clsx('sd-library-dropzone', isDragging ? 'sd-field-acid' : 'sd-field-sage', isDragging && 'is-active')}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
         >
-          <div className="dropzone-icon">
-            <UploadCloud size={24} />
-          </div>
-          <div className="dropzone-text-group">
-            <span className="dropzone-main-text">{t('library.drag_drop_title')}</span>
-            <span className="dropzone-sub-text">{t('library.drag_drop_subtitle')}</span>
-          </div>
+          <Icon icon={UploadCloud} size="lg" />
+          <span className="sd-library-dropzone__text">
+            <span className="sd-library-dropzone__title">{t('library.drag_drop_title')}</span>
+            <span className="sd-library-dropzone__hint">{t('library.drag_drop_subtitle')}</span>
+          </span>
         </div>
 
         {/* Notificaciones y alertas */}
         {feedback && (
-          <div className={clsx('library-alert', feedback.type)}>
-            <div className="alert-content">
-              {feedback.type === 'success' && <CheckCircle2 size={18} />}
-              {feedback.type === 'warning' && <AlertCircle size={18} />}
-              {feedback.type === 'error' && <AlertCircle size={18} />}
-              <span>{feedback.text}</span>
-            </div>
-            <IconButton 
-              icon={<X size={16} />} 
-              size="sm" 
-              variant="ghost" 
-              onClick={() => setFeedback(null)} 
+          <Notice
+            tone={feedback.type}
+            dismissLabel={t('common.close')}
+            onDismiss={() => setFeedback(null)}
+          >
+            {feedback.text}
+          </Notice>
+        )}
+
+        <div className="sd-library-toolbar">
+          <TextField
+            type="search"
+            placeholder={t('library.search_tracks')}
+            aria-label={t('library.search_tracks')}
+            icon={<Icon icon={Search} size="sm" />}
+            value={searchQuery}
+            onChange={(e) => changeView(filter, e.target.value)}
+            wrapperClassName="sd-library-toolbar__search"
+          />
+
+          <div className="sd-library-toolbar__filters">
+            <SegmentedControl
+              label={t('library.filters_label')}
+              value={filter}
+              options={filterOptions}
+              onChange={(value) => changeView(value, searchQuery)}
             />
+          </div>
+        </div>
+
+        {/* Modo referencia (semillas) */}
+        {localTracks.length > 0 && (
+          <div
+            className={clsx('sd-library-bar', isSeedBarUpdated && 'is-updated')}
+            role="region"
+            aria-label={t('seed.mode_title')}
+            onAnimationEnd={(e) => { if (e.target === e.currentTarget) setIsSeedBarUpdated(false); }}
+          >
+            <span className="sd-library-bar__title">
+              <Icon icon={Target} size="md" />
+              {t('seed.mode_title')}
+            </span>
+            {seedTracks.length === 0 ? (
+              <span className="sd-library-bar__hint">{t('seed.mode_hint', { max: MAX_SEED_TRACKS })}</span>
+            ) : (
+              <span className="sd-library-bar__seeds">
+                {seedTracks.map((seed, index) => (
+                  <Tag key={seed.id} tone="acid" title={seed.title} className="sd-library-bar__seed">
+                    {seedTracks.length === 2
+                      ? t(index === 0 ? 'seed.start_label' : 'seed.end_label', { title: seed.title })
+                      : t('seed.single_label', { title: seed.title })}
+                  </Tag>
+                ))}
+              </span>
+            )}
+            <span className="sd-library-bar__actions">
+              {seedTracks.length === 2 && (
+                <IconButton
+                  icon={<Icon icon={ArrowLeftRight} size="sm" />}
+                  label={t('seed.swap')}
+                  size="sm"
+                  onClick={swapSeeds}
+                />
+              )}
+              <Button
+                variant="ink"
+                size="sm"
+                disabled={seedTracks.length === 0 || isGenerating}
+                title={seedTracks.length === 0 ? t('seed.generate_disabled') : undefined}
+                onClick={handleGenerateFromSeeds}
+              >
+                <Icon icon={WandSparkles} size="sm" />
+                {isGenerating ? t('seed.generating') : t('seed.generate')}
+              </Button>
+              {seedTracks.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearSeeds}>
+                  {t('seed.clear')}
+                </Button>
+              )}
+            </span>
           </div>
         )}
 
-        <div className="library-toolbar">
-          <Input 
-            placeholder={t('library.search_tracks')} 
-            icon={<Search size={18} />}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            wrapperClassName="library-search-container" 
-          />
-          
-          <div className="library-filters">
-            <Button 
-              variant={filter === 'all' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('all')}
+        {/* Cola de reanálisis en segundo plano y su resumen */}
+        <AnalysisQueuePanel />
+
+        {/* Barra contextual de la selección: el hueco se pliega con ella y la salida termina antes de desmontarla */}
+        <AnimatePresence initial={false}>
+          {selectedRows.length > 0 && (
+            <motion.div
+              key="selection-bar"
+              className="sd-selection-bar-slot"
+              initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
+              animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
+              exit={{ height: 0, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+              transition={{ duration: animationsEnabled ? DURATION.base : 0, ease: EASE_OUT }}
             >
-              {t('library.filter_all')}
-            </Button>
-            <Button 
-              variant={filter === 'local' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('local')}
-            >
-              <HardDrive size={14} />
-              {t('library.filter_local')} ({localTracks.length})
-            </Button>
-            <Button 
-              variant={filter === 'audio' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('audio')}
-            >
-              {t('library.filter_audio')}
-            </Button>
-            <Button 
-              variant={filter === 'video' ? 'primary' : 'outline'} 
-              size="sm" 
-              onClick={() => setFilter('video')}
-            >
-              {t('library.filter_video')}
-            </Button>
-          </div>
-        </div>
+              <div className="sd-selection-bar-slot__inner">
+                <LibrarySelectionBar
+                  selectedCount={selectedRows.length}
+                  visibleCount={filteredTracks.length}
+                  isFiltered={isFiltered}
+                  playlists={playlists}
+                  countPlaylistTracks={(playlist) => playlist.trackIds.filter((id) => localTracks.some((tr) => tr.id === id)).length}
+                  targetPlaylistId={targetPlaylistId}
+                  onTargetPlaylistChange={setTargetPlaylistId}
+                  onAddToPlaylist={handleAddSelectedToPlaylist}
+                  onSelectAll={selectAllVisible}
+                  onDeselectAll={clearSelection}
+                  onReanalyze={handleBulkReanalyze}
+                  onDelete={() => setBulkDeleteOpen(true)}
+                  busy={isDeleting}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Modo referencia (semillas) */}
-      {localTracks.length > 0 && (
-        <div className="library-filters" style={{ alignItems: 'center' }} role="region" aria-label={t('seed.mode_title')}>
-          <Target size={16} aria-hidden="true" />
-          <strong>{t('seed.mode_title')}</strong>
-          {seedTracks.length === 0 ? (
-            <span className="text-muted">{t('seed.mode_hint', { max: MAX_SEED_TRACKS })}</span>
-          ) : (
-            seedTracks.map((seed, index) => (
-              <Badge key={seed.id} variant="secondary" title={seed.title}>
-                {seedTracks.length === 2
-                  ? t(index === 0 ? 'seed.start_label' : 'seed.end_label', { title: seed.title })
-                  : t('seed.single_label', { title: seed.title })}
-              </Badge>
-            ))
-          )}
-          {seedTracks.length === 2 && (
-            <IconButton
-              icon={<ArrowLeftRight size={14} />}
-              size="sm"
-              variant="ghost"
-              title={t('seed.swap')}
-              aria-label={t('seed.swap')}
-              onClick={swapSeeds}
-            />
-          )}
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={seedTracks.length === 0 || isGenerating}
-            title={seedTracks.length === 0 ? t('seed.generate_disabled') : undefined}
-            onClick={handleGenerateFromSeeds}
-          >
-            <WandSparkles size={14} />
-            {isGenerating ? t('seed.generating') : t('seed.generate')}
-          </Button>
-          {seedTracks.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearSeeds}>
-              {t('seed.clear')}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Acción sobre la selección: añadir a playlist */}
-      {selectedTracks.size > 0 && (
-        <div className="library-filters" style={{ alignItems: 'center' }}>
-          <span>{t('library.selected_count', { count: selectedTracks.size })}</span>
-          {playlists.length === 0 ? (
-            <span className="text-muted">{t('library.playlist_none_available')}</span>
-          ) : (
-            <>
-              <select
-                className="input-field"
-                aria-label={t('library.playlist_target')}
-                value={targetPlaylistId}
-                onChange={(e) => setTargetPlaylistId(e.target.value)}
-              >
-                <option value="">{t('library.playlist_target')}</option>
-                {playlists.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <Button variant="primary" size="sm" disabled={!targetPlaylistId} onClick={handleAddSelectedToPlaylist}>
-                <ListPlus size={14} />
-                {t('library.playlist_add_btn')}
-              </Button>
-            </>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => setSelectedTracks(new Set())}>
-            {t('common.cancel')}
-          </Button>
-        </div>
-      )}
-
       {/* Tabla unificada */}
-      <div className="library-table-container">
-        <table className="library-table">
+      <div ref={tableScrollRef} className="sd-library-table-wrap sd-scroll-area">
+        <table className="sd-table sd-library-table">
           <thead>
             <tr>
-              <th className="col-checkbox">
-                <Square size={16} />
+              <th className="sd-table__check">
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={allVisibleSelected ? true : selectedRows.length > 0 ? 'mixed' : false}
+                  aria-label={t('library.bulk.select_all_rows')}
+                  title={t('library.bulk.select_all_rows')}
+                  disabled={filteredTracks.length === 0}
+                  className="sd-table__checkbox"
+                  onClick={() => (selectedRows.length > 0 ? clearSelection() : selectAllVisible())}
+                >
+                  <Icon
+                    icon={allVisibleSelected ? CheckSquare : selectedRows.length > 0 ? MinusSquare : Square}
+                    size="sm"
+                    className={selectedRows.length > 0 ? 'sd-table__check-on' : 'sd-table__check-off'}
+                  />
+                </button>
               </th>
               <th>{t('library.col_title')}</th>
-              <th>{t('library.col_artist')}</th>
+              <th className="sd-library-table__deck"><span className="sd-visually-hidden">{t('library.col_deck')}</span></th>
               <th>{t('library.col_album')}</th>
-              <th>{t('library.col_bpm')}</th>
-              <th>{t('library.col_key')}</th>
+              <th className="sd-table__num">{t('library.col_bpm')}</th>
+              <th colSpan={2}>{t('library.col_key')}</th>
               <th>{t('library.col_energy')}</th>
-              <th className="col-status">{t('library.col_status')}</th>
-              <th>{t('library.col_duration')}</th>
-              <th className="col-actions"></th>
+              <th>{t('library.col_status')}</th>
+              <th className="sd-table__num">{t('library.col_duration')}</th>
+              <th className="sd-table__actions"><span className="sd-visually-hidden">{t('library.col_actions')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -847,52 +943,69 @@ export const Library: React.FC = () => {
               const isLoadedInDeckB = deckB.track?.title === track.title;
               const seedIndex = seedTrackIds.indexOf(track.id);
               const isEditing = editingTrackId === track.id;
+              const isQueued = queuedIds.has(track.id);
 
               return (
-                <tr key={track.id} className={clsx(isSelected && 'selected', (isLoadedInDeckA || isLoadedInDeckB) && 'prepared')}>
-                  <td className="col-checkbox" onClick={() => toggleSelection(track.id)}>
-                    {isSelected ? (
-                      <CheckSquare size={16} className="icon-selected" />
-                    ) : (
-                      <Square size={16} className="icon-unselected" />
-                    )}
+                <tr key={track.id} className={clsx(isSelected && 'is-selected', (isLoadedInDeckA || isLoadedInDeckB) && 'is-prepared')}>
+                  <td className="sd-table__check" onClick={(e) => { if (e.target === e.currentTarget) toggleSelection(track.id, e.shiftKey); }}>
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={isSelected}
+                      aria-label={t('library.bulk.select_row', { title: track.title })}
+                      className="sd-table__checkbox"
+                      onClick={(e) => toggleSelection(track.id, e.shiftKey)}
+                    >
+                      <Icon
+                        icon={isSelected ? CheckSquare : Square}
+                        size="sm"
+                        className={isSelected ? 'sd-table__check-on' : 'sd-table__check-off'}
+                      />
+                    </button>
                   </td>
-                  <td>
-                    <div className="track-title-container">
-                      <span className="track-title">{track.title}</span>
-                      <Badge variant="primary">{t('library.badge_local')}</Badge>
-                      {seedIndex !== -1 && (
-                        <Badge variant="warning" title={t('seed.badge_title')}>
-                          <Target size={11} aria-hidden="true" /> {t('seed.badge', { index: seedIndex + 1 })}
-                        </Badge>
-                      )}
-                      {track.type === 'video' && <Badge variant="secondary">V</Badge>}
-                      {isLoadedInDeckA && (
-                        <span className="deck-prepared-tag" title={t('library.load_deck_a')}>
-                          <Disc size={13} className={clsx(deckA.playbackState === 'playing' && 'playing-anim-spin')} />
-                          Deck A {deckA.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
-                        </span>
-                      )}
-                      {isLoadedInDeckB && (
-                        <span className="deck-prepared-tag deck-b-tag" title={t('library.load_deck_b')}>
-                          <Disc size={13} className={clsx(deckB.playbackState === 'playing' && 'playing-anim-spin')} />
-                          Deck B {deckB.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
-                        </span>
-                      )}
+                  <td className="sd-library-table__track">
+                    <div className="sd-library-track">
+                      <span className="sd-library-track__line">
+                        <span className="sd-library-track__title">{track.title}</span>
+                        {seedIndex !== -1 && (
+                          <Tag tone="acid" className="sd-library-track__tag" title={t('seed.badge_title')}>
+                            <Icon icon={Target} size="xs" /> {t('seed.badge', { index: seedIndex + 1 })}
+                          </Tag>
+                        )}
+                      </span>
+                      <span className="sd-library-track__line">
+                        <span className="sd-library-track__artist">{track.artist}</span>
+                        <Tag tone="surface" className="sd-library-track__tag">{isLinkTrack(track.rawLocalTrack) ? t('library.badge_link') : t('library.badge_local')}</Tag>
+                        {track.type === 'video' && <Tag tone="surface" className="sd-library-track__tag">V</Tag>}
+                      </span>
                     </div>
                   </td>
-                  <td>{track.artist}</td>
-                  <td className="track-album">
-                    {track.album}
-                    {track.fileSizeFormatted && (
-                      <span className="text-muted" style={{ marginLeft: 'var(--space-2)' }}>
-                        ({track.fileSizeFormatted})
+                  {/* Columna reservada para la asignación a Deck: vacía si la pista no está cargada */}
+                  <td className="sd-library-table__deck">
+                    {(isLoadedInDeckA || isLoadedInDeckB) && (
+                      <span className="sd-library-table__decks">
+                        {isLoadedInDeckA && (
+                          <Tag tone="ink" className="sd-library-track__tag" title={t('library.load_deck_a')}>
+                            <Icon icon={Disc} size="xs" className={clsx(deckA.playbackState === 'playing' && 'sd-deck-spin')} />
+                            Deck A
+                          </Tag>
+                        )}
+                        {isLoadedInDeckB && (
+                          <Tag tone="ink" className="sd-library-track__tag" title={t('library.load_deck_b')}>
+                            <Icon icon={Disc} size="xs" className={clsx(deckB.playbackState === 'playing' && 'sd-deck-spin')} />
+                            Deck B
+                          </Tag>
+                        )}
                       </span>
                     )}
                   </td>
-                  <td>
+                  <td className="sd-library-table__file">
+                    <span className="sd-library-table__file-name">{track.album}</span>
+                  </td>
+                  <td className="sd-table__num">
                     {isEditing ? (
-                      <Input
+                      <TextField
+                        size="sm"
                         type="number"
                         inputMode="decimal"
                         min={MANUAL_BPM_MIN}
@@ -903,55 +1016,64 @@ export const Library: React.FC = () => {
                         disabled={isSavingMetadata}
                         onChange={(e) => setMetadataDraft((d) => ({ ...d, bpm: e.target.value }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                        wrapperClassName="sd-library-edit sd-library-edit--bpm"
                         autoFocus
                       />
                     ) : track.bpm !== undefined && track.bpm > 0 ? (
                       <span
-                        className="track-bpm-value"
+                        className={clsx('sd-library-table__bpm sd-num', track.manualFields.includes('bpm') && 'is-manual')}
                         title={track.manualFields.includes('bpm') ? t('library.manual_value_title') : undefined}
                       >
                         {track.bpm % 1 === 0 ? track.bpm : track.bpm.toFixed(1)}
                       </span>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="sd-library-table__muted">—</span>
                     )}
                   </td>
-                  <td>
-                    {isEditing ? (
-                      <select
-                        className="input-field"
+                  {isEditing ? (
+                    <td colSpan={2}>
+                      <SelectMenu
+                        size="sm"
+                        label={t('library.manual_key_label')}
+                        placeholder={t('library.manual_key_none')}
                         value={metadataDraft.camelot}
-                        aria-label={t('library.manual_key_label')}
                         disabled={isSavingMetadata}
-                        onChange={(e) => setMetadataDraft((d) => ({ ...d, camelot: e.target.value }))}
+                        menuMinWidth={176}
+                        options={[
+                          { value: '', label: t('library.manual_key_none') },
+                          ...CAMELOT_KEYS.map((camelot) => ({ value: camelot, label: `${camelot} · ${camelotToKey(camelot)}` })),
+                        ]}
+                        onChange={(camelot) => setMetadataDraft((d) => ({ ...d, camelot }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
-                      >
-                        <option value="">{t('library.manual_key_none')}</option>
-                        {CAMELOT_KEYS.map((camelot) => (
-                          <option key={camelot} value={camelot}>
-                            {camelot} · {camelotToKey(camelot)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : track.key ? (
-                      <div
-                        className="track-key-group"
+                        wrapperClassName="sd-library-edit sd-library-edit--key"
+                      />
+                    </td>
+                  ) : track.key ? (
+                    <>
+                      {/* Tonalidad y Camelot en celdas propias: cada una se alinea en su columna */}
+                      <td
+                        className={clsx('sd-library-table__key', track.manualFields.includes('camelot') && 'is-manual')}
                         title={track.manualFields.includes('camelot') ? t('library.manual_value_title') : undefined}
                       >
-                        <span className="track-key-name">{track.key}</span>
+                        <span className="sd-library-key__name">{track.key}</span>
+                      </td>
+                      <td className="sd-library-table__camelot">
                         {track.camelot && (
-                          <Badge variant="outline" className="track-camelot-badge">
+                          <Tag tone="surface" className="sd-library-key__camelot">
                             {track.camelot}
-                          </Badge>
+                          </Tag>
                         )}
-                      </div>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={2}>
+                      <span className="sd-library-table__muted">—</span>
+                    </td>
+                  )}
                   <td>
                     {isEditing ? (
-                      <Input
+                      <TextField
+                        size="sm"
                         type="number"
                         inputMode="numeric"
                         min={MANUAL_ENERGY_MIN}
@@ -962,127 +1084,120 @@ export const Library: React.FC = () => {
                         disabled={isSavingMetadata}
                         onChange={(e) => setMetadataDraft((d) => ({ ...d, energy: e.target.value }))}
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
+                        wrapperClassName="sd-library-edit sd-library-edit--energy"
                       />
                     ) : typeof track.energy === 'number' ? (
                       <div
-                        className="energy-bar-container"
+                        className={clsx('sd-energy', track.manualFields.includes('energy') && 'is-manual')}
                         title={track.manualFields.includes('energy')
                           ? `${t('library.energy_label', { val: track.energy })} · ${t('library.manual_value_title')}`
                           : t('library.energy_label', { val: track.energy })}
                       >
-                        <div className="energy-bar">
-                          <div 
-                            className="energy-bar-fill" 
+                        <div className="sd-energy__track">
+                          <div
+                            className="sd-energy__fill"
                             style={{ width: `${Math.min(10, Math.max(0, track.energy)) * 10}%` }}
                           ></div>
                         </div>
-                        <span className="energy-bar-value">{track.energy}</span>
+                        <span className="sd-energy__value sd-num">{track.energy}</span>
                       </div>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="sd-library-table__muted">—</span>
                     )}
                   </td>
-                  <td className="col-status">
+                  <td>
                     <AnalysisStatusBadge
                       status={track.status}
                       error={track.analysisError}
-                      onAnalyze={() => handleAnalyzeTrack(track.rawLocalTrack, track.status === 'analyzed')}
+                      queued={isQueued}
+                      onAnalyze={isQueued ? undefined : () => handleAnalyzeTrack(track.rawLocalTrack, track.status === 'analyzed')}
                     />
                   </td>
-                  <td className="track-duration">{track.durationFormatted}</td>
-                  <td className="col-actions">
-                    <div className="track-actions-container">
-                      <IconButton 
-                        icon={<span className="deck-action-badge">A</span>} 
-                        size="sm" 
-                        variant={isLoadedInDeckA ? 'primary' : 'outline'}
-                        title={t('library.load_deck_a')}
-                        aria-label={t('library.load_deck_a')}
+                  <td className="sd-table__num sd-library-table__muted sd-num">{track.durationFormatted}</td>
+                  <td className="sd-table__actions">
+                    <div className="sd-library-actions">
+                      <IconButton
+                        icon={<span className="sd-library-actions__deck">A</span>}
+                        size="sm"
+                        variant={isLoadedInDeckA ? 'ink' : 'surface'}
+                        label={t('library.load_deck_a')}
                         onClick={() => handleLoadToDeck(track, 'A')}
                       />
-                      <IconButton 
-                        icon={<span className="deck-action-badge">B</span>} 
-                        size="sm" 
-                        variant={isLoadedInDeckB ? 'secondary' : 'outline'}
-                        title={t('library.load_deck_b')}
-                        aria-label={t('library.load_deck_b')}
+                      <IconButton
+                        icon={<span className="sd-library-actions__deck">B</span>}
+                        size="sm"
+                        variant={isLoadedInDeckB ? 'ink' : 'surface'}
+                        label={t('library.load_deck_b')}
                         onClick={() => handleLoadToDeck(track, 'B')}
                       />
                       <IconButton
-                        icon={<Target size={15} />}
+                        icon={<Icon icon={Target} size="sm" />}
                         size="sm"
-                        variant={seedIndex !== -1 ? 'primary' : 'ghost'}
+                        variant={seedIndex !== -1 ? 'ink' : 'ghost'}
                         aria-pressed={seedIndex !== -1}
-                        title={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
-                        aria-label={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
+                        label={seedIndex !== -1 ? t('seed.unmark') : t('seed.mark')}
                         onClick={() => handleToggleSeed(track.rawLocalTrack)}
                       />
                       {isEditing ? (
                         <>
                           <IconButton
-                            icon={<Check size={15} />}
+                            icon={<Icon icon={Check} size="sm" />}
                             size="sm"
-                            variant="primary"
+                            variant="ink"
                             disabled={isSavingMetadata}
-                            title={t('library.action_save_metadata')}
-                            aria-label={t('library.action_save_metadata')}
+                            label={t('library.action_save_metadata')}
                             onClick={() => handleSaveMetadataEdit(track)}
                           />
                           <IconButton
-                            icon={<X size={15} />}
+                            icon={<Icon icon={X} size="sm" />}
                             size="sm"
-                            variant="ghost"
                             disabled={isSavingMetadata}
-                            title={t('library.action_cancel_edit')}
-                            aria-label={t('library.action_cancel_edit')}
+                            label={t('library.action_cancel_edit')}
                             onClick={handleCancelMetadataEdit}
                           />
                         </>
                       ) : (
                         <IconButton
-                          icon={<Pencil size={15} />}
+                          icon={<Icon icon={Pencil} size="sm" />}
                           size="sm"
-                          variant="ghost"
                           disabled={track.status === 'analyzing'}
-                          title={t('library.action_edit_metadata')}
-                          aria-label={t('library.action_edit_metadata')}
+                          label={t('library.action_edit_metadata')}
                           onClick={() => handleStartMetadataEdit(track)}
                         />
                       )}
-                      {track.status === 'analyzing' ? (
-                        <IconButton 
-                          icon={<Loader2 size={15} className="spin-anim" />} 
-                          size="sm" 
-                          variant="ghost"
+                      {isQueued ? (
+                        <IconButton
+                          icon={<Icon icon={Clock} size="sm" />}
+                          size="sm"
                           disabled
-                          title={t('library.status_analyzing')}
-                          aria-label={t('library.status_analyzing')}
+                          label={t('library.queue.status_queued_title')}
+                        />
+                      ) : track.status === 'analyzing' ? (
+                        <IconButton
+                          icon={<Icon icon={Loader2} size="sm" className="sd-status__spin" />}
+                          size="sm"
+                          disabled
+                          label={t('library.status_analyzing')}
                         />
                       ) : track.status === 'analyzed' ? (
-                        <IconButton 
-                          icon={<RefreshCw size={15} />} 
-                          size="sm" 
-                          variant="ghost"
-                          title={t('library.action_reanalyze')}
-                          aria-label={t('library.action_reanalyze')}
+                        <IconButton
+                          icon={<Icon icon={RefreshCw} size="sm" />}
+                          size="sm"
+                          label={t('library.action_reanalyze')}
                           onClick={() => handleAnalyzeTrack(track.rawLocalTrack, true)}
                         />
                       ) : (
-                        <IconButton 
-                          icon={<Sparkles size={15} />} 
-                          size="sm" 
-                          variant="ghost"
-                          title={t('library.action_analyze')}
-                          aria-label={t('library.action_analyze')}
+                        <IconButton
+                          icon={<Icon icon={Sparkles} size="sm" />}
+                          size="sm"
+                          label={t('library.action_analyze')}
                           onClick={() => handleAnalyzeTrack(track.rawLocalTrack, false)}
                         />
                       )}
-                      <IconButton 
-                        icon={<Trash2 size={16} />} 
-                        size="sm" 
-                        variant="ghost"
-                        title={t('library.delete_track')}
-                        aria-label={t('library.delete_track')}
+                      <IconButton
+                        icon={<Icon icon={Trash2} size="sm" />}
+                        size="sm"
+                        label={t('library.delete_track')}
                         onClick={() => setDeleteConfirmTrack(track.rawLocalTrack)}
                       />
                     </div>
@@ -1092,17 +1207,13 @@ export const Library: React.FC = () => {
             })}
 
             {filteredTracks.length === 0 && (
-              <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-2)' }}>
-                    <AlertCircle size={28} className="text-muted" />
-                    <span style={{ fontWeight: 'var(--font-weight-medium)', color: 'var(--text-primary)' }}>
-                      {localTracks.length === 0 ? t('library.empty_local_title') : t('states.empty_title')}
-                    </span>
-                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                      {localTracks.length === 0 ? t('library.empty_local_desc') : t('states.empty_desc')}
-                    </span>
-                  </div>
+              <tr className="sd-table__empty-row">
+                <td colSpan={11}>
+                  <EmptyState
+                    icon={localTracks.length === 0 ? Music : Search}
+                    title={localTracks.length === 0 ? t('library.empty_local_title') : t('states.empty_title')}
+                    description={localTracks.length === 0 ? t('library.empty_local_desc') : t('states.empty_desc')}
+                  />
                 </td>
               </tr>
             )}
@@ -1116,27 +1227,29 @@ export const Library: React.FC = () => {
         onAudioReceived={handleYouTubeAudio}
       />
 
-      {/* Modal de confirmación para eliminar pista local */}
-      {deleteConfirmTrack && (
-        <div className="delete-confirm-overlay" onClick={() => setDeleteConfirmTrack(null)}>
-          <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="delete-modal-title">{t('library.delete_track')}</h3>
-            <p className="delete-modal-desc">
-              {t('library.delete_confirm', { title: deleteConfirmTrack.title })}
-            </p>
-            <div className="delete-modal-actions">
-              <Button variant="outline" onClick={() => setDeleteConfirmTrack(null)}>
-                {t('common.cancel')}
-              </Button>
-              <Button variant="primary" onClick={() => handleDeleteTrack(deleteConfirmTrack)}>
-                <Trash2 size={16} />
-                {t('common.delete')}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      {/* Confirmación para eliminar una pista local */}
+      <ConfirmDialog
+        open={deleteConfirmTrack !== null}
+        title={t('library.delete_track')}
+        description={deleteConfirmTrack ? t('library.delete_confirm', { title: deleteConfirmTrack.title }) : ''}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={<><Icon icon={Trash2} size="sm" />{t('common.delete')}</>}
+        onCancel={() => setDeleteConfirmTrack(null)}
+        onConfirm={() => { if (deleteConfirmTrack) void handleDeleteTrack(deleteConfirmTrack); }}
+      />
+
+      {/* Confirmación del borrado masivo: indica cuántas pistas se eliminarán */}
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        busy={isDeleting}
+        title={t('library.bulk.delete_title', { count: selectedRows.length })}
+        description={t('library.bulk.delete_confirm', { count: selectedRows.length })}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={<><Icon icon={Trash2} size="sm" />{isDeleting ? t('library.bulk.deleting') : t('common.delete')}</>}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void handleBulkDelete()}
+      />
+    </ConsoleTemplate>
   );
 };
 

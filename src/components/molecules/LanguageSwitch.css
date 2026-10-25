@@ -1,0 +1,35 @@
+.sd-language-switch {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-surface);
+}
+
+.sd-language-switch__option {
+  min-width: 2.75rem;
+  min-height: calc(var(--sd-control-height) - 6px);
+  padding: 0 0.75rem;
+  border-radius: var(--sd-radius-pill);
+  font-family: var(--sd-font);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  color: var(--sd-ink-soft);
+  cursor: pointer;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-language-switch__option:hover {
+  color: var(--sd-ink);
+}
+
+.sd-language-switch__option[aria-pressed='true'] {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sd-language-switch__option:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: 1px;
+}

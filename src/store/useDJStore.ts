@@ -371,6 +371,11 @@ class DJStore {
     return sessionRecorder.finalize();
   }
 
+  /** Discards the active or finalized in-memory session so nothing remains pending export. */
+  public clearSessionCapture(): void {
+    sessionRecorder.reset();
+  }
+
   /** Returns a detached snapshot of the active or most recently finalized session. */
   public getSessionCapture(): RecordedSession | null {
     return sessionRecorder.getSession();

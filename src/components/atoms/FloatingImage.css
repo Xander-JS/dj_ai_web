@@ -1,0 +1,10 @@
+.sd-floating-image {
+  pointer-events: none;
+  user-select: none;
+}
+
+.sd-floating-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}

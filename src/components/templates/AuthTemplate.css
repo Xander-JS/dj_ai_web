@@ -1,0 +1,293 @@
+/* Login y Registro: dos regiones, papel con el formulario y un campo plano con el altavoz 3D */
+.sd-auth__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  min-height: calc(100svh - var(--sd-nav-height));
+}
+
+.sd-auth__panel {
+  display: flex;
+  align-items: center;
+  padding: var(--sd-gap-5) var(--sd-margin) var(--sd-gap-6);
+}
+
+.sd-auth__content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 34rem;
+  container-type: inline-size;
+}
+
+/* Paso «sección» del sistema, ajustado a la columna para quedarse en dos líneas */
+.sd-auth__title {
+  font-family: var(--sd-font);
+  font-size: max(2.5rem, min(var(--sd-text-section), 13cqi));
+  font-weight: var(--sd-weight-black);
+  line-height: var(--sd-leading-display);
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
+  text-wrap: balance;
+  color: var(--sd-ink);
+}
+
+.sd-auth__title:focus {
+  outline: none;
+}
+
+.sd-auth__intro {
+  max-width: 40ch;
+  margin-top: var(--sd-gap-4);
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+}
+
+.sd-auth__form {
+  margin-top: var(--sd-gap-5);
+}
+
+/* Campo de color: se apoya en el borde derecho e inferior, con la esquina libre redondeada */
+.sd-auth__stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 34rem;
+  padding: clamp(1.75rem, 3vw, 2.75rem);
+  overflow: hidden;
+  border-radius: var(--sd-radius-panel) 0 0 0;
+  color: var(--sd-field-ink);
+}
+
+.sd-auth__stage--sage { background-color: var(--sd-field-sage); }
+.sd-auth__stage--accent { background-color: var(--sd-accent); }
+
+.sd-auth__speaker {
+  position: absolute;
+  inset: 2% -6% 16% 2%;
+}
+
+.sd-auth__statement {
+  position: relative;
+  max-width: 22ch;
+  font-size: var(--sd-text-statement);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+/* ---- Formularios existentes (ui/Input, ui/Button) en el lenguaje del Design System v2 ----
+   Los formularios se comparten con los modales de la consola, así que aquí solo se
+   reasignan sus tokens heredados y se da forma de píldora a sus controles. */
+.sd-auth__form {
+  --font-family-sans: var(--sd-font);
+  --text-sm: var(--sd-text-note);
+  --text-base: var(--sd-text-body);
+  --text-primary: var(--sd-ink);
+  --text-secondary: var(--sd-ink-soft);
+  --text-tertiary: var(--sd-ink-soft);
+  --bg-surface: var(--sd-paper);
+  --bg-surface-hover: var(--sd-surface);
+  --color-primary-500: var(--sd-accent);
+  --color-primary-600: var(--sd-accent-hover);
+}
+
+.sd-auth__form .auth-form {
+  gap: var(--sd-gap-4);
+}
+
+.sd-auth__form .input-wrapper {
+  gap: var(--sd-gap-1);
+}
+
+.sd-auth__form .input-label {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  color: var(--sd-ink);
+}
+
+.sd-auth__form .input-icon {
+  left: 1.25rem;
+  color: var(--sd-ink-soft);
+}
+
+.sd-auth__form .input-field {
+  height: var(--sd-control-height-lg);
+  padding: 0 1.5rem 0 3.25rem;
+  border: 2px solid var(--sd-ink-soft);
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-paper);
+  color: var(--sd-ink);
+  caret-color: var(--sd-accent);
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-regular);
+  transition: border-color var(--sd-duration-fast) var(--sd-ease-out);
+}
+
+.sd-auth__form .input-field:hover:not(:disabled) {
+  border-color: var(--sd-ink);
+}
+
+.sd-auth__form .input-field:focus {
+  border-color: var(--sd-ink);
+  box-shadow: none; /* taste-skill-ignore: anula el halo heredado, no es una sombra */
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: var(--sd-focus-offset);
+}
+
+/* El autorrelleno del navegador conserva el fondo y la tinta del tema */
+.sd-auth__form .input-field:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 100px var(--sd-surface) inset; /* taste-skill-ignore: fondo del autorrelleno, no es una sombra */
+  -webkit-text-fill-color: var(--sd-ink);
+}
+
+.sd-auth__form .btn {
+  border-radius: var(--sd-radius-pill);
+  font-family: var(--sd-font);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1;
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-auth__form .btn:active:not(:disabled) {
+  opacity: 1;
+  transform: scale(0.97);
+}
+
+.sd-auth__form .btn:focus-visible {
+  outline: var(--sd-focus-width) solid var(--sd-focus);
+  outline-offset: var(--sd-focus-offset);
+}
+
+.sd-auth__form .btn:disabled {
+  opacity: 0.45;
+}
+
+/* Acción principal: la píldora naranja grande de la Home */
+.sd-auth__form .btn-primary {
+  height: var(--sd-control-height-lg);
+  margin-top: var(--sd-gap-1);
+  padding: 0 2rem;
+  background-color: var(--sd-accent);
+  color: var(--sd-accent-ink);
+  font-size: var(--sd-text-body);
+}
+
+.sd-auth__form .btn-primary:hover:not(:disabled) {
+  background-color: var(--sd-accent-hover);
+}
+
+/* Secundaria rellena (volver al acceso tras registrarse) */
+.sd-auth__form .btn-outline {
+  height: var(--sd-control-height-lg);
+  border: 0;
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+  font-size: var(--sd-text-body);
+}
+
+.sd-auth__form .btn-outline:hover:not(:disabled) {
+  background-color: var(--sd-ink-soft);
+  border-color: transparent;
+}
+
+/* Enlaces del formulario: botones fantasma de la Home, alineados con el borde del texto */
+.sd-auth__form .auth-form-links {
+  margin-inline: -1rem;
+}
+
+.sd-auth__form .btn-ghost {
+  height: var(--sd-control-height);
+  padding: 0 1rem;
+  color: var(--sd-ink);
+  font-size: var(--sd-text-note);
+}
+
+.sd-auth__form .btn-ghost:hover:not(:disabled) {
+  background-color: var(--sd-surface);
+}
+
+.sd-auth__form .auth-form-message {
+  font-size: var(--sd-text-body);
+  font-weight: var(--sd-weight-light);
+  line-height: var(--sd-leading-body);
+  color: var(--sd-ink);
+}
+
+/* Avisos como campos planos con tinta negra: ácido para el error, salvia para la confirmación */
+.sd-auth__form .auth-form-message-error,
+.sd-auth__form .auth-form-message-success {
+  padding: 0.875rem 1.5rem;
+  border-radius: var(--sd-radius-panel);
+  color: var(--sd-field-ink);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.4;
+}
+
+.sd-auth__form .auth-form-message-error {
+  background-color: var(--sd-field-acid);
+}
+
+.sd-auth__form .auth-form-message-success {
+  background-color: var(--sd-field-sage);
+}
+
+@media (pointer: coarse) {
+  .sd-auth__form .btn-ghost {
+    height: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-auth__form .btn,
+  .sd-auth__form .input-field {
+    transition-duration: 0ms;
+  }
+}
+
+/* Tableta vertical: el campo pasa a ser una banda inferior con las esquinas superiores redondeadas, como en la Home */
+@media (max-width: 900px) {
+  .sd-auth__main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+  }
+
+  .sd-auth__panel {
+    justify-content: center;
+    padding-block: var(--sd-gap-5);
+  }
+
+  .sd-auth__stage {
+    min-height: clamp(18rem, 36svh, 24rem);
+    border-radius: var(--sd-radius-panel) var(--sd-radius-panel) 0 0;
+  }
+
+  .sd-auth__speaker {
+    inset: 0 -2% 0 38%;
+  }
+
+  .sd-auth__statement {
+    max-width: min(20ch, 52%);
+  }
+}
+
+/* Por debajo de tableta: sin altavoz (ni se carga) para que el formulario mande */
+@media (max-width: 640px) {
+  .sd-auth__stage {
+    min-height: 0;
+  }
+
+  .sd-auth__speaker {
+    display: none;
+  }
+
+  .sd-auth__statement {
+    max-width: none;
+  }
+}

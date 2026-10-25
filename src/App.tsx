@@ -1,11 +1,13 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useOutlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DesktopLayout } from './layouts/DesktopLayout';
 import { UpdatePasswordModal } from './components/auth/UpdatePasswordModal';
 import { useAuth } from './context/AuthContext';
 
 const Landing = lazy(() => import('./pages/Landing').then((module) => ({ default: module.Landing })));
+const Login = lazy(() => import('./pages/Login').then((module) => ({ default: module.Login })));
+const SignUp = lazy(() => import('./pages/SignUp').then((module) => ({ default: module.SignUp })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Library = lazy(() => import('./pages/Library').then((module) => ({ default: module.Library })));
 const Playlists = lazy(() => import('./pages/Playlists').then((module) => ({ default: module.Playlists })));
@@ -24,16 +26,19 @@ function RouteLoading() {
 function ConsoleShell() {
   const { user, loading, isConfigured } = useAuth();
   const location = useLocation();
+  // Se captura el elemento de la ruta (no <Outlet />) para que la vista saliente conserve su
+  // contenido mientras el shell la anima hacia fuera
+  const outlet = useOutlet();
 
   if (isConfigured && loading) return <RouteLoading />;
   if (isConfigured && !user) {
-    return <Navigate to="/" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   return (
     <DesktopLayout>
       <Suspense fallback={<RouteLoading />}>
-        <Outlet />
+        {outlet}
       </Suspense>
     </DesktopLayout>
   );
@@ -44,6 +49,8 @@ function App() {
     <Suspense fallback={<RouteLoading />}>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
         <Route element={<ConsoleShell />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/library" element={<Library />} />

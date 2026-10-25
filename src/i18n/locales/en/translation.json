@@ -22,6 +22,8 @@
   },
   "dashboard": {
     "welcome": "Welcome back",
+    "title": "Your booth",
+    "subtitle": "Import, analyse and mix your tracks. The audio never leaves this device.",
     "recent": "Recently Added",
     "recent_empty_title": "No tracks imported yet",
     "recent_empty_desc": "Import MP3 or WAV files from the Library to see them here.",
@@ -53,6 +55,10 @@
     "badge_mock": "Local deterministic engine",
     "match_score": "Match",
     "transition_tip": "Suggested Transition",
+    "recommendation_nav": "Browse recommendations",
+    "recommendation_prev": "Previous recommendation",
+    "recommendation_next": "Next recommendation",
+    "recommendation_position": "{{current}} of {{total}}",
     "load_deck_a": "Load into Deck A",
     "load_deck_b": "Load into Deck B",
     "loaded_to_deck": "Track successfully loaded into {{deck}}",
@@ -65,6 +71,7 @@
     "load_demo_deck_a": "Load Demo into Deck A",
     "load_local_track_first": "Load a local track into a deck to get recommendations.",
     "reference_analysis_required": "Analyze the reference track and verify its BPM and key before requesting recommendations.",
+    "no_candidates": "Not enough candidate tracks in the library to compare.",
     "track_load_failed": "The audio file could not be loaded. Check that it is available in your library.",
     "bpm_na": "BPM N/A",
     "key_na": "Camelot N/A",
@@ -82,16 +89,37 @@
     "pitch_label": "Pitch",
     "half_tempo": "½ Tempo",
     "double_tempo": "2x Tempo",
-    "key_label": "Key"
+    "key_label": "Key",
+    "recent_target": "Click a track to load it into Deck {{deck}}, the deck selected in Recommendations. Play starts playback.",
+    "recent_load_aria": "Load {{title}} by {{artist}} into Deck {{deck}}",
+    "recent_load_hint": "Load into Deck {{deck}}",
+    "recent_play_aria": "Play {{title}}",
+    "recent_pause_aria": "Pause {{title}}",
+    "results_summary_one": "{{count}} suggestion for “{{title}}”, ranked by match",
+    "results_summary_other": "{{count}} suggestions for “{{title}}”, ranked by match",
+    "fact_tempo": "Tempo",
+    "fact_energy": "Energy",
+    "fact_unknown": "Not enough data to evaluate",
+    "energy_na": "No data",
+    "score_na": "N/A",
+    "tempo_exact": "Same tempo",
+    "tempo_in_range": "Within pitch range",
+    "harmonic_same_key": "Same key",
+    "harmonic_relative": "Relative major/minor",
+    "harmonic_adjacent": "Adjacent on the Camelot wheel",
+    "musical_reasoning": "Musical reasoning",
+    "load_next_deck_hint": "Loads into the free deck without touching the reference track",
+    "load_reference_deck_hint": "Replaces the reference track on this deck"
   },
   "library": {
     "title": "Music Library",
     "search_tracks": "Search your library...",
-    "filter_all": "All",
-    "filter_audio": "Audio",
-    "filter_video": "Video",
+    "filter_all": "All Tracks",
     "filter_local": "My Local Files",
+    "filter_link": "Uploaded via Link",
+    "filters_label": "Filter tracks",
     "badge_local": "LOCAL",
+    "badge_link": "LINK",
     "import_btn": "Import Files",
     "importing": "Importing tracks...",
     "import_youtube_btn": "Import from YouTube",
@@ -118,6 +146,7 @@
     "drag_drop_title": "Drop your MP3 or WAV tracks here",
     "drag_drop_subtitle": "Or click to select files from your device",
     "col_title": "Title",
+    "col_deck": "Deck",
     "col_artist": "Artist",
     "col_album": "Album",
     "col_bpm": "BPM",
@@ -127,6 +156,7 @@
     "col_duration": "Time",
     "col_size": "Size",
     "col_date": "Added",
+    "col_actions": "Actions",
     "status_pending": "Pending",
     "status_analyzing": "Analyzing...",
     "status_analyzed": "Analyzed",
@@ -179,11 +209,83 @@
     "manual_invalid_bpm": "BPM must be a number between {{min}} and {{max}}.",
     "manual_invalid_energy": "Energy must be a whole number between {{min}} and {{max}}.",
     "manual_invalid_camelot": "Select a valid Camelot key.",
-    "manual_save_error": "Could not save the metadata for \"{{title}}\": {{error}}"
+    "manual_save_error": "Could not save the metadata for \"{{title}}\": {{error}}",
+    "toast": {
+      "imported": "Tracks loaded successfully",
+      "added_to_deck": "Added to {{deck}}",
+      "load_failed": "Could not load into {{deck}}",
+      "deleted": "Track deleted",
+      "analyzed": "Analysis complete",
+      "reanalyzed": "Reanalysis complete",
+      "analysis_failed": "Analysis failed",
+      "bpm_updated": "BPM updated",
+      "metadata_updated": "Metadata updated",
+      "save_failed": "Could not save"
+    },
+    "bulk": {
+      "region": "Selection actions",
+      "select_all": "Select all ({{count}})",
+      "select_visible": "Select the {{count}} shown",
+      "deselect_all": "Deselect all",
+      "scope_filtered": "Counts only tracks in the filtered view",
+      "reanalyze": "Reanalyze",
+      "delete": "Delete",
+      "select_row": "Select “{{title}}”",
+      "select_all_rows": "Select all shown tracks",
+      "queue_added": "{{count}} track(s) added to the analysis queue.",
+      "queue_duplicates": "{{count}} track(s) were already queued and were not duplicated.",
+      "delete_title": "Delete {{count}} track(s)",
+      "delete_confirm": "{{count}} track(s) will be deleted from the local library and from any playlists that contain them. This cannot be undone.",
+      "deleting": "Deleting…",
+      "delete_success": "{{count}} track(s) deleted from the local library.",
+      "delete_partial": "Deleted {{deleted}} of {{total}} tracks. {{failed}} could not be deleted and remain selected: {{errors}}",
+      "delete_failed": "None of the {{total}} tracks could be deleted: {{errors}}",
+      "search_playlists": "Search playlists"
+    },
+    "queue": {
+      "region": "Analysis queue",
+      "running": "Reanalyzing {{done}} of {{total}}",
+      "current": "Now: {{title}}",
+      "background_hint": "Keep using the console; the summary will appear here and in notifications when it finishes.",
+      "stop": "Stop queue",
+      "stopping": "It will stop after the current track.",
+      "summary_title": "Reanalysis finished",
+      "summary_stopped_title": "Queue stopped",
+      "stat_analyzed": "Analyzed",
+      "stat_failed": "Failed",
+      "stat_skipped": "Skipped",
+      "stat_total": "Total",
+      "failures_title": "Tracks with errors",
+      "skipped_title": "Skipped tracks",
+      "error_unknown": "The analysis failed without an error detail.",
+      "unsupported": "Unsupported format",
+      "reason_deleted": "Deleted before it finished",
+      "reason_stopped": "Queue stopped before its turn",
+      "reason_cancelled": "Analysis cancelled",
+      "show_all": "Show all {{count}}",
+      "show_less": "Show less",
+      "dismiss": "Close summary",
+      "status_queued": "Queued",
+      "status_queued_title": "Waiting for its turn in the analysis queue"
+    },
+    "analysis_filter_label": "Analysis status",
+    "analysis_filter": {
+      "all": "Any analysis status",
+      "analyzed": "Analyzed",
+      "pending": "Pending analysis",
+      "failed": "Failed or unsupported"
+    },
+    "analysis_filter_desc": {
+      "all": "Not filtered by analysis",
+      "analyzed": "Analysis completed",
+      "pending": "Not analyzed yet or analyzing now",
+      "failed": "Analysis failed or the audio is not supported"
+    }
   },
   "playlists": {
     "title": "My Playlists",
     "create": "New Playlist",
+    "tracks_count_one": "{{count}} track",
     "tracks_count": "{{count}} tracks",
     "total_duration": "Total time: {{time}}",
     "name_placeholder": "Playlist name",
@@ -202,7 +304,13 @@
     "empty_playlist_title": "This playlist is empty",
     "empty_playlist_desc": "Add tracks with the selector above or from the Library view.",
     "no_library_title": "Your library is empty",
-    "no_library_desc": "Import MP3 or WAV files in the Library to add them to playlists."
+    "no_library_desc": "Import MP3 or WAV files in the Library to add them to playlists.",
+    "search_tracks": "Search by title or artist",
+    "play_sequential": "Play in order",
+    "pause_playlist": "Pause",
+    "shuffle_play": "Shuffle play",
+    "shuffle_on": "Shuffle is on: click to return to the playlist order",
+    "playing_now": "Playing"
   },
   "player": {
     "play": "Play",
@@ -212,7 +320,34 @@
     "shuffle": "Shuffle",
     "repeat": "Repeat",
     "volume": "Volume",
-    "queue": "Playback queue"
+    "queue": "Playback queue",
+    "seek": "Track position",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites",
+    "shuffle_enable": "Turn shuffle on",
+    "shuffle_disable": "Turn shuffle off",
+    "shuffle_on": "Shuffle",
+    "repeat_label": "Repeat: {{mode}}",
+    "repeat_mode": {
+      "off": "off",
+      "all": "whole queue",
+      "one": "this track"
+    },
+    "queue_pending_count_one": "{{count}} pending track",
+    "queue_pending_count_other": "{{count}} pending tracks",
+    "queue_empty_title": "The queue is empty",
+    "queue_empty_desc": "Play a playlist or a recent track from Home to fill it.",
+    "queue_now": "Now playing",
+    "queue_next": "Up next",
+    "queue_clear": "Clear",
+    "queue_no_pending": "No pending tracks left.",
+    "queue_play_now": "Play now",
+    "queue_remove": "Remove {{title}} from the queue",
+    "status_playing": "Playing",
+    "status_paused": "Paused",
+    "status_pending": "Pending"
   },
   "dj": {
     "deck_a": "DECK A",
@@ -379,7 +514,23 @@
     "playlist_error": "Playlist operation failed: {{error}}",
     "seed_mix_generated": "Mix \"{{name}}\" generated with {{count}} tracks.",
     "session_history_limit": "{{max}}-session limit reached; the oldest session has been replaced.",
-    "session_history_save_failed": "The exported session could not be saved to the local history."
+    "session_history_save_failed": "The exported session could not be saved to the local history.",
+    "session_scope": "Events from this session; cleared on reload.",
+    "new": "New",
+    "status": {
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "category": {
+      "analysis": "Analysis",
+      "import": "Import",
+      "session": "Session",
+      "playlist": "Playlists",
+      "account": "Account",
+      "library": "Library",
+      "system": "System"
+    },
+    "analysis_queue_finished": "Analysis queue finished: {{analyzed}} analyzed, {{failed}} failed, {{skipped}} skipped of {{total}}."
   },
   "states": {
     "loading": "Loading...",
@@ -420,15 +571,18 @@
     "profile_error": "The profile could not be saved.",
     "profile_username_taken": "That username is already taken.",
     "accent_title": "Accent color",
-    "accent_desc": "Highlight color for buttons and active elements.",
+    "accent_desc": "Color of the console’s main actions, indicator lights and accent fields. Home, Login and Sign Up keep the SYSTEM DJ orange.",
     "accent": {
       "cyan": "Cyan",
       "violet": "Violet",
-      "neon": "Neon",
-      "orange": "Orange"
+      "neon": "Green",
+      "orange": "SYSTEM DJ orange",
+      "blue": "Electric blue",
+      "magenta": "Magenta",
+      "amber": "Amber"
     },
     "density_title": "Interface density",
-    "density_desc": "Compact reduces spacing to show more content.",
+    "density_desc": "Compact reduces spacing, rows, padding and control heights across the console. Text keeps its size.",
     "density": {
       "standard": "Standard",
       "compact": "Compact"
@@ -510,7 +664,96 @@
     "factory_reset_confirm_title": "Reset everything to factory defaults?",
     "factory_reset_confirm_desc": "All tracks, recorded sessions and playlists will be deleted and preferences restored to their defaults. This cannot be undone.",
     "factory_reset_confirm": "Reset everything",
-    "factory_reset_done": "App reset to factory defaults."
+    "factory_reset_done": "App reset to factory defaults.",
+    "page_desc": "Preferences apply as soon as you change them and are kept in this browser.",
+    "categories_label": "Settings categories",
+    "applied": "Applied",
+    "tab_desc": {
+      "general": "Your identity in SYSTEM DJ. Audio never leaves this device.",
+      "appearance": "Console theme, accent color, density and motion.",
+      "language": "Language for menus, alerts and messages.",
+      "audio": "How the crossfader blends and how far pitch and SYNC can move.",
+      "playback": "Length of automatic transitions and CUE behavior.",
+      "shortcuts": "Control the decks and mixer from the keyboard.",
+      "library": "How much space your music takes in this browser, and its upkeep."
+    },
+    "theme_title": "Theme",
+    "theme_desc": "Switches the paper and ink of the whole console.",
+    "theme_option": {
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language_desc": "Applies to the whole app straight away.",
+    "audio_mixer_title": "Mixing",
+    "audio_engine_title": "Audio engine",
+    "crossfader_preview_label": "Gain of decks A and B across the crossfader with the {{curve}} curve",
+    "crossfader_center": "At center: A {{a}}% · B {{b}}%",
+    "auto_transition_bars": "{{beats}} beats = {{bars}} bars of 4 beats",
+    "shortcuts_fixed_title": "Fixed shortcuts",
+    "shortcuts_fixed_desc": "These keys cannot be reassigned.",
+    "shortcuts_disabled_note": "Shortcuts are off: no key will act on the decks or open sections until you turn them on.",
+    "storage_desc": "Tracks, playlists and sessions are kept in this browser’s storage.",
+    "storage_browser": "Browser",
+    "storage_tracks": "Tracks",
+    "storage_share": "Quota used",
+    "storage_percent": "{{percent}}%",
+    "maintenance_title": "Maintenance",
+    "reset_mixer_action": "Reset",
+    "factory_reset_action": "Erase everything",
+    "account_desc": "Your username, alias and photo are stored in your account.",
+    "view_profile": "View profile",
+    "readout": {
+      "account": "Account",
+      "theme": "Theme",
+      "accent": "Accent",
+      "density": "Density",
+      "curve": "Curve",
+      "pitch": "Pitch",
+      "sync": "SYNC",
+      "buffer": "Latency",
+      "buffer_value": "{{ms}} ms",
+      "transition": "Transition",
+      "cue": "CUE",
+      "shortcuts": "Shortcuts",
+      "on": "On",
+      "off": "Off",
+      "tracks": "Tracks",
+      "tracks_size": "Music",
+      "auto_analyze": "Analyze on import",
+      "animations": "Animations"
+    },
+    "accent_default": "Default",
+    "motion_title": "Motion",
+    "animations_title": "Animations",
+    "animations_desc": "Decorative motion effects. Turning them off does not change any console feature.",
+    "animations_scope": "Includes",
+    "animations_list": {
+      "sidebar": "Sidebar light that follows the cursor",
+      "selection_bar": "Library selection bar entrance",
+      "player_visualizer": "Energy wave in the player bar"
+    },
+    "animations_reduced": "Your system asks for reduced motion: animations stay off even if you turn them on here.",
+    "lab_title": "Lab",
+    "experimental_title": "Experimental interface mode",
+    "experimental_desc": "Reserves an alternative console layout without the usual navigation bar. It is not available yet: turning it on reloads the page and you will still see the current interface.",
+    "experimental_tag": "In preparation",
+    "experimental_on_note": "On. The new layout will arrive in a future version.",
+    "experimental_reloading": "Saved. Reloading the page…",
+    "experimental_not_saved": "This browser did not allow the preference to be saved, so the page will not reload.",
+    "visualizer_title": "Player bar wave",
+    "visualizer_desc": "Intensity of the wave that reacts to the real Master audio. It uses your accent colour and stops when animations are off.",
+    "visualizer_intensity": {
+      "subtle": "Subtle",
+      "balanced": "Balanced",
+      "vivid": "Vivid"
+    },
+    "shortcuts_nav_title": "Navigation",
+    "shortcuts_nav_desc": "Hold Shift and press the key to open the section. They do nothing while you type. Click a key to reassign it (Esc cancels).",
+    "shortcuts_nav_binding_aria": "Open {{section}}: Shift + {{key}}. Click to reassign.",
+    "shortcuts_nav_binding_invalid": "Use a letter or a number together with Shift.",
+    "shortcuts_nav_binding_duplicate": "Shift + {{key}} already opens another section.",
+    "shortcuts_nav_binding_saved": "Shift + {{key}} assigned.",
+    "shortcuts_section": "Section"
   },
   "profile": {
     "title": "My Profile",
@@ -530,14 +773,24 @@
     "no_name": "No name",
     "no_username": "No username",
     "audio_local_badge": "Local-only audio",
-    "full_name": "Real name"
+    "full_name": "Real name",
+    "no_account_title": "No account",
+    "member_since": "Member since",
+    "unsaved_changes": "Unsaved changes",
+    "discard_changes": "Discard",
+    "device_title": "On this device",
+    "device_desc": "Your music and sessions live in this browser, not in your account.",
+    "device_error": "This browser’s local storage could not be read.",
+    "device_tracks": "Tracks",
+    "device_hours": "Of music",
+    "device_playlists": "Playlists"
   },
   "sessions": {
     "eyebrow": "Session tools",
     "title": "Session recording and export",
     "subtitle": "Capture a mix, finalize its snapshot, and export a WAV or MP3 file.",
     "captureTitle": "Session capture",
-    "captureActive": "Capture is active. Finish it to create a stable export snapshot.",
+    "captureActive": "Recording in progress. Finish to export",
     "captureFinalized": "A finalized session snapshot is ready to export.",
     "captureEmpty": "No finalized session is available yet.",
     "recording": "Recording",
@@ -558,7 +811,7 @@
     "mp3Info": "Stereo, 48 kHz MPEG Layer III audio.",
     "bitrate": "MP3 bitrate",
     "bitrateOption": "{{bitrate}} kbps",
-    "bitrateInfo": "Higher bitrates create larger files. Supported values are listed above.",
+    "bitrateInfo": "A higher bitrate produces larger files",
     "export": "Export file",
     "retryExport": "Retry export",
     "cancelExport": "Cancel export",
@@ -600,7 +853,27 @@
     "historyCount": "{{count}} / {{max}}",
     "historyEmpty": "No saved sessions yet. Export a finalized session to keep it here.",
     "historyDuration": "Duration {{duration}}",
-    "historyDownload": "Download {{format}}"
+    "historyDownload": "Download {{format}}",
+    "settingsTitle": "File settings",
+    "limitsTitle": "Export limits",
+    "exportSummaryWav": "WAV · 48 kHz · stereo",
+    "exportSummaryMp3": "MP3 · 48 kHz · {{bitrate}} kbps",
+    "openMixer": "Go to Mixer",
+    "captureHint": "Start a capture and mix in the Mixer. Finalizing it creates the snapshot you can export.",
+    "captureActiveHint": "You can go to the Mixer and come back: the capture stays active until you finalize it.",
+    "captureReplaceHint": "Starting a new capture replaces this snapshot. Exported sessions stay in the history.",
+    "readoutDuration": "Duration",
+    "readoutEvents": "Recorded events",
+    "steps": {
+      "label": "Steps to record and export a session",
+      "capture": "Record and finalize",
+      "captureHint": "Start a capture",
+      "export": "Export the file",
+      "exportHint": "Available once the capture is finalized",
+      "download": "Download and keep",
+      "downloadHint": "The last {{max}} are kept on this device",
+      "downloadDone": "File ready to save"
+    }
   },
   "seed": {
     "mode_title": "Reference mode",
@@ -617,26 +890,115 @@
     "generating": "Generating…",
     "generate_disabled": "Mark at least one reference track first",
     "clear": "Clear references",
-    "replaced": "Only {{max}} reference tracks allowed: \"{{removed}}\" was replaced by \"{{added}}\".",
+    "updated": "Reference updated",
+    "limit_reached": "Maximum {{max}} references",
     "no_compatible": "No compatible tracks found. Analyze more tracks (BPM and key) and try again.",
     "generated_name": "Mix from {{title}}",
     "generated_name_pair": "Mix {{start}} → {{end}}"
   },
   "landing": {
-    "badge": "100% local audio on your device",
-    "title": "Mix like a pro, right in your browser",
-    "subtitle": "SYSTEM DJ analyzes BPM and key of your local music, syncs two decks and suggests the next track with AI so your sessions keep flowing.",
-    "privacy_note": "Your account only stores your identity and profile. Audio files never leave your computer.",
-    "features_title": "Main features",
+    "brand": "SYSTEM DJ",
+    "skip_to_content": "Skip to content",
+    "nav": {
+      "label": "Main",
+      "home": "SYSTEM DJ home",
+      "language": "Language",
+      "language_es": "Español",
+      "language_en": "English",
+      "theme_to_dark": "Switch to dark theme",
+      "theme_to_light": "Switch to light theme",
+      "log_in": "Log in",
+      "sign_up": "Sign up"
+    },
+    "hero": {
+      "title": "SYSTEM DJ",
+      "subtitle": "Mix like a pro, directly in your browser.",
+      "description": "SYSTEM DJ analyzes the BPM and key of your local music, synchronizes two decks, and uses AI to suggest the next track so your sessions flow seamlessly.",
+      "cta": "Open Console",
+      "image_alt": "White DJ headphones"
+    },
+    "band": {
+      "items": [
+        {
+          "value": "124 BPM",
+          "label": "Detected tempo"
+        },
+        {
+          "value": "8A",
+          "label": "Camelot key"
+        },
+        {
+          "value": "SYNC",
+          "label": "Tempo locked"
+        },
+        {
+          "value": "ALIGN",
+          "label": "Phase aligned"
+        },
+        {
+          "value": "BAR SYNC",
+          "label": "Bars in step"
+        },
+        {
+          "value": "HOT CUES",
+          "label": "Jump points"
+        },
+        {
+          "value": "±16%",
+          "label": "Pitch range"
+        },
+        {
+          "value": "9A",
+          "label": "Next key"
+        },
+        {
+          "value": "BEATGRID",
+          "label": "Editable downbeat"
+        },
+        {
+          "value": "WAV",
+          "label": "Lossless export"
+        },
+        {
+          "value": "MP3",
+          "label": "Encoded on your device"
+        },
+        {
+          "value": "128 BPM",
+          "label": "Deck B synced"
+        }
+      ]
+    },
+    "privacy": {
+      "title": "100% local audio",
+      "body": "Your music is analyzed, mixed and recorded on your device. Your account only stores your identity and profile. Audio files never leave your device."
+    },
     "features": {
+      "title": "Four tools, one console",
       "analysis_title": "Music analysis",
-      "analysis_desc": "BPM, Camelot key, energy and beatgrid detection on your local files.",
+      "analysis_desc": "Detects BPM, Camelot key, energy and beatgrid from your local files, and lets you correct the downbeat by hand.",
       "sync_title": "Two synced decks",
-      "sync_desc": "SYNC, ALIGN and BAR SYNC, hot cues, pitch bend and a crossfader with configurable curve.",
+      "sync_desc": "SYNC, ALIGN and BAR SYNC, hot cues, pitch bend and a crossfader with a configurable curve: constant power, linear or cut.",
       "ai_title": "AI recommendations",
-      "ai_desc": "Next-track suggestions based on the harmony, tempo and energy of your mix.",
+      "ai_desc": "Suggests the next track by harmony, tempo and energy. A local engine does the ranking; AI only adds an optional explanation.",
       "export_title": "Record and export",
-      "export_desc": "Record your sessions and export them as WAV or MP3 without relying on servers."
+      "export_desc": "Record your sessions and export them as WAV or MP3. Rendering and encoding happen on your device.",
+      "key_matcher": {
+        "label": "Your track's key",
+        "previous": "Previous key",
+        "next": "Next key",
+        "mode": "Mode",
+        "minor": "Minor",
+        "major": "Major",
+        "result": "Mixes well with",
+        "summary": "{{key}} mixes well with {{list}}.",
+        "note": "The same Camelot rule the recommendation engine uses."
+      }
+    },
+    "closing": {
+      "title": "Your session starts here",
+      "secondary": "Create account",
+      "copyright": "© {{year}} SYSTEM DJ"
     }
   },
   "auth": {
@@ -677,6 +1039,12 @@
     "confirm_new_password": "Confirm new password",
     "save_password": "Save password",
     "password_updated": "Your password has been updated successfully.",
-    "link_expired_title": "Link expired"
+    "link_expired_title": "Link expired",
+    "page": {
+      "login_intro": "Back to your console: your decks, library and sessions are waiting.",
+      "signup_intro": "All you need is an email and a password. Mix in the browser, nothing to install.",
+      "login_statement": "Your tracks are right where you left them: on your device.",
+      "signup_statement": "Your account stores your identity and profile. Your music never leaves your device."
+    }
   }
 }

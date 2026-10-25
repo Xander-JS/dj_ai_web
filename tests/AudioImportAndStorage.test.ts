@@ -105,6 +105,22 @@ describe('audioImportService — política actual de importación', () => {
     assert.equal(tracks[0].analysis.status, 'pending');
   });
 
+  test('records origin "link" for link imports and leaves file imports without origin', async () => {
+    const deps = {
+      hasDuplicate: async () => false,
+      decodeAudioData: async () => ({ duration: 10 }) as AudioBuffer,
+      computeFileHash: async () => undefined,
+      saveTrack: (track: Parameters<IndexedDBStorage['saveTrack']>[0], source: File) => storage.saveTrack(track, source),
+      duplicateWarning: (name: string) => `duplicate: ${name}`,
+    };
+    await importAudioFiles([createMockFile('from-disk.mp3', 32, 'audio/mpeg')], deps);
+    await importAudioFiles([createMockFile('from-youtube.mp3', 48, 'audio/mpeg')], deps, { origin: 'link' });
+
+    const byName = new Map((await storage.getAllTracks()).map((t) => [t.fileMeta?.fileName, t]));
+    assert.equal(byName.get('from-disk.mp3')?.origin, undefined);
+    assert.equal(byName.get('from-youtube.mp3')?.origin, 'link');
+  });
+
   test('with requireDecodable, rejects an undecodable file without persisting it', async () => {
     const file = createMockFile('remote.mp3', 32, 'audio/mpeg');
     const result = await importAudioFiles([file], {

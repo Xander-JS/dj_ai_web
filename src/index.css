@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap');
+@import './design-system/tokens.css';
 
 :root {
   /* ==========================================================================
@@ -52,8 +53,13 @@
   /* LAYOUT (Shell regions; reduced in the tablet breakpoint below) */
   --layout-header-height: 4rem;    /* 64px */
   --layout-sidebar-width: 15.625rem; /* 250px */
-  --layout-player-height: 5.625rem;  /* 90px */
+  --layout-player-height: 6.25rem;  /* 100px: aire alrededor de Play en la barra */
   --layout-gutter: var(--space-4);
+  /* Marco de la aplicación: consola, Home, Login y Registro comparten este ancho, centrado.
+     En escritorio ocupa el 92 % de la ventana; cuando eso deja menos de 80rem (decks y mixer
+     necesitan espacio) crece hasta 80rem, y en pantallas pequeñas llega casi al borde con un
+     margen mínimo. En vw para que las capas fijas (avisos) puedan alinearse con él. */
+  --layout-frame-width: max(92vw, min(100vw - 2 * var(--layout-gutter), 80rem));
 
   /* TOUCH */
   --touch-target-min: var(--size-md); /* 40px */
@@ -106,7 +112,7 @@
   --size-md: 2.25rem;
   --size-lg: 2.75rem;
   --layout-header-height: 3.5rem;
-  --layout-player-height: 5rem;
+  --layout-player-height: 5.5rem;
 }
 
 /* Coarse pointers (touch screens) get larger hit areas */
@@ -242,4 +248,17 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden; /* For desktop app feel */
+}
+
+/* Páginas largas (Home): desplaza el documento en lugar del shell fijo. Ver design-system/documentScroll.ts */
+html[data-scroll-mode='document'],
+html[data-scroll-mode='document'] body {
+  height: auto;
+  overflow-x: clip;
+}
+
+html[data-scroll-mode='document'] #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
 }

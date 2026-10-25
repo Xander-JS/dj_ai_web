@@ -38,3 +38,5 @@ __pycache__/
 .agents/logs/
 
 docs/
+.impeccable/
+.taste-skill/

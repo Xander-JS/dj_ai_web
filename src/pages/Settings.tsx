@@ -1,18 +1,43 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Settings as SettingsIcon, Palette, Globe, Volume2, PlayCircle, Keyboard, Library, Camera, SlidersHorizontal, RotateCcw } from 'lucide-react';
-import { Switch } from '../components/ui/Switch';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Avatar } from '../components/ui/Avatar';
-import { Badge } from '../components/ui/Badge';
-import { Modal } from '../components/ui/Modal';
-import { Slider } from '../components/ui/Slider';
+import type { TFunction } from 'i18next';
+import { useSearchParams } from 'react-router-dom';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import {
+  Check,
+  Globe,
+  Keyboard,
+  Library,
+  Palette,
+  PlayCircle,
+  UserRound,
+  Volume2,
+  type LucideIcon,
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import { Icon } from '../components/atoms/Icon';
+import { Fader } from '../components/atoms/Fader';
+import { Switch } from '../components/atoms/Switch';
+import { Tag } from '../components/atoms/Tag';
+import { ChoiceTiles } from '../components/molecules/ChoiceTiles';
+import { Notice } from '../components/molecules/Notice';
+import { Panel } from '../components/molecules/Panel';
+import { SegmentedControl } from '../components/molecules/SegmentedControl';
+import { SettingRow } from '../components/molecules/SettingRow';
+import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { AccountSettings } from '../components/settings/AccountSettings';
+import { LibrarySettings } from '../components/settings/LibrarySettings';
+import { readStorageUsage, toMb, type StorageUsage } from '../components/settings/storageUsage';
+import { ShortcutSettings } from '../components/settings/ShortcutSettings';
+import { BeatLengthPreview, CrossfaderCurvePreview } from '../components/settings/SettingsPreviews';
+import { DURATION, EASE_OUT } from '../design-system/motion';
+import { useSystemReducedMotion } from '../design-system/motionPreference';
+import { useSmoothScroll } from '../design-system/smoothScroll';
 import { useAuth } from '../context/AuthContext';
-import { ALLOWED_AVATAR_TYPES, isValidAvatarFile } from '../utils/avatarFile';
 import {
   ACCENT_COLORS,
   AUTO_TRANSITION_BEATS,
+  DEFAULT_SETTINGS,
   BUFFER_SIZES,
   CROSSFADER_CURVES,
   PITCH_RANGES,
@@ -22,599 +47,555 @@ import {
   settingsStore,
   useSettingsStore,
   type AppLanguage,
+  type AppSettings,
+  type ThemeMode,
 } from '../store/useSettingsStore';
-import { djStore } from '../store/useDJStore';
-import { seedStore } from '../store/useSeedStore';
-import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { playlistService } from '../services/playlists/playlistService';
-import {
-  DEFAULT_SHORTCUT_BINDINGS,
-  KEYBOARD_SHORTCUTS,
-  MIX_PARAMS,
-  formatKeyCode,
-  validateBinding,
-  type MixShortcutId,
-} from '../services/keyboard/keyboardShortcuts';
-import { clsx } from 'clsx';
-import '../components/ui/Table.css';
-import '../components/auth/AuthForm.css';
 import './Settings.css';
 
 type Tab = 'general' | 'appearance' | 'language' | 'audio' | 'playback' | 'shortcuts' | 'library';
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,30}$/;
-const BYTES_PER_MB = 1024 * 1024;
+const TABS: { id: Tab; icon: LucideIcon }[] = [
+  { id: 'general', icon: UserRound },
+  { id: 'appearance', icon: Palette },
+  { id: 'language', icon: Globe },
+  { id: 'audio', icon: Volume2 },
+  { id: 'playback', icon: PlayCircle },
+  { id: 'shortcuts', icon: Keyboard },
+  { id: 'library', icon: Library },
+];
 
-type Feedback = { type: 'error' | 'success'; text: string } | null;
+const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.id === value);
 
-/** Selector de opciones excluyentes con los botones existentes (primary = activo). */
-function OptionSelector<T extends string | number>({ options, value, onChange, label }: {
-  options: readonly T[];
-  value: T;
-  onChange: (value: T) => void;
-  label: (value: T) => string;
-}) {
+const AUDIO_SAMPLE_RATE = 48000;
+const APPLIED_STAMP_MS = 2400;
+const percent = (fraction: number) => `±${Math.round(fraction * 100)}%`;
+const latencyMs = (size: number) => ((size / AUDIO_SAMPLE_RATE) * 1000).toFixed(1);
+
+interface Readout {
+  label: string;
+  value: string;
+}
+
+/** Lecturas de consola: el valor vigente de cada ajuste de la vista; al cambiar, la cifra se reemplaza */
+const ReadoutStrip: React.FC<{ readouts: Readout[] }> = ({ readouts }) => {
+  const reduceMotion = useReducedMotion();
+  if (readouts.length === 0) return null;
   return (
-    <div className="settings-button-group" role="radiogroup">
-      {options.map((option) => (
-        <Button
-          key={option}
-          size="sm"
-          role="radio"
-          aria-checked={option === value}
-          variant={option === value ? 'primary' : 'outline'}
-          onClick={() => onChange(option)}
-        >
-          {label(option)}
-        </Button>
+    <dl className="sd-settings-readouts">
+      {readouts.map((readout) => (
+        <div key={readout.label} className="sd-settings-readout">
+          <dt className="sd-settings-readout__label">{readout.label}</dt>
+          <dd className="sd-settings-readout__value sd-num">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={readout.value}
+                className="sd-settings-readout__text"
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
+                transition={{ duration: DURATION.base, ease: EASE_OUT }}
+              >
+                {readout.value}
+              </motion.span>
+            </AnimatePresence>
+          </dd>
+        </div>
       ))}
-    </div>
-  );
-}
-
-const OptionCard: React.FC<{ title: string; desc?: string; children: React.ReactNode }> = ({ title, desc, children }) => (
-  <div className="settings-option-card">
-    <div>
-      <div className="settings-option-title">{title}</div>
-      {desc && <div className="settings-option-desc">{desc}</div>}
-    </div>
-    {children}
-  </div>
-);
-
-const FeedbackMessage: React.FC<{ feedback: Feedback }> = ({ feedback }) => feedback && (
-  <p role={feedback.type === 'error' ? 'alert' : 'status'} className={`auth-form-message auth-form-message-${feedback.type}`}>
-    {feedback.text}
-  </p>
-);
-
-const GeneralSettings: React.FC = () => {
-  const { t } = useTranslation();
-  const { user, profile, updateProfile, uploadAvatar } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Borradores: null = sin editar, se muestra el valor vigente del perfil (también si cambia desde Perfil)
-  const [usernameDraft, setUsernameDraft] = useState<string | null>(null);
-  const [fullNameDraft, setFullNameDraft] = useState<string | null>(null);
-  const [djAliasDraft, setDjAliasDraft] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-
-  if (!user) {
-    return <div className="settings-placeholder">{t('settings.general_sign_in')}</div>;
-  }
-
-  const username = usernameDraft ?? profile?.username ?? '';
-  const fullName = fullNameDraft ?? profile?.full_name ?? '';
-  const djAlias = djAliasDraft ?? profile?.dj_alias ?? '';
-  const trimmedUsername = username.trim();
-  const trimmedFullName = fullName.trim();
-  const trimmedDjAlias = djAlias.trim();
-  const usernameInvalid = trimmedUsername !== '' && !USERNAME_PATTERN.test(trimmedUsername);
-  const isDirty = trimmedUsername !== (profile?.username ?? '')
-    || trimmedFullName !== (profile?.full_name ?? '')
-    || trimmedDjAlias !== (profile?.dj_alias ?? '');
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (usernameInvalid || !isDirty) return;
-    setSaving(true);
-    setFeedback(null);
-    try {
-      await updateProfile({
-        username: trimmedUsername || null,
-        full_name: trimmedFullName || null,
-        dj_alias: trimmedDjAlias || null,
-      });
-      setUsernameDraft(null);
-      setFullNameDraft(null);
-      setDjAliasDraft(null);
-      setFeedback({ type: 'success', text: t('settings.profile_saved') });
-    } catch (err) {
-      const taken = (err as { code?: string } | null)?.code === '23505';
-      setFeedback({ type: 'error', text: t(taken ? 'settings.profile_username_taken' : 'settings.profile_error') });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (!isValidAvatarFile(file)) {
-      setFeedback({ type: 'error', text: t('profile.avatar_invalid') });
-      return;
-    }
-    setFeedback(null);
-    setUploading(true);
-    try {
-      await uploadAvatar(file);
-      setFeedback({ type: 'success', text: t('profile.avatar_updated') });
-    } catch {
-      setFeedback({ type: 'error', text: t('profile.avatar_error') });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <form className="settings-group" onSubmit={(e) => { void handleSave(e); }}>
-      <h3 className="settings-group-title">{t('settings.general_title')}</h3>
-      <div className="settings-option-card">
-        <Avatar size="xl" src={profile?.avatar_url ?? undefined} alt={trimmedDjAlias || trimmedFullName || user.email || ''} />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ALLOWED_AVATAR_TYPES.join(',')}
-          hidden
-          onChange={(e) => { void handleFileChange(e); }}
-        />
-        <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
-          <Camera size={14} />
-          {uploading ? t('profile.uploading') : t('profile.change_avatar')}
-        </Button>
-      </div>
-      <Input
-        label={t('settings.username')}
-        placeholder={t('settings.username_placeholder')}
-        value={username}
-        maxLength={30}
-        autoComplete="username"
-        aria-invalid={usernameInvalid}
-        onChange={(e) => setUsernameDraft(e.target.value)}
-      />
-      {usernameInvalid && <p role="alert" className="auth-form-message auth-form-message-error">{t('settings.username_invalid')}</p>}
-      <Input
-        label={t('settings.dj_alias')}
-        placeholder={t('settings.dj_alias_placeholder')}
-        value={djAlias}
-        maxLength={60}
-        onChange={(e) => setDjAliasDraft(e.target.value)}
-      />
-      <Input
-        label={t('settings.full_name')}
-        placeholder={t('settings.full_name_placeholder')}
-        value={fullName}
-        maxLength={60}
-        autoComplete="name"
-        onChange={(e) => setFullNameDraft(e.target.value)}
-      />
-      <div className="settings-button-group">
-        <Button type="submit" disabled={saving || usernameInvalid || !isDirty}>
-          {saving ? t('settings.profile_saving') : t('settings.profile_save')}
-        </Button>
-      </div>
-      <FeedbackMessage feedback={feedback} />
-    </form>
+    </dl>
   );
 };
 
-/**
- * Tabla de teclas selectoras de mezcla. Al pulsar una celda se captura la siguiente tecla
- * (Escape cancela); las flechas son fijas y solo se reasigna la tecla selectora.
- */
-const ShortcutBindingsEditor: React.FC = () => {
-  const { t } = useTranslation();
-  const { settings, updateSettings } = useSettingsStore();
-  const [listening, setListening] = useState<MixShortcutId | null>(null);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-  const bindings = settings.shortcutBindings;
+/** Sello «Aplicado» durante unos segundos tras cada cambio de preferencias */
+function useAppliedStamp(): boolean {
+  const [applied, setApplied] = useState(false);
+  const timerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    if (!listening) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      // Captura antes que los atajos globales para que la tecla no dispare ninguna acción
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (event.repeat) return;
-      if (event.code === 'Escape') {
-        setListening(null);
-        return;
-      }
-      const current = settingsStore.getSnapshot().shortcutBindings;
-      const error = validateBinding(current, listening, event.code);
-      if (error) {
-        setFeedback({ type: 'error', text: t(`settings.shortcuts_binding_${error}`, { key: formatKeyCode(event.code) }) });
-        return;
-      }
-      updateSettings({ shortcutBindings: { ...current, [listening]: event.code } });
-      setFeedback({ type: 'success', text: t('settings.shortcuts_binding_saved', { key: formatKeyCode(event.code) }) });
-      setListening(null);
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [listening, t, updateSettings]);
-
-  const startListening = (id: MixShortcutId) => {
-    setFeedback(null);
-    setListening((current) => (current === id ? null : id));
-  };
-
-  return (
-    <>
-      <OptionCard title={t('settings.shortcuts_mix_title')} desc={t('settings.shortcuts_mix_desc')}>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setListening(null);
-            setFeedback(null);
-            updateSettings({ shortcutBindings: DEFAULT_SHORTCUT_BINDINGS });
-          }}
-        >
-          <RotateCcw size={14} />
-          {t('settings.shortcuts_restore')}
-        </Button>
-      </OptionCard>
-      <div className="library-table-container">
-        <table className="library-table">
-          <thead>
-            <tr>
-              <th scope="col">{t('settings.shortcuts_action')}</th>
-              <th scope="col">{t('settings.shortcuts_deck', { deck: 'A' })}</th>
-              <th scope="col">{t('settings.shortcuts_deck', { deck: 'B' })}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {MIX_PARAMS.map((param) => (
-              <tr key={param}>
-                <td>{t(`settings.shortcuts_mix.${param}`)}</td>
-                {(['A', 'B'] as const).map((deckId) => {
-                  const id: MixShortcutId = `${deckId}.${param}`;
-                  const isListening = listening === id;
-                  return (
-                    <td key={deckId}>
-                      <Button
-                        size="sm"
-                        variant={isListening ? 'primary' : 'outline'}
-                        aria-pressed={isListening}
-                        aria-label={t('settings.shortcuts_binding_aria', {
-                          action: t(`settings.shortcuts_mix.${param}`),
-                          deck: deckId,
-                          key: formatKeyCode(bindings[id]),
-                        })}
-                        onClick={() => startListening(id)}
-                      >
-                        {isListening ? t('settings.shortcuts_press_key') : `${formatKeyCode(bindings[id])} + ← / →`}
-                      </Button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <FeedbackMessage feedback={feedback} />
-    </>
-  );
-};
-
-interface StorageUsage {
-  trackCount: number;
-  trackBytes: number;
-  usage: number | null;
-  quota: number | null;
-}
-
-const toMb = (bytes: number): string => (bytes / BYTES_PER_MB).toFixed(1);
-
-const LibrarySettings: React.FC = () => {
-  const { t } = useTranslation();
-  const { settings, updateSettings, resetSettings } = useSettingsStore();
-  const [storage, setStorage] = useState<StorageUsage | null>(null);
-  const [confirm, setConfirm] = useState<'mixer' | 'factory' | null>(null);
-  const [resetting, setResetting] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback>(null);
-  const [refreshToken, setRefreshToken] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    const estimate = typeof navigator !== 'undefined' && navigator.storage?.estimate
-      ? navigator.storage.estimate().catch(() => null)
-      : Promise.resolve(null);
-    Promise.all([indexedDBStorage.getAllTracks().catch(() => []), estimate]).then(([tracks, est]) => {
-      if (!active) return;
-      setStorage({
-        trackCount: tracks.length,
-        trackBytes: tracks.reduce((sum, track) => sum + (track.fileMeta?.fileSize ?? 0), 0),
-        usage: est?.usage ?? null,
-        quota: est?.quota ?? null,
-      });
+    const unsubscribe = settingsStore.subscribe(() => {
+      setApplied(true);
+      window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setApplied(false), APPLIED_STAMP_MS);
     });
-    return () => { active = false; };
-  }, [refreshToken]);
+    return () => {
+      unsubscribe();
+      window.clearTimeout(timerRef.current);
+    };
+  }, []);
 
-  /** Restablece decks (transporte, cues, sync) y mixer sin descargar pistas ni borrar datos. */
-  const handleResetMixer = () => {
-    djStore.resetMixerControls();
-    setFeedback({ type: 'success', text: t('settings.reset_mixer_done') });
-    setConfirm(null);
-  };
+  return applied;
+}
 
-  /** Borra pistas, sesiones, playlists y preferencias. */
-  const handleFactoryReset = async () => {
-    setResetting(true);
-    try {
-      djStore.unloadDeck('A');
-      djStore.unloadDeck('B');
-      seedStore.clearSeeds();
-      await indexedDBStorage.clearAll();
-      resetSettings();
-      playlistService.notifyExternalChange();
-      setFeedback({ type: 'success', text: t('settings.factory_reset_done') });
-    } catch {
-      setFeedback({ type: 'error', text: t('states.error_desc') });
-    } finally {
-      setResetting(false);
-      setConfirm(null);
-      setRefreshToken((n) => n + 1);
-    }
-  };
+/** Miniatura de la consola en un tema: se dibuja con los tokens del ámbito data-theme */
+const ThemePreview: React.FC<{ theme: ThemeMode }> = ({ theme }) => (
+  <span className="sd-theme-preview" data-theme={theme}>
+    <span className="sd-theme-preview__bar">
+      <span className="sd-theme-preview__mark" />
+      <span className="sd-theme-preview__line sd-theme-preview__line--short" />
+    </span>
+    <span className="sd-theme-preview__body">
+      <span className="sd-theme-preview__rail">
+        <span className="sd-theme-preview__pill sd-theme-preview__pill--active" />
+        <span className="sd-theme-preview__pill" />
+        <span className="sd-theme-preview__pill" />
+      </span>
+      <span className="sd-theme-preview__panel">
+        <span className="sd-theme-preview__line" />
+        <span className="sd-theme-preview__line sd-theme-preview__line--short" />
+        <span className="sd-theme-preview__button" />
+      </span>
+    </span>
+  </span>
+);
 
-  const closeConfirm = () => { if (!resetting) setConfirm(null); };
+/** Animaciones gobernadas por la preferencia global; cada nueva se añade aquí y en su CSS */
+const ANIMATED_SURFACES = ['sidebar', 'selection_bar'] as const;
 
-  return (
-    <div className="settings-group">
-      <h3 className="settings-group-title">{t('settings.library_title')}</h3>
-      <OptionCard
-        title={t('settings.storage_used')}
-        desc={storage ? t('settings.storage_tracks_value', { used: toMb(storage.trackBytes), count: storage.trackCount }) : undefined}
-      >
-        <Badge>
-          {storage?.usage != null && storage.quota
-            ? t('settings.storage_used_value', { used: toMb(storage.usage), quota: toMb(storage.quota) })
-            : storage ? t('settings.storage_unavailable') : t('states.loading')}
-        </Badge>
-      </OptionCard>
-      <OptionCard title={t('settings.auto_analyze')} desc={t('settings.auto_analyze_desc')}>
-        <Switch
-          checked={settings.autoAnalyzeOnImport}
-          onChange={(e) => updateSettings({ autoAnalyzeOnImport: e.target.checked })}
-        />
-      </OptionCard>
-      <OptionCard title={t('settings.reset_mixer')} desc={t('settings.reset_mixer_desc')}>
-        <Button variant="outline" onClick={() => setConfirm('mixer')}>
-          <SlidersHorizontal size={16} />
-          {t('settings.reset_mixer')}
-        </Button>
-      </OptionCard>
-      <OptionCard title={t('settings.factory_reset')} desc={t('settings.factory_reset_desc')}>
-        <Button variant="outline" onClick={() => setConfirm('factory')}>
-          <RotateCcw size={16} />
-          {t('settings.factory_reset')}
-        </Button>
-      </OptionCard>
-      <FeedbackMessage feedback={feedback} />
-
-      <Modal open={confirm === 'mixer'} onClose={closeConfirm} title={t('settings.reset_mixer_confirm_title')}>
-        <p className="settings-option-desc">{t('settings.reset_mixer_confirm_desc')}</p>
-        <div className="settings-button-group">
-          <Button variant="outline" onClick={closeConfirm}>
-            {t('common.cancel')}
-          </Button>
-          <Button onClick={handleResetMixer}>
-            <SlidersHorizontal size={16} />
-            {t('settings.reset_mixer_confirm')}
-          </Button>
-        </div>
-      </Modal>
-
-      <Modal open={confirm === 'factory'} onClose={closeConfirm} title={t('settings.factory_reset_confirm_title')}>
-        <p className="settings-option-desc">{t('settings.factory_reset_confirm_desc')}</p>
-        <div className="settings-button-group">
-          <Button variant="outline" disabled={resetting} onClick={closeConfirm}>
-            {t('common.cancel')}
-          </Button>
-          <Button disabled={resetting} onClick={() => { void handleFactoryReset(); }}>
-            <RotateCcw size={16} />
-            {t('settings.factory_reset_confirm')}
-          </Button>
-        </div>
-      </Modal>
-    </div>
-  );
-};
+const LanguagePreview: React.FC<{ code: string }> = ({ code }) => (
+  <span className="sd-language-preview">
+    <span className="sd-language-preview__code">{code}</span>
+  </span>
+);
 
 export const Settings: React.FC = () => {
   const { t } = useTranslation();
+  const reduceMotion = useReducedMotion();
+  const { user, profile } = useAuth();
   const { settings, updateSettings } = useSettingsStore();
-  const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requested = searchParams.get('section');
+  const activeTab: Tab = isTab(requested) ? requested : 'general';
+  const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const baseId = useId();
+  const applied = useAppliedStamp();
+  const systemReducedMotion = useSystemReducedMotion();
+  const smoothScrollRef = useSmoothScroll<HTMLDivElement>();
+  // Desplazamiento propio del contenido de la categoría: el menú queda fijo y cada categoría
+  // nueva empieza arriba (se reinicia mientras ninguna está a la vista, entre salida y entrada)
+  const viewScrollRef = useRef<HTMLDivElement | null>(null);
+  const setViewScroll = useCallback((element: HTMLDivElement | null) => {
+    viewScrollRef.current = element;
+    return smoothScrollRef(element);
+  }, [smoothScrollRef]);
+  const [interfaceNotice, setInterfaceNotice] = useState<'reloading' | 'not_saved' | null>(null);
 
-  const tabs = [
-    { id: 'general', icon: SettingsIcon, label: t('settings.tabs.general') },
-    { id: 'appearance', icon: Palette, label: t('settings.tabs.appearance') },
-    { id: 'language', icon: Globe, label: t('settings.tabs.language') },
-    { id: 'audio', icon: Volume2, label: t('settings.tabs.audio') },
-    { id: 'playback', icon: PlayCircle, label: t('settings.tabs.playback') },
-    { id: 'shortcuts', icon: Keyboard, label: t('settings.tabs.shortcuts') },
-    { id: 'library', icon: Library, label: t('settings.tabs.library') }
-  ];
+  // Modo experimental: al activarlo se guarda y se recarga una sola vez, solo por acción del usuario.
+  // Si el almacenamiento no conserva el valor, no se recarga (se perdería y no tendría efecto).
+  const handleExperimentalChange = (enabled: boolean) => {
+    updateSettings({ experimentalInterface: enabled });
+    if (!enabled) {
+      setInterfaceNotice(null);
+      return;
+    }
+    if (settingsStore.readPersisted()?.experimentalInterface !== true) {
+      setInterfaceNotice('not_saved');
+      return;
+    }
+    setInterfaceNotice('reloading');
+    window.location.reload();
+  };
+  const [storage, setStorage] = useState<StorageUsage | null>(null);
+  const [storageToken, setStorageToken] = useState(0);
+  const refreshStorage = useCallback(() => setStorageToken((n) => n + 1), []);
+
+  // Uso de almacenamiento: se lee al abrir Biblioteca y tras un borrado
+  useEffect(() => {
+    if (activeTab !== 'library') return;
+    let active = true;
+    void readStorageUsage().then((usage) => { if (active) setStorage(usage); });
+    return () => { active = false; };
+  }, [activeTab, storageToken]);
+
+  const selectTab = (tab: Tab, focus = false) => {
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      next.set('section', tab);
+      return next;
+    }, { replace: true });
+    if (focus) tabRefs.current[tab]?.focus();
+  };
+
+  // Navegación de pestañas con flechas, Inicio y Fin (activación automática)
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const index = TABS.findIndex((tab) => tab.id === activeTab);
+    const last = TABS.length - 1;
+    const target = {
+      ArrowDown: index === last ? 0 : index + 1,
+      ArrowRight: index === last ? 0 : index + 1,
+      ArrowUp: index === 0 ? last : index - 1,
+      ArrowLeft: index === 0 ? last : index - 1,
+      Home: 0,
+      End: last,
+    }[e.key];
+    if (target === undefined) return;
+    e.preventDefault();
+    selectTab(TABS[target].id, true);
+  };
+
+  const readouts = buildReadouts(activeTab, settings, storage, user ? (profile?.username ? `@${profile.username}` : user.email ?? '') : null, t);
+  const tabLabel = (tab: Tab) => t(`settings.tabs.${tab}`);
+  const panelId = `${baseId}-panel`;
+  const tabId = (tab: Tab) => `${baseId}-tab-${tab}`;
 
   return (
-    <div className="settings-container">
-
-      <div className="settings-sidebar">
-        {tabs.map(tab => (
-          <div
-            key={tab.id}
-            className={clsx('settings-tab', activeTab === tab.id && 'active')}
-            onClick={() => setActiveTab(tab.id as Tab)}
-          >
-            <tab.icon size={20} />
-            {tab.label}
+    <ConsoleTemplate fill className="sd-settings">
+      <div className="sd-settings__layout">
+        <aside className="sd-settings__aside">
+          <h2 className="sd-settings__title">{t('settings.title')}</h2>
+          <p className="sd-settings__intro">{t('settings.page_desc')}</p>
+          <div role="tablist" aria-orientation="vertical" aria-label={t('settings.categories_label')} className="sd-settings__tabs">
+            {TABS.map((tab) => {
+              const selected = tab.id === activeTab;
+              return (
+                <button
+                  key={tab.id}
+                  ref={(el) => { tabRefs.current[tab.id] = el; }}
+                  id={tabId(tab.id)}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={panelId}
+                  tabIndex={selected ? 0 : -1}
+                  className={clsx('sd-settings__tab', selected && 'is-active')}
+                  onClick={() => selectTab(tab.id)}
+                  onKeyDown={handleTabKeyDown}
+                >
+                  <Icon icon={tab.icon} size="md" />
+                  <span className="sd-settings__tab-label">{tabLabel(tab.id)}</span>
+                </button>
+              );
+            })}
           </div>
-        ))}
-      </div>
+        </aside>
 
-      <div className="settings-content">
-        <h2 className="settings-section-title">
-          {tabs.find(t => t.id === activeTab)?.label}
-        </h2>
-
-        {activeTab === 'general' && <GeneralSettings />}
-
-        {activeTab === 'appearance' && (
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.appearance_title')}</h3>
-            <OptionCard title={t('settings.theme_dark')} desc={t('settings.theme_dark_desc')}>
-              <Switch
-                checked={settings.theme === 'dark'}
-                onChange={(e) => updateSettings({ theme: e.target.checked ? 'dark' : 'light' })}
-              />
-            </OptionCard>
-            <OptionCard title={t('settings.accent_title')} desc={t('settings.accent_desc')}>
-              <OptionSelector
-                options={ACCENT_COLORS}
-                value={settings.accentColor}
-                onChange={(accentColor) => updateSettings({ accentColor })}
-                label={(color) => t(`settings.accent.${color}`)}
-              />
-            </OptionCard>
-            <OptionCard title={t('settings.density_title')} desc={t('settings.density_desc')}>
-              <OptionSelector
-                options={['standard', 'compact'] as const}
-                value={settings.density}
-                onChange={(density) => updateSettings({ density })}
-                label={(density) => t(`settings.density.${density}`)}
-              />
-            </OptionCard>
-          </div>
-        )}
-
-        {activeTab === 'language' && (
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.language_title')}</h3>
-            <OptionSelector<AppLanguage>
-              options={['es', 'en']}
-              value={settings.language}
-              onChange={(language) => updateSettings({ language })}
-              label={(language) => t(`settings.language_${language}`)}
-            />
-          </div>
-        )}
-
-        {activeTab === 'audio' && (
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.audio_title')}</h3>
-            <OptionCard title={t('settings.crossfader_curve_title')} desc={t('settings.crossfader_curve_desc')}>
-              <OptionSelector
-                options={CROSSFADER_CURVES}
-                value={settings.crossfaderCurve}
-                onChange={(crossfaderCurve) => updateSettings({ crossfaderCurve })}
-                label={(curve) => t(`settings.crossfader_curve.${curve}`)}
-              />
-            </OptionCard>
-            <OptionCard title={t('settings.pitch_range_title')} desc={t('settings.pitch_range_desc')}>
-              <OptionSelector
-                options={PITCH_RANGES}
-                value={settings.pitchRange}
-                onChange={(pitchRange) => updateSettings({ pitchRange })}
-                label={(range) => `±${Math.round(range * 100)}%`}
-              />
-            </OptionCard>
-            <OptionCard title={t('settings.sync_range_title')} desc={t('settings.sync_range_desc')}>
-              <div className="settings-button-group">
-                <Slider
-                  min={SYNC_RANGE_MIN * 100}
-                  max={SYNC_RANGE_MAX * 100}
-                  step={SYNC_RANGE_STEP * 100}
-                  value={Math.round(settings.syncRange * 100)}
-                  aria-label={t('settings.sync_range_title')}
-                  aria-valuetext={`±${Math.round(settings.syncRange * 100)}%`}
-                  onChange={(e) => updateSettings({ syncRange: Number(e.target.value) / 100 })}
-                />
-                <Badge>{`±${Math.round(settings.syncRange * 100)}%`}</Badge>
-              </div>
-            </OptionCard>
-            <OptionCard title={t('settings.buffer_title')} desc={t('settings.buffer_desc')}>
-              <OptionSelector
-                options={BUFFER_SIZES}
-                value={settings.bufferSize}
-                onChange={(bufferSize) => updateSettings({ bufferSize })}
-                label={(size) => t('settings.buffer_option', { size, ms: ((size / 48000) * 1000).toFixed(1) })}
-              />
-            </OptionCard>
-          </div>
-        )}
-
-        {activeTab === 'playback' && (
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.playback_title')}</h3>
-            <OptionCard title={t('settings.auto_transition_title')} desc={t('settings.auto_transition_desc')}>
-              <OptionSelector
-                options={AUTO_TRANSITION_BEATS}
-                value={settings.autoTransitionBeats}
-                onChange={(autoTransitionBeats) => updateSettings({ autoTransitionBeats })}
-                label={(count) => t('settings.auto_transition_beats', { count })}
-              />
-            </OptionCard>
-            <OptionCard title={t('settings.cue_mode_title')} desc={t('settings.cue_mode_desc')}>
-              <OptionSelector
-                options={['cdj', 'standard'] as const}
-                value={settings.cueMode}
-                onChange={(cueMode) => updateSettings({ cueMode })}
-                label={(mode) => t(`settings.cue_mode.${mode}`)}
-              />
-            </OptionCard>
-          </div>
-        )}
-
-        {activeTab === 'shortcuts' && (
-          <div className="settings-group">
-            <h3 className="settings-group-title">{t('settings.shortcuts_title')}</h3>
-            <OptionCard title={t('settings.shortcuts_enabled')} desc={t('settings.shortcuts_enabled_desc')}>
-              <Switch
-                checked={settings.shortcutsEnabled}
-                onChange={(e) => updateSettings({ shortcutsEnabled: e.target.checked })}
-              />
-            </OptionCard>
-            <div className="library-table-container">
-              <table className="library-table">
-                <thead>
-                  <tr>
-                    <th scope="col">{t('settings.shortcuts_key')}</th>
-                    <th scope="col">{t('settings.shortcuts_action')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {KEYBOARD_SHORTCUTS.map((shortcut) => (
-                    <tr key={shortcut.labelKey}>
-                      <td><Badge>{shortcut.keys}</Badge></td>
-                      <td>{t(shortcut.labelKey)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Cambio de categoría: la saliente se desvanece brevemente y la entrante llega desde la derecha */}
+        <div ref={setViewScroll} className="sd-settings__view-scroll sd-scroll-area">
+        <AnimatePresence mode="wait" initial={false} onExitComplete={() => viewScrollRef.current?.scrollTo({ top: 0 })}>
+        <motion.section
+          key={activeTab}
+          id={panelId}
+          role="tabpanel"
+          aria-labelledby={tabId(activeTab)}
+          className="sd-settings__view"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 16 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: reduceMotion ? 0 : -8, transition: { duration: DURATION.fast, ease: EASE_OUT } }}
+          transition={{ duration: DURATION.base, ease: EASE_OUT }}
+        >
+          <header className="sd-settings__view-header">
+            <div className="sd-settings__view-heading">
+              <h3 className="sd-settings__view-title">{tabLabel(activeTab)}</h3>
+              <p className="sd-settings__view-desc">{t(`settings.tab_desc.${activeTab}`)}</p>
             </div>
-            <ShortcutBindingsEditor />
+            <div className="sd-settings__applied" role="status">
+              <AnimatePresence>
+                {applied && (
+                  <motion.span
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: DURATION.base, ease: EASE_OUT }}
+                  >
+                    <Tag tone="sage">
+                      <Icon icon={Check} size="xs" />
+                      {t('settings.applied')}
+                    </Tag>
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+            <ReadoutStrip readouts={readouts} />
+          </header>
+
+          <div className="sd-settings__view-body">
+            {activeTab === 'general' && <AccountSettings />}
+
+            {activeTab === 'appearance' && (
+              <Panel>
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.theme_title')}
+                  description={t('settings.theme_desc')}
+                  control={(
+                    <ChoiceTiles<ThemeMode>
+                      label={t('settings.theme_title')}
+                      value={settings.theme}
+                      onChange={(theme) => updateSettings({ theme })}
+                      options={(['light', 'dark'] as const).map((theme) => ({
+                        value: theme,
+                        label: t(`settings.theme_option.${theme}`),
+                        preview: <ThemePreview theme={theme} />,
+                      }))}
+                    />
+                  )}
+                />
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.accent_title')}
+                  description={t('settings.accent_desc')}
+                  control={(
+                    <ChoiceTiles
+                      variant="swatch"
+                      label={t('settings.accent_title')}
+                      value={settings.accentColor}
+                      onChange={(accentColor) => updateSettings({ accentColor })}
+                      options={ACCENT_COLORS.map((color) => ({
+                        value: color,
+                        label: t(`settings.accent.${color}`),
+                        hint: color === DEFAULT_SETTINGS.accentColor ? t('settings.accent_default') : undefined,
+                        // El ámbito data-accent pinta el mismo --sd-accent que recibirá la consola
+                        preview: <span className="sd-accent-swatch" data-accent={color} />,
+                      }))}
+                    />
+                  )}
+                />
+                <SettingRow
+                  title={t('settings.density_title')}
+                  description={t('settings.density_desc')}
+                  control={(
+                    <SegmentedControl
+                      label={t('settings.density_title')}
+                      value={settings.density}
+                      onChange={(density) => updateSettings({ density })}
+                      options={(['standard', 'compact'] as const).map((density) => ({ value: density, label: t(`settings.density.${density}`) }))}
+                    />
+                  )}
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'appearance' && (
+              <Panel title={t('settings.motion_title')} headingLevel="h4">
+                <SettingRow
+                  title={t('settings.animations_title')}
+                  description={t('settings.animations_desc')}
+                  control={({ titleId, descriptionId }) => (
+                    <Switch
+                      checked={settings.animations}
+                      aria-labelledby={titleId}
+                      aria-describedby={descriptionId}
+                      onChange={(e) => updateSettings({ animations: e.target.checked })}
+                    />
+                  )}
+                  preview={(
+                    <div className="sd-settings__motion">
+                      <p className="sd-settings__motion-scope">
+                        <span className="sd-settings__motion-label">{t('settings.animations_scope')}</span>
+                        {ANIMATED_SURFACES.map((surface) => (
+                          <Tag key={surface} tone={settings.animations && !systemReducedMotion ? 'ink' : 'surface'}>
+                            {t(`settings.animations_list.${surface}`)}
+                          </Tag>
+                        ))}
+                      </p>
+                      {systemReducedMotion && (
+                        <Notice tone="info">{t('settings.animations_reduced')}</Notice>
+                      )}
+                    </div>
+                  )}
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'appearance' && (
+              <Panel title={t('settings.lab_title')} headingLevel="h4" aside={<Tag tone="acid">{t('settings.experimental_tag')}</Tag>}>
+                <SettingRow
+                  title={t('settings.experimental_title')}
+                  description={t('settings.experimental_desc')}
+                  control={({ titleId, descriptionId }) => (
+                    <Switch
+                      checked={settings.experimentalInterface}
+                      disabled={interfaceNotice === 'reloading'}
+                      aria-labelledby={titleId}
+                      aria-describedby={descriptionId}
+                      onChange={(e) => handleExperimentalChange(e.target.checked)}
+                    />
+                  )}
+                  preview={
+                    interfaceNotice === 'not_saved' ? (
+                      <Notice tone="error">{t('settings.experimental_not_saved')}</Notice>
+                    ) : interfaceNotice === 'reloading' ? (
+                      <p className="sd-settings__value-line" role="status">{t('settings.experimental_reloading')}</p>
+                    ) : settings.experimentalInterface ? (
+                      <p className="sd-settings__value-line">{t('settings.experimental_on_note')}</p>
+                    ) : undefined
+                  }
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'language' && (
+              <Panel>
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.language_title')}
+                  description={t('settings.language_desc')}
+                  control={(
+                    <ChoiceTiles<AppLanguage>
+                      label={t('settings.language_title')}
+                      value={settings.language}
+                      onChange={(language) => updateSettings({ language })}
+                      options={(['es', 'en'] as const).map((language) => ({
+                        value: language,
+                        label: t(`settings.language_${language}`),
+                        preview: <LanguagePreview code={language.toUpperCase()} />,
+                      }))}
+                    />
+                  )}
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'audio' && (
+              <>
+                <Panel title={t('settings.audio_mixer_title')} headingLevel="h4">
+                  <SettingRow
+                    title={t('settings.crossfader_curve_title')}
+                    description={t('settings.crossfader_curve_desc')}
+                    control={(
+                      <SegmentedControl
+                        label={t('settings.crossfader_curve_title')}
+                        value={settings.crossfaderCurve}
+                        onChange={(crossfaderCurve) => updateSettings({ crossfaderCurve })}
+                        options={CROSSFADER_CURVES.map((curve) => ({ value: curve, label: t(`settings.crossfader_curve.${curve}`) }))}
+                      />
+                    )}
+                    preview={<CrossfaderCurvePreview curve={settings.crossfaderCurve} />}
+                  />
+                  <SettingRow
+                    title={t('settings.pitch_range_title')}
+                    description={t('settings.pitch_range_desc')}
+                    control={(
+                      <SegmentedControl
+                        label={t('settings.pitch_range_title')}
+                        value={String(settings.pitchRange)}
+                        onChange={(value) => updateSettings({ pitchRange: Number(value) as AppSettings['pitchRange'] })}
+                        options={PITCH_RANGES.map((range) => ({ value: String(range), label: <span className="sd-num">{percent(range)}</span> }))}
+                      />
+                    )}
+                  />
+                  <SettingRow
+                    layout="stacked"
+                    title={t('settings.sync_range_title')}
+                    description={t('settings.sync_range_desc')}
+                    control={({ titleId }) => (
+                      <div className="sd-settings__fader-row">
+                        <Fader
+                          min={SYNC_RANGE_MIN * 100}
+                          max={SYNC_RANGE_MAX * 100}
+                          step={SYNC_RANGE_STEP * 100}
+                          value={Math.round(settings.syncRange * 100)}
+                          aria-labelledby={titleId}
+                          aria-valuetext={percent(settings.syncRange)}
+                          ticks={[4, 8, 12, 16, 20].map((value) => ({ value, label: `±${value}` }))}
+                          onChange={(e) => updateSettings({ syncRange: Number(e.target.value) / 100 })}
+                        />
+                        <output className="sd-settings__fader-value sd-num" aria-hidden="true">{percent(settings.syncRange)}</output>
+                      </div>
+                    )}
+                  />
+                </Panel>
+                <Panel title={t('settings.audio_engine_title')} headingLevel="h4">
+                  <SettingRow
+                    title={t('settings.buffer_title')}
+                    description={t('settings.buffer_desc')}
+                    control={(
+                      <SegmentedControl
+                        label={t('settings.buffer_title')}
+                        value={String(settings.bufferSize)}
+                        onChange={(value) => updateSettings({ bufferSize: Number(value) as AppSettings['bufferSize'] })}
+                        options={BUFFER_SIZES.map((size) => ({ value: String(size), label: <span className="sd-num">{size}</span> }))}
+                      />
+                    )}
+                    preview={(
+                      <p className="sd-settings__value-line sd-num">
+                        {t('settings.buffer_option', { size: settings.bufferSize, ms: latencyMs(settings.bufferSize) })}
+                      </p>
+                    )}
+                  />
+                </Panel>
+              </>
+            )}
+
+            {activeTab === 'playback' && (
+              <Panel>
+                <SettingRow
+                  title={t('settings.auto_transition_title')}
+                  description={t('settings.auto_transition_desc')}
+                  control={(
+                    <SegmentedControl
+                      label={t('settings.auto_transition_title')}
+                      value={String(settings.autoTransitionBeats)}
+                      onChange={(value) => updateSettings({ autoTransitionBeats: Number(value) as AppSettings['autoTransitionBeats'] })}
+                      options={AUTO_TRANSITION_BEATS.map((count) => ({ value: String(count), label: t('settings.auto_transition_beats', { count }) }))}
+                    />
+                  )}
+                  preview={<BeatLengthPreview beats={settings.autoTransitionBeats} />}
+                />
+                <SettingRow
+                  title={t('settings.cue_mode_title')}
+                  description={t('settings.cue_mode_desc')}
+                  control={(
+                    <SegmentedControl
+                      label={t('settings.cue_mode_title')}
+                      value={settings.cueMode}
+                      onChange={(cueMode) => updateSettings({ cueMode })}
+                      options={(['cdj', 'standard'] as const).map((mode) => ({ value: mode, label: t(`settings.cue_mode.${mode}`) }))}
+                    />
+                  )}
+                />
+              </Panel>
+            )}
+
+            {activeTab === 'shortcuts' && <ShortcutSettings />}
+
+            {activeTab === 'library' && <LibrarySettings storage={storage} onStorageChange={refreshStorage} />}
           </div>
-        )}
-
-        {activeTab === 'library' && <LibrarySettings />}
-
+        </motion.section>
+        </AnimatePresence>
+        </div>
       </div>
-    </div>
+    </ConsoleTemplate>
   );
 };
+
+function buildReadouts(
+  tab: Tab,
+  settings: AppSettings,
+  storage: StorageUsage | null,
+  account: string | null,
+  t: TFunction,
+): Readout[] {
+  switch (tab) {
+    case 'general':
+      return account ? [{ label: t('settings.readout.account'), value: account }] : [];
+    case 'appearance':
+      return [
+        { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
+        { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
+        { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
+        { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },
+      ];
+    case 'language':
+      // La muestra del idioma ya es la lectura: no se duplica
+      return [];
+    case 'audio':
+      return [
+        { label: t('settings.readout.curve'), value: t(`settings.crossfader_curve.${settings.crossfaderCurve}`) },
+        { label: t('settings.readout.pitch'), value: percent(settings.pitchRange) },
+        { label: t('settings.readout.sync'), value: percent(settings.syncRange) },
+        { label: t('settings.readout.buffer'), value: t('settings.readout.buffer_value', { ms: latencyMs(settings.bufferSize) }) },
+      ];
+    case 'playback':
+      return [
+        { label: t('settings.readout.transition'), value: t('settings.auto_transition_beats', { count: settings.autoTransitionBeats }) },
+        { label: t('settings.readout.cue'), value: t(`settings.cue_mode.${settings.cueMode}`) },
+      ];
+    case 'shortcuts':
+      return [{ label: t('settings.readout.shortcuts'), value: t(settings.shortcutsEnabled ? 'settings.readout.on' : 'settings.readout.off') }];
+    case 'library':
+      return [
+        { label: t('settings.readout.tracks'), value: storage ? String(storage.trackCount) : '—' },
+        { label: t('settings.readout.tracks_size'), value: storage ? `${toMb(storage.trackBytes)} MB` : '—' },
+        { label: t('settings.readout.auto_analyze'), value: t(settings.autoAnalyzeOnImport ? 'settings.readout.on' : 'settings.readout.off') },
+      ];
+  }
+}

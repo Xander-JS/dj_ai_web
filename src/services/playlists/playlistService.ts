@@ -82,10 +82,18 @@ export function moveTrackInPlaylist(playlist: Playlist, fromIndex: number, toInd
   return { ...playlist, trackIds, updatedAt: now };
 }
 
+/** Misma referencia = mismas semillas en el mismo orden (la 1.ª abre la sesión y la 2.ª la cierra). */
+export function isSameSeedReference(playlist: Playlist, seedTrackIds: readonly string[]): boolean {
+  const seeds = playlist.seedTrackIds;
+  return !!seeds && seeds.length === seedTrackIds.length && seeds.every((id, index) => id === seedTrackIds[index]);
+}
+
 type PlaylistChangeListener = () => void;
 
 export class PlaylistService {
   private listeners: Set<PlaylistChangeListener> = new Set();
+  // Referencias en creación: dos peticiones simultáneas no generan la misma mezcla dos veces
+  private pendingSeedReferences = new Set<string>();
   private storage: IndexedDBStorage;
 
   constructor(storage: IndexedDBStorage = indexedDBStorage) {
@@ -106,6 +114,30 @@ export class PlaylistService {
   public async create(name: string): Promise<Playlist> {
     const existing = await this.storage.getAllPlaylists();
     return this.persist(buildPlaylist(name, existing.length));
+  }
+
+  /** Mezcla ya generada (y no eliminada) por el Modo referencia con estas semillas. */
+  public async findBySeeds(seedTrackIds: readonly string[]): Promise<Playlist | null> {
+    const existing = await this.storage.getAllPlaylists();
+    return existing.find((p) => isSameSeedReference(p, seedTrackIds)) ?? null;
+  }
+
+  /**
+   * Guarda la mezcla de una referencia con sus pistas. Devuelve null, sin crear nada, si esa
+   * referencia ya existe o se está creando en este momento.
+   */
+  public async createSeedMix(name: string, seedTrackIds: readonly string[], trackIds: readonly string[]): Promise<Playlist | null> {
+    const key = JSON.stringify(seedTrackIds);
+    if (this.pendingSeedReferences.has(key)) return null;
+    this.pendingSeedReferences.add(key);
+    try {
+      const existing = await this.storage.getAllPlaylists();
+      if (existing.some((p) => isSameSeedReference(p, seedTrackIds))) return null;
+      const playlist = addTracksToPlaylist(buildPlaylist(name, existing.length), trackIds);
+      return await this.persist({ ...playlist, seedTrackIds: [...seedTrackIds] });
+    } finally {
+      this.pendingSeedReferences.delete(key);
+    }
   }
 
   /** Aplica una edición pura sobre la versión almacenada y la persiste. */

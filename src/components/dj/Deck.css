@@ -12,6 +12,8 @@
   position: relative;
   z-index: 25;
   display: flex;
+  /* Junto a la consola el deck es estrecho: el título baja a su propia línea antes que truncarse */
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -25,7 +27,7 @@
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-  flex: 1;
+  flex: 1 1 9rem;
 }
 
 .deck-title-row {
@@ -84,6 +86,7 @@
 
 .deck-stats {
   display: flex;
+  margin-left: auto;
   gap: var(--space-3);
   font-family: var(--font-family-mono);
   font-size: var(--text-sm);
@@ -223,47 +226,95 @@
 .deck-controls {
   display: flex;
   flex: 1;
+  min-width: 0;
   padding: var(--space-4);
   gap: var(--space-4);
 }
 
 .deck-jog-wheel-container {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.dj-deck.deck-a {
+  --deck-tone: var(--color-primary-500);
+}
+
+.dj-deck.deck-b {
+  --deck-tone: var(--color-secondary-500);
+}
+
+/* Plato: aro metálico con anillo de neón del deck que se enciende al reproducir */
 .deck-jog-wheel {
-  width: 200px;
-  height: 200px;
+  width: min(200px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  padding: 7px;
   border-radius: 50%;
-  border: 4px solid var(--border-strong);
-  background-color: var(--bg-base);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background:
+    conic-gradient(from 210deg, hsl(0 0% 100% / 0.35), hsl(0 0% 0% / 0.25), hsl(0 0% 100% / 0.3), hsl(0 0% 0% / 0.3), hsl(0 0% 100% / 0.35)),
+    var(--console-panel, var(--bg-surface-active));
   position: relative;
-  box-shadow: var(--shadow-inner);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--deck-tone) 25%, transparent),
+    0 10px 24px -10px rgb(0 0 0 / 0.6),
+    inset 0 1px 2px rgb(255 255 255 / 0.3);
+  transition: box-shadow 0.35s ease;
+}
+
+.deck-jog-wheel.is-spinning {
+  box-shadow:
+    0 0 0 2px var(--deck-tone),
+    0 0 22px -2px color-mix(in srgb, var(--deck-tone) calc(var(--console-glow, 0.5) * 100%), transparent),
+    0 10px 24px -10px rgb(0 0 0 / 0.6),
+    inset 0 1px 2px rgb(255 255 255 / 0.3);
 }
 
 .deck-jog-wheel-inner {
-  width: 180px;
-  height: 180px;
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, var(--bg-surface-hover) 0deg, var(--bg-surface) 360deg);
+  background-color: hsl(var(--hue-neutral), 12%, 8%);
+  box-shadow: inset 0 0 0 2px rgb(0 0 0 / 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Disco giratorio (rotating-disc-*.png): siempre lleva la animación y solo avanza mientras
+   el deck reproduce, así se detiene donde está en lugar de volver a 0° */
+.deck-jog-disc {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  animation: spin var(--jog-spin-duration, 1.8s) linear infinite;
+  animation-play-state: paused;
+}
+
+.deck-jog-wheel.is-spinning .deck-jog-disc {
+  animation-play-state: running;
+}
+
+.deck-jog-disc-img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
 }
 
 .deck-jog-marker {
   position: absolute;
-  top: 10px;
+  top: 6px;
+  left: calc(50% - 2px);
   width: 4px;
-  height: 20px;
-  background-color: var(--color-primary-500);
+  height: 16px;
+  background-color: var(--deck-tone, var(--color-primary-500));
   border-radius: var(--radius-full);
+  box-shadow: 0 0 6px var(--deck-tone, var(--color-primary-500));
 }
 
 .deck-transport {
@@ -274,6 +325,7 @@
 }
 
 .deck-pitch-controls-container {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -350,9 +402,22 @@
   -webkit-touch-callout: none;
 }
 
+.btn-dj {
+  letter-spacing: 0.06em;
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.22), inset 0 1px 0 rgb(255 255 255 / 0.18);
+  transition: box-shadow 0.2s ease, filter 0.15s ease, transform 0.08s ease;
+}
+
+.btn-dj:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 .btn-dj-play {
   background-color: var(--color-success);
   color: var(--bg-base);
+  box-shadow:
+    0 2px 0 rgb(0 0 0 / 0.22),
+    0 0 16px -2px color-mix(in srgb, var(--color-success) 70%, transparent);
 }
 
 .btn-dj-play:hover {
@@ -377,10 +442,30 @@
   animation: spin 1.8s linear infinite;
 }
 
+/* Letra del deck en el eje del disco */
 .deck-jog-wheel-text {
-  font-size: var(--text-2xl);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
-  color: var(--border-strong);
+  color: #fff;
+  background-color: rgb(10 10 14 / 0.78);
+  border: 1px solid var(--deck-tone, var(--border-strong));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--deck-tone, transparent) 50%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-jog-disc {
+    animation: none;
+  }
+}
+
+:root[data-animations='off'] .deck-jog-disc {
+  animation: none;
 }
 
 .deck-pitch-label {
@@ -397,8 +482,14 @@
 }
 
 .deck-pitch-slider-wrapper {
+  display: flex;
   flex: 1;
+  min-height: 0;
   padding: var(--space-2) 0;
+}
+
+.deck-pitch-slider-wrapper .console-fader {
+  --cap-short: 1.25rem;
 }
 
 @keyframes spin {
@@ -438,9 +529,6 @@
   border-right-color: var(--color-secondary-500);
 }
 
-.dj-deck.deck-b .deck-jog-marker {
-  background-color: var(--color-secondary-500);
-}
 
 .dj-deck.deck-b .btn-dj-sync {
   background-color: var(--color-secondary-500);
@@ -1250,15 +1338,7 @@
     width: min(calc(var(--size-xl) * 3), 100%);
     height: auto;
     aspect-ratio: 1;
-  }
-
-  .deck-jog-wheel-inner {
-    width: 90%;
-    height: 90%;
-  }
-
-  .deck-jog-wheel-text {
-    font-size: var(--text-xl);
+    padding: 5px;
   }
 
   .deck-pitch-bend-controls {

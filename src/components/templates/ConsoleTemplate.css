@@ -78,7 +78,7 @@
 .sd-table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 0.25rem;
+  border-spacing: 0 var(--sd-row-gap);
   font-size: var(--sd-text-note);
   text-align: left;
 }
@@ -87,7 +87,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 0.5rem 0.75rem;
+  padding: var(--sd-row-pad-y) var(--sd-cell-pad-x);
   background-color: var(--sd-paper);
   color: var(--sd-ink-soft);
   font-weight: var(--sd-weight-medium);
@@ -95,7 +95,7 @@
 }
 
 .sd-table td {
-  padding: 0.5rem 0.75rem;
+  padding: var(--sd-row-pad-y) var(--sd-cell-pad-x);
   vertical-align: middle;
   transition: background-color var(--sd-duration-fast) var(--sd-ease-out);
 }

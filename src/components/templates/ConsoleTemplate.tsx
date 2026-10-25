@@ -1,10 +1,11 @@
-import type { HTMLAttributes, ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode, Ref } from 'react';
 import { clsx } from 'clsx';
 import './ConsoleTemplate.css';
 
 export interface ConsoleTemplateProps extends HTMLAttributes<HTMLDivElement> {
   /** Ocupa el alto del área de trabajo y deja que un hijo gestione su propio desplazamiento */
   fill?: boolean;
+  ref?: Ref<HTMLDivElement>;
   children: ReactNode;
 }
 

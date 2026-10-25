@@ -1,4 +1,6 @@
 .desktop-layout {
+  /* Marco de la aplicación (--layout-frame-width, index.css): cabecera, área de trabajo y
+     barra de reproducción comparten este ancho, centrado */
   display: grid;
   grid-template-areas:
     "header header"
@@ -8,10 +10,20 @@
   /* minmax(0, ...) keeps wide children from stretching the track past the viewport */
   grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
   height: 100vh;
-  width: 100vw;
+  width: var(--layout-frame-width);
+  margin-inline: auto;
   overflow: hidden;
   background-color: var(--bg-base);
   color: var(--text-primary);
+  /* Filas del shell (densidad y retirada de la barra en Mixer) y tokens de densidad (tokens.css) */
+  transition:
+    grid-template-rows var(--sd-duration-base) var(--sd-ease-out),
+    var(--sd-density-transition);
+}
+
+/* Mixer: la fila de la barra de reproducción se pliega y el área de trabajo la ocupa */
+.desktop-layout--player-hidden {
+  grid-template-rows: var(--layout-header-height) minmax(0, 1fr) 0;
 }
 
 /* Barra superior y lateral: papel del Design System v2, sin filetes; separan por espacio */
@@ -44,19 +56,53 @@
   overscroll-behavior: contain;
   min-width: 0;
   position: relative;
+  /* Los z-index de cada pantalla (p. ej. cabeceras de los decks en Mixer) quedan dentro del
+     área de trabajo: cabecera, panel de avisos y barra de reproducción siempre por encima */
+  isolation: isolate;
   display: flex;
   flex-direction: column;
 }
 
 .layout-player {
   grid-area: player;
-  background-color: var(--bg-elevated);
-  border-top: 1px solid var(--border-subtle);
+  background-color: var(--sd-paper);
   display: flex;
-  align-items: center;
-  padding: 0 var(--space-6);
+  align-items: stretch;
+  padding: var(--sd-gap-1) var(--sd-gap-3);
+  /* Alto propio (no el de la fila): al plegarse la fila en Mixer la barra baja entera, sin aplastarse */
+  height: var(--layout-player-height);
   min-width: 0;
   z-index: 20;
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    height var(--sd-duration-base) var(--sd-ease-out),
+    opacity var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out),
+    visibility 0s linear 0s;
+}
+
+/* Retirada en Mixer: sale hacia abajo y se desvanece; al terminar deja de ser visible
+   (inert ya la saca del puntero y del teclado durante la transición) */
+.layout-player.is-hidden {
+  opacity: 0;
+  transform: translateY(1.5rem);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    height var(--sd-duration-base) var(--sd-ease-out),
+    opacity var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out),
+    visibility 0s linear var(--sd-duration-base);
+}
+
+/* Vista de la ruta activa: ocupa el área de trabajo igual que antes ocupaba la página */
+.layout-view {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 /* Scrollbar styling for a desktop feel */
@@ -185,9 +231,12 @@
 
 /* Tablet: tighter shell paddings and a narrower search field */
 @media (max-width: 1024px) {
-  .layout-header,
-  .layout-player {
+  .layout-header {
     padding: 0 var(--layout-gutter);
+  }
+
+  .layout-player {
+    padding: 0.25rem var(--layout-gutter) var(--layout-gutter);
   }
 
   .header-logo-text {
@@ -205,5 +254,20 @@
 
   .header-actions {
     gap: 0;
+  }
+}
+
+:root[data-animations='off'] .desktop-layout,
+:root[data-animations='off'] .layout-player {
+  transition-duration: 0s;
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .desktop-layout,
+  .layout-player {
+    transition-duration: 0s;
+    transition-delay: 0s;
   }
 }

@@ -30,6 +30,7 @@ import { LibrarySettings } from '../components/settings/LibrarySettings';
 import { readStorageUsage, toMb, type StorageUsage } from '../components/settings/storageUsage';
 import { ShortcutSettings } from '../components/settings/ShortcutSettings';
 import { BeatLengthPreview, CrossfaderCurvePreview } from '../components/settings/SettingsPreviews';
+import { DISC_ASSETS, discImageStyle } from '../components/dj/mixerAssets';
 import { DURATION, EASE_OUT } from '../design-system/motion';
 import { useSystemReducedMotion } from '../design-system/motionPreference';
 import { useSmoothScroll } from '../design-system/smoothScroll';
@@ -40,6 +41,7 @@ import {
   DEFAULT_SETTINGS,
   BUFFER_SIZES,
   CROSSFADER_CURVES,
+  JOG_DISCS,
   PITCH_RANGES,
   SYNC_RANGE_MAX,
   SYNC_RANGE_MIN,
@@ -48,6 +50,7 @@ import {
   useSettingsStore,
   type AppLanguage,
   type AppSettings,
+  type JogDisc,
   type ThemeMode,
 } from '../store/useSettingsStore';
 import './Settings.css';
@@ -148,7 +151,16 @@ const ThemePreview: React.FC<{ theme: ThemeMode }> = ({ theme }) => (
 );
 
 /** Animaciones gobernadas por la preferencia global; cada nueva se añade aquí y en su CSS */
-const ANIMATED_SURFACES = ['sidebar', 'selection_bar'] as const;
+const ANIMATED_SURFACES = ['sidebar', 'selection_bar', 'mixer'] as const;
+
+/** Muestra real del disco (rotating-disc-*.png); el elegido gira despacio como en los decks */
+const DiscPreview: React.FC<{ disc: JogDisc }> = ({ disc }) => (
+  <span className="sd-disc-preview">
+    <span className="sd-disc-preview__platter">
+      <img src={DISC_ASSETS[disc].src} alt="" loading="lazy" decoding="async" draggable={false} style={discImageStyle(DISC_ASSETS[disc])} />
+    </span>
+  </span>
+);
 
 const LanguagePreview: React.FC<{ code: string }> = ({ code }) => (
   <span className="sd-language-preview">
@@ -344,6 +356,25 @@ export const Settings: React.FC = () => {
                         hint: color === DEFAULT_SETTINGS.accentColor ? t('settings.accent_default') : undefined,
                         // El ámbito data-accent pinta el mismo --sd-accent que recibirá la consola
                         preview: <span className="sd-accent-swatch" data-accent={color} />,
+                      }))}
+                    />
+                  )}
+                />
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.disc_title')}
+                  description={t('settings.disc_desc')}
+                  control={(
+                    <ChoiceTiles<JogDisc>
+                      className="sd-disc-tiles"
+                      label={t('settings.disc_title')}
+                      value={settings.jogDisc}
+                      onChange={(jogDisc) => updateSettings({ jogDisc })}
+                      options={JOG_DISCS.map((disc) => ({
+                        value: disc,
+                        label: t(`settings.disc.${disc}`),
+                        hint: t(`settings.disc_hint.${disc}`),
+                        preview: <DiscPreview disc={disc} />,
                       }))}
                     />
                   )}
@@ -572,6 +603,7 @@ function buildReadouts(
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
+        { label: t('settings.readout.disc'), value: t(`settings.disc.${settings.jogDisc}`) },
         { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },
       ];
     case 'language':

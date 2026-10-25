@@ -79,6 +79,12 @@
   /* Relleno interior de los paneles de la consola */
   --sd-panel-padding: clamp(1.25rem, 2vw, 1.75rem);
 
+  /* ROWS — filas de listas y tablas de la consola (la densidad compacta los reduce) */
+  --sd-row-min-height: 3.5rem;
+  --sd-row-pad-y: 0.5rem;
+  --sd-row-gap: 0.25rem;
+  --sd-cell-pad-x: 0.75rem;
+
   /* CONTROLS */
   --sd-control-height-sm: 2.25rem; /* tablas y barras densas de la consola */
   --sd-control-height: 2.75rem;
@@ -127,6 +133,14 @@ html[data-scroll-mode='document'] {
   scrollbar-color: var(--sd-ink-soft) var(--sd-paper);
 }
 
+/* Zona desplazable (Inicio, Biblioteca, Playlist, Ajustes, avisos): barra fina con su hueco
+   siempre reservado; sin desbordamiento queda invisible y al aparecer no desplaza nada.
+   Se combina con useSmoothScroll (design-system/smoothScroll.ts) para la rueda suavizada */
+.sd-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
 /* Ámbito de tema anidado: un elemento con data-theme="light" vuelve a los valores claros
    aunque el documento esté en oscuro (vistas previas del selector de tema en Ajustes) */
 [data-theme='light'] {
@@ -151,6 +165,112 @@ html[data-scroll-mode='document'] {
   --sd-inverse-ink-soft: #b4b4b4;
   --sd-inverse-surface: #303030;
   --sd-focus: #f0ff1c;
+}
+
+/* ==========================================================================
+   Densidad compacta (Ajustes → Apariencia, data-density en <html>). Solo actúa
+   dentro del shell de la consola (.desktop-layout): Home pública, Login y Sign Up
+   y los paneles en portal (SelectMenu, diálogos) conservan la escala estándar.
+   Reduce huecos, rellenos, filas y alturas de control; la tipografía no cambia.
+   ========================================================================== */
+[data-density='compact'] .desktop-layout {
+  --sd-gap-1: 0.375rem;
+  --sd-gap-2: 0.5rem;
+  --sd-gap-3: 0.75rem;
+  --sd-gap-4: 1rem;
+  --sd-gap-5: 1.5rem;
+  --sd-gap-6: 2.5rem;
+  --sd-margin: clamp(0.75rem, 1.6vw, 1.5rem);
+  --sd-panel-padding: clamp(0.875rem, 1.4vw, 1.25rem);
+  --sd-row-min-height: 2.75rem;
+  --sd-row-pad-y: 0.25rem;
+  --sd-row-gap: 0.125rem;
+  --sd-cell-pad-x: 0.5rem;
+  --sd-control-height-sm: 2rem;
+  --sd-control-height: 2.25rem;
+  --sd-control-height-lg: 3rem;
+}
+
+/* Punteros táctiles: la densidad compacta no encoge los objetivos de toque */
+@media (pointer: coarse) {
+  [data-density='compact'] .desktop-layout {
+    --sd-control-height-sm: 2.25rem;
+    --sd-control-height: 2.75rem;
+    --sd-control-height-lg: 3.75rem;
+  }
+}
+
+/* Transición Estándar ⇄ Compacta: los tokens de densidad se registran como longitudes para
+   que el cambio de data-density se interpole en lugar de saltar. Cada valor transiciona donde
+   se declara (<html> los heredados de index.css, .desktop-layout los v2); los descendientes
+   heredan el valor intermedio, así que ningún componente necesita su propia transición.
+   .desktop-layout consume --sd-density-transition junto a sus filas en DesktopLayout.css,
+   que también anima las alturas de cabecera y barra y apaga todo con movimiento reducido. */
+@property --sd-gap-1 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-2 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-3 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-4 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-5 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-6 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-margin { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-panel-padding { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-row-min-height { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-row-pad-y { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-row-gap { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-cell-pad-x { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-control-height-sm { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-control-height { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-control-height-lg { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-2 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-3 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-4 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-5 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-6 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --space-8 { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --size-sm { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --size-md { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --size-lg { syntax: '<length>'; inherits: true; initial-value: 0px; }
+
+:root {
+  transition:
+    --space-2 var(--sd-duration-base) var(--sd-ease-out),
+    --space-3 var(--sd-duration-base) var(--sd-ease-out),
+    --space-4 var(--sd-duration-base) var(--sd-ease-out),
+    --space-5 var(--sd-duration-base) var(--sd-ease-out),
+    --space-6 var(--sd-duration-base) var(--sd-ease-out),
+    --space-8 var(--sd-duration-base) var(--sd-ease-out),
+    --size-sm var(--sd-duration-base) var(--sd-ease-out),
+    --size-md var(--sd-duration-base) var(--sd-ease-out),
+    --size-lg var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.desktop-layout {
+  --sd-density-transition:
+    --sd-gap-1 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-2 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-3 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-4 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-5 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-gap-6 var(--sd-duration-base) var(--sd-ease-out),
+    --sd-margin var(--sd-duration-base) var(--sd-ease-out),
+    --sd-panel-padding var(--sd-duration-base) var(--sd-ease-out),
+    --sd-row-min-height var(--sd-duration-base) var(--sd-ease-out),
+    --sd-row-pad-y var(--sd-duration-base) var(--sd-ease-out),
+    --sd-row-gap var(--sd-duration-base) var(--sd-ease-out),
+    --sd-cell-pad-x var(--sd-duration-base) var(--sd-ease-out),
+    --sd-control-height-sm var(--sd-duration-base) var(--sd-ease-out),
+    --sd-control-height var(--sd-duration-base) var(--sd-ease-out),
+    --sd-control-height-lg var(--sd-duration-base) var(--sd-ease-out);
+}
+
+:root[data-animations='off'] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    transition: none;
+  }
 }
 
 /* ==========================================================================

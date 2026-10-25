@@ -1,144 +1,248 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { 
-  Play, Pause, SkipBack, SkipForward, 
-  Volume2, VolumeX, Shuffle, Repeat, ListMusic, Heart 
+import {
+  Disc3, Heart, ListMusic, Pause, Play, Repeat, Repeat1, Shuffle,
+  SkipBack, SkipForward, Volume1, Volume2, VolumeX,
 } from 'lucide-react';
-import { IconButton } from '../components/ui/IconButton';
-import { Slider } from '../components/ui/Slider';
 import { clsx } from 'clsx';
+import { Fader } from '../components/atoms/Fader';
+import { Icon } from '../components/atoms/Icon';
+import { IconButton } from '../components/atoms/IconButton';
+import { QueuePanel } from '../components/player/QueuePanel';
 import { useDJStore } from '../store/useDJStore';
+import { favoritesStore, useIsFavorite } from '../services/favorites/favoritesService';
+import { PLAYER_DECK, playerQueue, usePlayerQueue } from '../services/player/playerService';
+import type { DeckId } from '../types/deck';
 import { formatDuration } from '../utils/formatters';
 import './PlayerBar.css';
 
-export const PlayerBar: React.FC = () => {
+export interface PlayerBarProps {
+  /** Retirada (Mixer): sigue montada, pero fuera del puntero, del teclado y del árbol accesible */
+  hidden?: boolean;
+}
+
+/**
+ * Barra de reproducción. Muestra el deck que arrancó la reproducción más reciente (Deck A por
+ * defecto, el de la cola): Play/Pausa y la línea de tiempo actúan sobre él, Anterior/Siguiente/Aleatorio/Repetir sobre la cola
+ * compartida (playerService) y el volumen sobre el Master del motor, sin tocar los faders de
+ * canal de los decks.
+ */
+export const PlayerBar: React.FC<PlayerBarProps> = ({ hidden = false }) => {
   const { t } = useTranslation();
-  const { 
-    deckA, 
-    togglePlayDeckA, 
-    seekDeckA, 
-    masterVolume, 
-    isMasterMuted, 
-    setMasterVolume, 
-    toggleMasterMute 
+  const {
+    deckA,
+    deckB,
+    togglePlayDeck,
+    seekDeck,
+    masterVolume,
+    isMasterMuted,
+    setMasterVolume,
+    toggleMasterMute,
   } = useDJStore();
+  const queue = usePlayerQueue();
+  // Deck que sigue la barra: el último que pasó a reproducirse, sin copiar su estado
+  const [focusDeckId, setFocusDeckId] = useState<DeckId>(PLAYER_DECK);
+  const prevPlayingRef = useRef({ A: false, B: false });
+  useEffect(() => {
+    const prev = prevPlayingRef.current;
+    const playingA = deckA.playbackState === 'playing';
+    const playingB = deckB.playbackState === 'playing';
+    if (playingB && !prev.B) setFocusDeckId('B');
+    else if (playingA && !prev.A) setFocusDeckId('A');
+    prevPlayingRef.current = { A: playingA, B: playingB };
+  }, [deckA.playbackState, deckB.playbackState]);
+  const deck = focusDeckId === 'A' ? deckA : deckB;
+  const isQueueDeck = focusDeckId === PLAYER_DECK;
+  const isLiked = useIsFavorite(deck.track?.id);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const queueRootRef = useRef<HTMLDivElement>(null);
+  const queueTriggerRef = useRef<HTMLButtonElement>(null);
 
-  const [isShuffle, setIsShuffle] = React.useState(false);
-  const [isRepeat, setIsRepeat] = React.useState(false);
-  const [isLiked, setIsLiked] = React.useState(false);
+  const isPlaying = deck.playbackState === 'playing';
+  const hasTrack = Boolean(deck.track);
+  const current = queue.entries[queue.currentIndex] ?? null;
+  const isQueueTrackLoaded = Boolean(current && deckA.track?.id === current.track.id);
+  const isQueuePlaying = deckA.playbackState === 'playing';
+  const canPlay = hasTrack || (isQueueDeck && Boolean(current));
+  const hasNext = current !== null && (queue.currentIndex < queue.entries.length - 1 || (queue.repeat === 'all' && queue.entries.length > 0));
+  const canGoPrevious = current !== null || hasTrack;
+  const effectiveVolume = isMasterMuted ? 0 : masterVolume;
 
-  const isPlaying = deckA.playbackState === 'playing';
-  const hasTrack = Boolean(deckA.track);
-  const progressPercent = deckA.duration > 0 
-    ? Math.min(100, Math.max(0, (deckA.currentTime / deckA.duration) * 100)) 
-    : 0;
+  const trackTitle = deck.track ? deck.track.title : 'SYSTEM DJ';
+  const trackArtist = deck.track ? (deck.track.artist || t('dj.unknown_artist')) : t('dj.no_track');
 
-  const trackTitle = deckA.track ? deckA.track.title : 'SYSTEM DJ';
-  const trackArtist = deckA.track 
-    ? (deckA.track.artist || t('dj.unknown_artist')) 
-    : t('dj.no_track');
+  // Cerrar la cola al hacer clic fuera o con Escape; el foco vuelve al botón
+  useEffect(() => {
+    if (!queueOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!queueRootRef.current?.contains(e.target as Node)) setQueueOpen(false);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setQueueOpen(false);
+      queueTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [queueOpen]);
 
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (deckA.duration > 0) {
-      const percent = Number(e.target.value);
-      seekDeckA((percent / 100) * deckA.duration);
+  const handlePlayPause = () => {
+    // Sin pista en el deck (p. ej. tras descargarlo) la cola vuelve a cargar la suya
+    if (!hasTrack && isQueueDeck && current) {
+      void playerQueue.resume();
+      return;
+    }
+    void togglePlayDeck(focusDeckId);
+  };
+
+  const handlePrevious = () => {
+    if (isQueueDeck && current) {
+      void playerQueue.previous();
+    } else if (hasTrack) {
+      // Sin cola, «Anterior» vuelve al inicio de la pista cargada
+      seekDeck(focusDeckId, 0);
     }
   };
 
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (deck.duration > 0) seekDeck(focusDeckId, (Number(e.target.value) / 1000) * deck.duration);
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const volume = Number(e.target.value);
+    setMasterVolume(volume);
+    // El fader muestra el volumen efectivo: subirlo estando en silencio debe oírse
+    if (isMasterMuted && volume > 0) toggleMasterMute();
+  };
+
+  const repeatLabel = t(`player.repeat_mode.${queue.repeat}`);
+  const VolumeIcon = effectiveVolume === 0 ? VolumeX : effectiveVolume < 50 ? Volume1 : Volume2;
+  const progress = deck.duration > 0 ? Math.min(1000, Math.max(0, (deck.currentTime / deck.duration) * 1000)) : 0;
+
   return (
-    <footer className="layout-player">
-      <div className="player-bar-container">
-        
-        {/* Track Info (sincronizada con Deck A) */}
-        <div className="player-track-info">
-          <div className="player-cover"></div>
-          <div className="player-text-info">
-            <div className="player-title">{trackTitle}</div>
-            <div className="player-artist">{trackArtist}</div>
-          </div>
-          <IconButton 
-            icon={<Heart size={16} className={clsx('player-heart-icon', isLiked && 'liked')} />} 
-            size="sm" 
-            onClick={() => setIsLiked(!isLiked)}
+    <footer className={clsx('layout-player', hidden && 'is-hidden')} inert={hidden}>
+      <div className="sd-player">
+        {/* Pista en curso (deck que sigue la barra) */}
+        <div className="sd-player__track">
+          <span className={clsx('sd-player__cover', hasTrack && 'is-loaded')} aria-hidden="true">
+            <Icon icon={Disc3} size="md" />
+          </span>
+          <span className="sd-player__text">
+            <span className="sd-player__title" title={trackTitle}>{trackTitle}</span>
+            <span className="sd-player__artist">{trackArtist}</span>
+          </span>
+          <IconButton
+            icon={<Icon icon={Heart} size="sm" className={clsx('sd-player__heart', isLiked && 'is-liked')} />}
+            size="sm"
+            label={isLiked ? t('player.unfavorite') : t('player.favorite')}
+            aria-pressed={isLiked}
+            disabled={!hasTrack}
+            onClick={() => deck.track && favoritesStore.toggle(deck.track.id)}
           />
         </div>
 
-        {/* Main Controls & Real Progress */}
-        <div className="player-main-controls">
-          <div className="player-buttons">
-            <IconButton 
-              icon={<Shuffle size={18} />} 
-              title={t('player.shuffle')}
-              className={clsx('player-btn player-btn-subtle', isShuffle && 'active')}
-              onClick={() => setIsShuffle(!isShuffle)}
+        {/* Transporte y línea de tiempo */}
+        <div className="sd-player__center">
+          <div className="sd-player__buttons">
+            <IconButton
+              icon={<Icon icon={Shuffle} size="sm" />}
+              size="sm"
+              label={queue.shuffle ? t('player.shuffle_disable') : t('player.shuffle_enable')}
+              aria-pressed={queue.shuffle}
+              className={clsx('sd-player__mode', queue.shuffle && 'is-on')}
+              onClick={() => playerQueue.toggleShuffle()}
             />
-            <IconButton 
-              icon={<SkipBack size={20} />} 
-              title={t('player.prev')} 
-              className="player-btn"
+            <IconButton
+              icon={<Icon icon={SkipBack} size="md" />}
+              label={t('player.prev')}
+              disabled={!canGoPrevious}
+              onClick={handlePrevious}
             />
-            
-            <button 
-              className="player-play-btn" 
-              onClick={() => togglePlayDeckA()}
-              title={isPlaying ? t('player.pause') : t('player.play')}
+            <IconButton
+              icon={<Icon icon={isPlaying ? Pause : Play} size="md" className={clsx(!isPlaying && 'sd-player__play-glyph')} />}
+              label={isPlaying ? t('player.pause') : t('player.play')}
+              variant="ink"
+              className="sd-player__play"
+              disabled={!canPlay}
+              onClick={handlePlayPause}
+            />
+            <IconButton
+              icon={<Icon icon={SkipForward} size="md" />}
+              label={t('player.next')}
+              disabled={!hasNext}
+              onClick={() => void playerQueue.next()}
+            />
+            <IconButton
+              icon={<Icon icon={queue.repeat === 'one' ? Repeat1 : Repeat} size="sm" />}
+              size="sm"
+              label={t('player.repeat_label', { mode: repeatLabel })}
+              aria-pressed={queue.repeat !== 'off'}
+              className={clsx('sd-player__mode', queue.repeat !== 'off' && 'is-on')}
+              onClick={() => playerQueue.cycleRepeat()}
+            />
+          </div>
+
+          <div className="sd-player__timeline">
+            <span className="sd-player__time sd-num">{formatDuration(deck.currentTime)}</span>
+            <Fader
+              min={0}
+              max={1000}
+              step={1}
+              value={progress}
               disabled={!hasTrack}
-            >
-              {isPlaying ? (
-                <Pause size={20} fill="currentColor" />
-              ) : (
-                <Play size={20} fill="currentColor" className="play-icon-offset" />
-              )}
-            </button>
-            
-            <IconButton 
-              icon={<SkipForward size={20} />} 
-              title={t('player.next')} 
-              className="player-btn"
+              aria-label={t('player.seek')}
+              aria-valuetext={`${formatDuration(deck.currentTime)} / ${formatDuration(deck.duration)}`}
+              onChange={handleSeekChange}
+              wrapperClassName="sd-player__seek"
             />
-            <IconButton 
-              icon={<Repeat size={18} />} 
-              title={t('player.repeat')}
-              className={clsx('player-btn player-btn-subtle', isRepeat && 'active')}
-              onClick={() => setIsRepeat(!isRepeat)}
-            />
-          </div>
-
-          <div className="player-timeline">
-            <span className="player-time left">{formatDuration(deckA.currentTime)}</span>
-            <div className="player-timeline-slider-container">
-              <Slider 
-                value={progressPercent} 
-                onChange={handleSeekChange}
-                disabled={!hasTrack}
-              />
-            </div>
-            <span className="player-time">{formatDuration(deckA.duration)}</span>
+            <span className="sd-player__time sd-num">{formatDuration(deck.duration)}</span>
           </div>
         </div>
 
-        {/* Master Output Volume */}
-        <div className="player-extra-controls">
-          <IconButton 
-            icon={<ListMusic size={18} />} 
-            title={t('player.queue')} 
-            className="player-btn player-btn-subtle"
-          />
-          <div className="player-volume-container">
-            <IconButton 
-              icon={isMasterMuted || masterVolume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />} 
-              size="sm" 
-              className="player-btn player-btn-subtle"
+        {/* Cola y volumen Master */}
+        <div className="sd-player__extra">
+          <div className="sd-player__queue" ref={queueRootRef}>
+            <IconButton
+              ref={queueTriggerRef}
+              icon={<Icon icon={ListMusic} size="sm" />}
+              size="sm"
+              label={t('player.queue')}
+              aria-expanded={queueOpen}
+              aria-haspopup="dialog"
+              className={clsx('sd-player__mode', queueOpen && 'is-open')}
+              onClick={() => setQueueOpen((open) => !open)}
+            />
+            {queueOpen && (
+              <QueuePanel isCurrentLoaded={isQueueTrackLoaded} isPlaying={isQueuePlaying} onClose={() => {
+                setQueueOpen(false);
+                queueTriggerRef.current?.focus();
+              }} />
+            )}
+          </div>
+          <div className="sd-player__volume">
+            <IconButton
+              icon={<Icon icon={VolumeIcon} size="sm" />}
+              size="sm"
+              label={isMasterMuted ? t('player.unmute') : t('player.mute')}
+              aria-pressed={isMasterMuted}
               onClick={toggleMasterMute}
-              title={t('player.volume')}
             />
-            <Slider 
-              value={isMasterMuted ? 0 : masterVolume} 
-              onChange={(e) => setMasterVolume(Number(e.target.value))}
+            <Fader
+              min={0}
+              max={100}
+              step={1}
+              value={effectiveVolume}
+              aria-label={t('player.volume')}
+              aria-valuetext={`${effectiveVolume} %`}
+              onChange={handleVolumeChange}
+              wrapperClassName="sd-player__volume-fader"
             />
           </div>
         </div>
-
       </div>
     </footer>
   );

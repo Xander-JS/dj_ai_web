@@ -248,6 +248,12 @@ export class SessionRecorder {
   public get isActive(): boolean {
     return this.active !== null;
   }
+
+  /** Discards the active and the last finalized session (factory reset). */
+  public reset(): void {
+    this.active = null;
+    this.lastFinalized = null;
+  }
 }
 
 /** Returns replay order without mutating the stored session. Sequence resolves timestamp ties. */

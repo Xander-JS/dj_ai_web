@@ -55,6 +55,9 @@ export interface TrackAudioSource {
   url?: string;                      // Blob URL temporal o stream URI
 }
 
+/** Mecanismo de importación: archivo del equipo o enlace (YouTube). Ausente = archivo (pistas históricas). */
+export type TrackOrigin = 'file' | 'link';
+
 export interface TrackFileMetadata {
   fileName: string;
   fileSize: number;                  // En bytes
@@ -89,6 +92,7 @@ export interface Track {
   durationFormatted: string;         // Representación amigable (ej. "6:15")
   type: 'audio' | 'video';
   source: TrackAudioSource;
+  origin?: TrackOrigin;              // 'link' si se importó desde un enlace; ausente = archivo local
   analysis: TrackAnalysis;
   fileMeta?: TrackFileMetadata;
   mainCue?: number | null;           // Posición en segundos del CUE principal

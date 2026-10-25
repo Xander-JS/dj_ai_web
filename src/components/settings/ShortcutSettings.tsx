@@ -10,12 +10,16 @@ import { Panel } from '../molecules/Panel';
 import { SettingRow } from '../molecules/SettingRow';
 import { settingsStore, useSettingsStore } from '../../store/useSettingsStore';
 import {
+  DEFAULT_NAVIGATION_BINDINGS,
   DEFAULT_SHORTCUT_BINDINGS,
   KEYBOARD_SHORTCUTS,
   MIX_PARAMS,
+  NAV_SECTIONS,
   formatKeyCode,
   validateBinding,
+  validateNavigationBinding,
   type MixShortcutId,
+  type NavSection,
 } from '../../services/keyboard/keyboardShortcuts';
 
 type Feedback = { type: 'error' | 'success'; text: string } | null;
@@ -151,6 +155,113 @@ const ShortcutBindingsEditor: React.FC = () => {
   );
 };
 
+/**
+ * Atajos de sección: Shift + tecla. Misma captura que las selectoras de mezcla (clic en la
+ * celda, siguiente tecla; Escape cancela); se reasigna la tecla, Shift es fijo.
+ */
+const NavigationBindingsEditor: React.FC = () => {
+  const { t } = useTranslation();
+  const { settings, updateSettings } = useSettingsStore();
+  const [listening, setListening] = useState<NavSection | null>(null);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const bindings = settings.navigationBindings;
+  const isDefault = JSON.stringify(bindings) === JSON.stringify(DEFAULT_NAVIGATION_BINDINGS);
+
+  useEffect(() => {
+    if (!listening) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Shift solo es el modificador del atajo: se espera la tecla que lo acompaña
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.repeat) return;
+      if (event.code === 'Escape') {
+        setListening(null);
+        return;
+      }
+      const current = settingsStore.getSnapshot().navigationBindings;
+      const error = validateNavigationBinding(current, listening, event.code);
+      if (error) {
+        setFeedback({ type: 'error', text: t(`settings.shortcuts_nav_binding_${error}`, { key: formatKeyCode(event.code) }) });
+        return;
+      }
+      updateSettings({ navigationBindings: { ...current, [listening]: event.code } });
+      setFeedback({ type: 'success', text: t('settings.shortcuts_nav_binding_saved', { key: formatKeyCode(event.code) }) });
+      setListening(null);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [listening, t, updateSettings]);
+
+  return (
+    <Panel
+      headingLevel="h4"
+      title={t('settings.shortcuts_nav_title')}
+      description={t('settings.shortcuts_nav_desc')}
+      aside={(
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isDefault}
+          onClick={() => {
+            setListening(null);
+            setFeedback(null);
+            updateSettings({ navigationBindings: DEFAULT_NAVIGATION_BINDINGS });
+          }}
+        >
+          <Icon icon={RotateCcw} size="sm" />
+          {t('settings.shortcuts_restore')}
+        </Button>
+      )}
+    >
+      <div className="sd-bindings">
+        <table className="sd-table sd-bindings__table">
+          <thead>
+            <tr>
+              <th scope="col">{t('settings.shortcuts_section')}</th>
+              <th scope="col">{t('settings.shortcuts_key')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {NAV_SECTIONS.map((section) => {
+              const isListening = listening === section;
+              const name = t(`navigation.${section}`);
+              return (
+                <tr key={section}>
+                  <th scope="row" className="sd-bindings__param">{name}</th>
+                  <td>
+                    <button
+                      type="button"
+                      className={clsx('sd-binding', isListening && 'is-listening')}
+                      aria-pressed={isListening}
+                      aria-label={t('settings.shortcuts_nav_binding_aria', { section: name, key: formatKeyCode(bindings[section]) })}
+                      onClick={() => {
+                        setFeedback(null);
+                        setListening((current) => (current === section ? null : section));
+                      }}
+                    >
+                      {isListening ? (
+                        <span className="sd-binding__prompt">{t('settings.shortcuts_press_key')}</span>
+                      ) : (
+                        <>
+                          <kbd className="sd-keycap">Shift</kbd>
+                          <span className="sd-binding__plus" aria-hidden="true">+</span>
+                          <kbd className="sd-keycap sd-keycap--strong">{formatKeyCode(bindings[section])}</kbd>
+                        </>
+                      )}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {feedback && <Notice tone={feedback.type}>{feedback.text}</Notice>}
+    </Panel>
+  );
+};
+
 export const ShortcutSettings: React.FC = () => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettingsStore();
@@ -192,6 +303,8 @@ export const ShortcutSettings: React.FC = () => {
             ))}
           </div>
         </Panel>
+
+        <NavigationBindingsEditor />
 
         <ShortcutBindingsEditor />
       </div>

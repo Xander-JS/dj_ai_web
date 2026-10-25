@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useOutlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { DesktopLayout } from './layouts/DesktopLayout';
 import { UpdatePasswordModal } from './components/auth/UpdatePasswordModal';
@@ -26,6 +26,9 @@ function RouteLoading() {
 function ConsoleShell() {
   const { user, loading, isConfigured } = useAuth();
   const location = useLocation();
+  // Se captura el elemento de la ruta (no <Outlet />) para que la vista saliente conserve su
+  // contenido mientras el shell la anima hacia fuera
+  const outlet = useOutlet();
 
   if (isConfigured && loading) return <RouteLoading />;
   if (isConfigured && !user) {
@@ -35,7 +38,7 @@ function ConsoleShell() {
   return (
     <DesktopLayout>
       <Suspense fallback={<RouteLoading />}>
-        <Outlet />
+        {outlet}
       </Suspense>
     </DesktopLayout>
   );

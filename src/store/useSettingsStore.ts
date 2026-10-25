@@ -12,8 +12,11 @@
 import { useSyncExternalStore } from 'react';
 import type { CrossfaderCurve } from '../types/mixer';
 import {
+  DEFAULT_NAVIGATION_BINDINGS,
   DEFAULT_SHORTCUT_BINDINGS,
+  sanitizeNavigationBindings,
   sanitizeShortcutBindings,
+  type NavigationBindings,
   type ShortcutBindings,
 } from '../services/keyboard/keyboardShortcuts.ts';
 
@@ -29,6 +32,8 @@ export type AudioBufferSize = 256 | 512 | 1024;
 export type AutoTransitionBeats = 8 | 16 | 32;
 /** `cdj`: CUE en reproducción pausa y vuelve al marcador. `standard`: vuelve al marcador sin detenerse. */
 export type CueMode = 'cdj' | 'standard';
+/** Intensidad del visualizador de la barra de reproducción (opacidad y ganancia de la onda). */
+export type VisualizerIntensity = 'subtle' | 'balanced' | 'vivid';
 
 export interface AppSettings {
   theme: ThemeMode;
@@ -45,9 +50,12 @@ export interface AppSettings {
   shortcutsEnabled: boolean;
   /** Teclas selectoras de GAIN / HI / MID / LOW / FILTER por deck. */
   shortcutBindings: ShortcutBindings;
+  /** Tecla (con Shift) que abre cada sección principal. */
+  navigationBindings: NavigationBindings;
   autoAnalyzeOnImport: boolean;
   /** Animaciones decorativas de la interfaz; `prefers-reduced-motion` las desactiva igualmente. */
   animations: boolean;
+  visualizerIntensity: VisualizerIntensity;
   /** Reserva la futura disposición alternativa de la consola; todavía no cambia la interfaz. */
   experimentalInterface: boolean;
 }
@@ -66,6 +74,7 @@ export const ACCENT_HUES: Record<AccentColor, number> = {
   neon: 147,
   amber: 39,
 };
+export const VISUALIZER_INTENSITIES: readonly VisualizerIntensity[] = ['subtle', 'balanced', 'vivid'];
 export const CROSSFADER_CURVES: readonly CrossfaderCurve[] = ['constant-power', 'linear', 'cut'];
 export const PITCH_RANGES: readonly PitchRange[] = [0.06, 0.08, 0.16];
 export const BUFFER_SIZES: readonly AudioBufferSize[] = [256, 512, 1024];
@@ -87,8 +96,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   syncRange: 0.08,
   shortcutsEnabled: true,
   shortcutBindings: DEFAULT_SHORTCUT_BINDINGS,
+  navigationBindings: DEFAULT_NAVIGATION_BINDINGS,
   autoAnalyzeOnImport: true,
   animations: true,
+  visualizerIntensity: 'balanced',
   experimentalInterface: false,
 };
 
@@ -135,8 +146,10 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     syncRange: sanitizeSyncRange(source.syncRange),
     shortcutsEnabled: typeof source.shortcutsEnabled === 'boolean' ? source.shortcutsEnabled : d.shortcutsEnabled,
     shortcutBindings: sanitizeShortcutBindings(source.shortcutBindings),
+    navigationBindings: sanitizeNavigationBindings(source.navigationBindings),
     autoAnalyzeOnImport: typeof source.autoAnalyzeOnImport === 'boolean' ? source.autoAnalyzeOnImport : d.autoAnalyzeOnImport,
     animations: typeof source.animations === 'boolean' ? source.animations : d.animations,
+    visualizerIntensity: pick(source.visualizerIntensity, VISUALIZER_INTENSITIES, d.visualizerIntensity),
     experimentalInterface: typeof source.experimentalInterface === 'boolean' ? source.experimentalInterface : d.experimentalInterface,
   };
 }

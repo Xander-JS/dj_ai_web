@@ -19,6 +19,9 @@ import { PageHeader } from '../components/molecules/PageHeader';
 import { Notice } from '../components/molecules/Notice';
 import { EmptyState } from '../components/molecules/EmptyState';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { useSmoothScroll } from '../design-system/smoothScroll';
+import { DURATION, EASE_OUT } from '../design-system/motion';
+import { useAnimationsEnabled } from '../design-system/motionPreference';
 import { LibrarySelectionBar } from '../components/organisms/LibrarySelectionBar';
 import { AnalysisQueuePanel } from '../components/organisms/AnalysisQueuePanel';
 import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
@@ -26,11 +29,12 @@ import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
 import { settingsStore } from '../store/useSettingsStore';
 import type { ExtractedAudio } from '../services/youtubeService';
-import { formatBytes, formatDate } from '../utils/formatters';
+import { formatDate } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
 import { useSeedStore } from '../store/useSeedStore';
 import { buildPlaylistFromSeeds, MAX_SEED_TRACKS } from '../engine/playlistBuilder';
 import { notificationCenter } from '../services/notifications/notificationCenter';
+import { toastStore } from '../services/notifications/toastService';
 import { analysisSyncManager, bulkAnalysisQueue } from '../services/analysis';
 import { playlistService, addTracksToPlaylist } from '../services/playlists/playlistService';
 import { camelotToKey, keyToCamelot } from '../audio/analysis/camelotMapper';
@@ -45,10 +49,16 @@ import {
 } from '../utils/trackAnalysis';
 import type { Track, AnalysisStatus, ManualAnalysisField, MusicalKeyCamelot } from '../types/track';
 import type { Playlist } from '../types/playlist';
+import {
+  filterLibraryRows,
+  isLinkTrack,
+  isLocalTrack,
+  type SourceFilter,
+} from '../utils/libraryFilters';
 import './Library.css';
 import { clsx } from 'clsx';
+import { AnimatePresence, motion } from 'framer-motion';
 
-export type FilterType = 'all' | 'local' | 'audio' | 'video';
 
 export interface UnifiedRowTrack {
   id: string;
@@ -64,7 +74,6 @@ export interface UnifiedRowTrack {
   analysisError?: string;
   durationFormatted: string;
   type: 'audio' | 'video';
-  fileSizeFormatted?: string;
   dateAddedFormatted?: string;
   rawLocalTrack: Track;
 }
@@ -88,20 +97,6 @@ function draftToManualEdits(draft: MetadataDraft, initial: MetadataDraft): Manua
     edits.energy = draft.energy.trim() === '' ? null : Number(draft.energy);
   }
   return edits;
-}
-
-/** Filas visibles según el filtro de tipo y la búsqueda; es también el alcance de la selección. */
-function filterLibraryRows(rows: UnifiedRowTrack[], filter: FilterType, query: string): UnifiedRowTrack[] {
-  const q = query.trim().toLowerCase();
-  return rows.filter((track) => {
-    // 'all' y 'local' muestran la biblioteca local completa
-    if (filter === 'audio' && track.type !== 'audio') return false;
-    if (filter === 'video' && track.type !== 'video') return false;
-    if (q === '') return true;
-    return track.title.toLowerCase().includes(q)
-      || track.artist.toLowerCase().includes(q)
-      || track.album.toLowerCase().includes(q);
-  });
 }
 
 export interface AnalysisStatusBadgeProps {
@@ -195,11 +190,13 @@ export const Library: React.FC = () => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const tableScrollRef = useSmoothScroll<HTMLDivElement>();
+  const animationsEnabled = useAnimationsEnabled();
   const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB, analyzeTrack } = useDJStore();
   const { seedTrackIds, toggleSeed, removeSeed, swapSeeds, clearSeeds } = useSeedStore();
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<SourceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
 
@@ -228,6 +225,8 @@ export const Library: React.FC = () => {
   const [metadataDraft, setMetadataDraft] = useState<MetadataDraft>({ bpm: '', camelot: '', energy: '' });
   const [initialMetadataDraft, setInitialMetadataDraft] = useState<MetadataDraft>({ bpm: '', camelot: '', energy: '' });
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
+  // Resalte breve del Modo referencia cuando cambian sus pistas
+  const [isSeedBarUpdated, setIsSeedBarUpdated] = useState(false);
 
   // Playlists locales disponibles como destino para las pistas seleccionadas
   useEffect(() => {
@@ -290,7 +289,6 @@ export const Library: React.FC = () => {
     if (!fileList || fileList.length === 0) return;
 
     setIsImporting(true);
-    setFeedback(null);
 
     const files = Array.from(fileList);
     const { successCount, errors, importedTracks } = await importFilesToLocalLibrary(
@@ -304,24 +302,16 @@ export const Library: React.FC = () => {
       importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
     }
 
+    // Resultado como aviso instantáneo en la esquina: no desplaza la cabecera ni la tabla
     if (successCount > 0 && errors.length === 0) {
-      setFeedback({
-        type: 'success',
-        text: t('library.import_success', { count: successCount }),
-      });
+      toastStore.show('success', t('library.toast.imported'));
     } else if (successCount > 0 && errors.length > 0) {
-      setFeedback({
-        type: 'warning',
-        text: t('library.import_partial_warning', {
-          success: t('library.import_success', { count: successCount }),
-          warnings: errors.join(', '),
-        }),
-      });
+      toastStore.show('warning', t('library.import_partial_warning', {
+        success: t('library.toast.imported'),
+        warnings: errors.join(', '),
+      }));
     } else if (errors.length > 0) {
-      setFeedback({
-        type: 'error',
-        text: errors.join(' | '),
-      });
+      toastStore.show('error', errors.join(' | '));
     }
   };
 
@@ -338,7 +328,7 @@ export const Library: React.FC = () => {
       return { ok: false, error: errors.join(' | ') || undefined };
     }
 
-    setFeedback({ type: 'success', text: t('library.import_success', { count: successCount }) });
+    toastStore.show('success', t('library.toast.imported'));
     if (settingsStore.getSnapshot().autoAnalyzeOnImport) {
       importedTracks.forEach((track) => { void handleAnalyzeTrack(track); });
     }
@@ -385,34 +375,13 @@ export const Library: React.FC = () => {
       const result = await analyzeTrack(track, force);
 
       if (result.status === 'failed') {
-        setFeedback({
-          type: 'warning',
-          text: t('library.analysis_failed_warning', {
-            title: track.title,
-            error: result.analysisError || t('states.error_desc'),
-          }),
-        });
+        toastStore.show('warning', t('library.toast.analysis_failed'));
       } else if (result.status === 'analyzed') {
-        const bpmStr = result.bpm ? `${result.bpm} BPM` : '';
-        const keyStr = result.key ? `${result.key}` : '';
-        setFeedback({
-          type: 'success',
-          text: t('library.analysis_success', {
-            title: track.title,
-            bpm: bpmStr,
-            key: keyStr,
-          }),
-        });
+        toastStore.show('success', t(force ? 'library.toast.reanalyzed' : 'library.toast.analyzed'));
       }
     } catch (err) {
       console.error('[Library] Error al solicitar análisis:', err);
-      setFeedback({
-        type: 'error',
-        text: t('library.analysis_error', {
-          title: track.title,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      });
+      toastStore.show('error', t('library.toast.analysis_failed'));
     }
   };
 
@@ -438,19 +407,10 @@ export const Library: React.FC = () => {
       removeSeed(track.id);
 
       await refreshLocalTracks();
-      setFeedback({
-        type: 'success',
-        text: t('library.delete_success', {
-          title: track.title,
-          defaultValue: `Pista "${track.title}" eliminada de la biblioteca local.`,
-        }),
-      });
+      toastStore.show('success', t('library.toast.deleted'));
     } catch (err) {
       console.error('[Library] Error al eliminar pista:', err);
-      setFeedback({
-        type: 'error',
-        text: t('library.delete_error', { error: err instanceof Error ? err.message : String(err) }),
-      });
+      toastStore.show('error', t('library.delete_error', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
@@ -483,7 +443,7 @@ export const Library: React.FC = () => {
         : invalid === 'energy'
           ? t('library.manual_invalid_energy', { min: MANUAL_ENERGY_MIN, max: MANUAL_ENERGY_MAX })
           : t('library.manual_invalid_camelot');
-      setFeedback({ type: 'error', text });
+      toastStore.show('error', text);
       return;
     }
 
@@ -495,15 +455,10 @@ export const Library: React.FC = () => {
         throw new Error(t('states.error_desc'));
       }
       setEditingTrackId(null);
-      setFeedback({ type: 'success', text: t('library.manual_saved', { title: track.title }) });
+      toastStore.show('success', t(edits.bpm !== undefined ? 'library.toast.bpm_updated' : 'library.toast.metadata_updated'));
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        text: t('library.manual_save_error', {
-          title: track.title,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      });
+      console.error('[Library] Error al guardar metadatos:', err);
+      toastStore.show('error', t('library.toast.save_failed'));
     } finally {
       setIsSavingMetadata(false);
     }
@@ -527,25 +482,16 @@ export const Library: React.FC = () => {
       const loaded = await loadFn(trackToLoad);
       const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
       if (loaded) {
-        setFeedback({
-          type: 'success',
-          text: t('library.load_success', { title: trackToLoad.title, deck: deckLabel }),
-        });
+        toastStore.show('success', t('library.toast.added_to_deck', { deck: deckLabel }));
       } else {
-        setFeedback({
-          type: 'error',
-          text: t('library.load_error', { title: trackToLoad.title, deck: deckLabel }),
-        });
+        toastStore.show('error', t('library.toast.load_failed', { deck: deckLabel }));
       }
     } catch (err) {
       const deckLabel = deckId === 'A' ? 'Deck A' : 'Deck B';
-      setFeedback({
-        type: 'error',
-        text: t('library.load_exception_error', {
-          deck: deckLabel,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      });
+      toastStore.show('error', t('library.load_exception_error', {
+        deck: deckLabel,
+        error: err instanceof Error ? err.message : String(err),
+      }));
     }
   };
 
@@ -557,7 +503,7 @@ export const Library: React.FC = () => {
         id: lt.id,
         title: lt.title,
         artist: lt.artist || t('dj.unknown_artist'),
-        album: lt.fileMeta?.fileName || '-',
+        album: lt.album || '-',
         bpm: hasMetrics ? lt.analysis.bpm : undefined,
         key: hasMetrics ? lt.analysis.key : undefined,
         camelot: hasMetrics
@@ -569,15 +515,19 @@ export const Library: React.FC = () => {
         analysisError: lt.analysis?.analysisError,
         durationFormatted: lt.durationFormatted,
         type: lt.type,
-        fileSizeFormatted: lt.fileMeta?.fileSize ? formatBytes(lt.fileMeta.fileSize) : undefined,
         dateAddedFormatted: lt.dateAdded ? formatDate(lt.dateAdded) : undefined,
         rawLocalTrack: lt,
       };
     });
 
-  // Filtrado reactivo por tipo y búsqueda
-  const filteredTracks = filterLibraryRows(unifiedTracks, filter, searchQuery);
-  const isFiltered = filter === 'audio' || filter === 'video' || searchQuery.trim() !== '';
+  // Filtrado reactivo por origen y búsqueda
+  const filteredTracks = filterLibraryRows(unifiedTracks, filter, 'all', searchQuery);
+  const localCount = localTracks.filter(isLocalTrack).length;
+  const linkCount = localTracks.filter(isLinkTrack).length;
+  // Un filtro de origen solo reduce la vista si hay pistas del otro origen
+  const isFiltered = (filter === 'local' && localCount < localTracks.length)
+    || (filter === 'link' && linkCount < localTracks.length)
+    || searchQuery.trim() !== '';
 
   // La selección solo abarca pistas visibles: al cambiar la vista se descartan las que quedan ocultas,
   // para que ninguna acción masiva alcance pistas que el usuario ya no ve
@@ -585,10 +535,10 @@ export const Library: React.FC = () => {
   const allVisibleSelected = filteredTracks.length > 0 && selectedRows.length === filteredTracks.length;
   const queuedIds = new Set(queue.pending.map((item) => item.trackId));
 
-  const changeView = (nextFilter: FilterType, nextQuery: string) => {
+  const changeView = (nextFilter: SourceFilter, nextQuery: string) => {
     setFilter(nextFilter);
     setSearchQuery(nextQuery);
-    const visibleIds = new Set(filterLibraryRows(unifiedTracks, nextFilter, nextQuery).map((track) => track.id));
+    const visibleIds = new Set(filterLibraryRows(unifiedTracks, nextFilter, 'all', nextQuery).map((track) => track.id));
     setSelectedTracks((prev) => {
       const next = new Set([...prev].filter((id) => visibleIds.has(id)));
       return next.size === prev.size ? prev : next;
@@ -603,12 +553,12 @@ export const Library: React.FC = () => {
   const handleToggleSeed = (track: Track) => {
     const result = toggleSeed(track.id);
     if (result.action === 'replaced') {
-      const replaced = localTracks.find((tr) => tr.id === result.replacedId);
-      setFeedback({
-        type: 'warning',
-        text: t('seed.replaced', { max: MAX_SEED_TRACKS, removed: replaced?.title ?? '', added: track.title }),
-      });
+      toastStore.show('warning', t('seed.limit_reached', { max: MAX_SEED_TRACKS }));
+    } else {
+      toastStore.show('success', t('seed.updated'));
     }
+    // toggleSeed siempre modifica las referencias (añade, quita o reemplaza)
+    setIsSeedBarUpdated(true);
   };
 
   // Modo referencia: secuencia la biblioteca desde las semillas y guarda el resultado como playlist
@@ -618,7 +568,7 @@ export const Library: React.FC = () => {
     try {
       const result = buildPlaylistFromSeeds({ seedTracks, candidates: localTracks });
       if (result.trackIds.length <= seedTracks.length) {
-        setFeedback({ type: 'warning', text: t('seed.no_compatible') });
+        notificationCenter.push({ type: 'warning', messageKey: 'seed.no_compatible' });
         return;
       }
       const name = seedTracks.length === 2
@@ -631,7 +581,8 @@ export const Library: React.FC = () => {
         messageKey: 'notifications.seed_mix_generated',
         params: { name: created.name, count: result.trackIds.length },
       });
-      navigate('/playlists');
+      // La vista de Playlists abre directamente la playlist recién generada
+      navigate('/playlists', { state: { playlistId: created.id } });
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -746,7 +697,7 @@ export const Library: React.FC = () => {
     }
   };
 
-  const filterOptions: { value: FilterType; label: React.ReactNode }[] = [
+  const filterOptions: { value: SourceFilter; label: React.ReactNode }[] = [
     { value: 'all', label: t('library.filter_all') },
     {
       value: 'local',
@@ -754,12 +705,20 @@ export const Library: React.FC = () => {
         <>
           <Icon icon={HardDrive} size="sm" />
           {t('library.filter_local')}
-          <span className="sd-num">({localTracks.length})</span>
+          <span className="sd-num">({localCount})</span>
         </>
       ),
     },
-    { value: 'audio', label: t('library.filter_audio') },
-    { value: 'video', label: t('library.filter_video') },
+    {
+      value: 'link',
+      label: (
+        <>
+          <Icon icon={Link2} size="sm" />
+          {t('library.filter_link')}
+          <span className="sd-num">({linkCount})</span>
+        </>
+      ),
+    },
   ];
 
   return (
@@ -844,17 +803,24 @@ export const Library: React.FC = () => {
             wrapperClassName="sd-library-toolbar__search"
           />
 
-          <SegmentedControl
-            label={t('library.filters_label')}
-            value={filter}
-            options={filterOptions}
-            onChange={(value) => changeView(value, searchQuery)}
-          />
+          <div className="sd-library-toolbar__filters">
+            <SegmentedControl
+              label={t('library.filters_label')}
+              value={filter}
+              options={filterOptions}
+              onChange={(value) => changeView(value, searchQuery)}
+            />
+          </div>
         </div>
 
         {/* Modo referencia (semillas) */}
         {localTracks.length > 0 && (
-          <div className="sd-library-bar" role="region" aria-label={t('seed.mode_title')}>
+          <div
+            className={clsx('sd-library-bar', isSeedBarUpdated && 'is-updated')}
+            role="region"
+            aria-label={t('seed.mode_title')}
+            onAnimationEnd={(e) => { if (e.target === e.currentTarget) setIsSeedBarUpdated(false); }}
+          >
             <span className="sd-library-bar__title">
               <Icon icon={Target} size="md" />
               {t('seed.mode_title')}
@@ -903,28 +869,41 @@ export const Library: React.FC = () => {
         {/* Cola de reanálisis en segundo plano y su resumen */}
         <AnalysisQueuePanel />
 
-        {/* Barra contextual de la selección */}
-        {selectedRows.length > 0 && (
-          <LibrarySelectionBar
-            selectedCount={selectedRows.length}
-            visibleCount={filteredTracks.length}
-            isFiltered={isFiltered}
-            playlists={playlists}
-            countPlaylistTracks={(playlist) => playlist.trackIds.filter((id) => localTracks.some((tr) => tr.id === id)).length}
-            targetPlaylistId={targetPlaylistId}
-            onTargetPlaylistChange={setTargetPlaylistId}
-            onAddToPlaylist={handleAddSelectedToPlaylist}
-            onSelectAll={selectAllVisible}
-            onDeselectAll={clearSelection}
-            onReanalyze={handleBulkReanalyze}
-            onDelete={() => setBulkDeleteOpen(true)}
-            busy={isDeleting}
-          />
-        )}
+        {/* Barra contextual de la selección: el hueco se pliega con ella y la salida termina antes de desmontarla */}
+        <AnimatePresence initial={false}>
+          {selectedRows.length > 0 && (
+            <motion.div
+              key="selection-bar"
+              className="sd-selection-bar-slot"
+              initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
+              animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
+              exit={{ height: 0, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+              transition={{ duration: animationsEnabled ? DURATION.base : 0, ease: EASE_OUT }}
+            >
+              <div className="sd-selection-bar-slot__inner">
+                <LibrarySelectionBar
+                  selectedCount={selectedRows.length}
+                  visibleCount={filteredTracks.length}
+                  isFiltered={isFiltered}
+                  playlists={playlists}
+                  countPlaylistTracks={(playlist) => playlist.trackIds.filter((id) => localTracks.some((tr) => tr.id === id)).length}
+                  targetPlaylistId={targetPlaylistId}
+                  onTargetPlaylistChange={setTargetPlaylistId}
+                  onAddToPlaylist={handleAddSelectedToPlaylist}
+                  onSelectAll={selectAllVisible}
+                  onDeselectAll={clearSelection}
+                  onReanalyze={handleBulkReanalyze}
+                  onDelete={() => setBulkDeleteOpen(true)}
+                  busy={isDeleting}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Tabla unificada */}
-      <div className="sd-library-table-wrap">
+      <div ref={tableScrollRef} className="sd-library-table-wrap sd-scroll-area">
         <table className="sd-table sd-library-table">
           <thead>
             <tr>
@@ -947,9 +926,10 @@ export const Library: React.FC = () => {
                 </button>
               </th>
               <th>{t('library.col_title')}</th>
+              <th className="sd-library-table__deck"><span className="sd-visually-hidden">{t('library.col_deck')}</span></th>
               <th>{t('library.col_album')}</th>
               <th className="sd-table__num">{t('library.col_bpm')}</th>
-              <th>{t('library.col_key')}</th>
+              <th colSpan={2}>{t('library.col_key')}</th>
               <th>{t('library.col_energy')}</th>
               <th>{t('library.col_status')}</th>
               <th className="sd-table__num">{t('library.col_duration')}</th>
@@ -992,31 +972,35 @@ export const Library: React.FC = () => {
                             <Icon icon={Target} size="xs" /> {t('seed.badge', { index: seedIndex + 1 })}
                           </Tag>
                         )}
+                      </span>
+                      <span className="sd-library-track__line">
+                        <span className="sd-library-track__artist">{track.artist}</span>
+                        <Tag tone="surface" className="sd-library-track__tag">{isLinkTrack(track.rawLocalTrack) ? t('library.badge_link') : t('library.badge_local')}</Tag>
+                        {track.type === 'video' && <Tag tone="surface" className="sd-library-track__tag">V</Tag>}
+                      </span>
+                    </div>
+                  </td>
+                  {/* Columna reservada para la asignación a Deck: vacía si la pista no está cargada */}
+                  <td className="sd-library-table__deck">
+                    {(isLoadedInDeckA || isLoadedInDeckB) && (
+                      <span className="sd-library-table__decks">
                         {isLoadedInDeckA && (
                           <Tag tone="ink" className="sd-library-track__tag" title={t('library.load_deck_a')}>
                             <Icon icon={Disc} size="xs" className={clsx(deckA.playbackState === 'playing' && 'sd-deck-spin')} />
-                            Deck A {deckA.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
+                            Deck A
                           </Tag>
                         )}
                         {isLoadedInDeckB && (
                           <Tag tone="ink" className="sd-library-track__tag" title={t('library.load_deck_b')}>
                             <Icon icon={Disc} size="xs" className={clsx(deckB.playbackState === 'playing' && 'sd-deck-spin')} />
-                            Deck B {deckB.playbackState === 'playing' ? `(${t('dj.play')})` : ''}
+                            Deck B
                           </Tag>
                         )}
                       </span>
-                      <span className="sd-library-track__line">
-                        <span className="sd-library-track__artist">{track.artist}</span>
-                        <Tag tone="surface" className="sd-library-track__tag">{t('library.badge_local')}</Tag>
-                        {track.type === 'video' && <Tag tone="surface" className="sd-library-track__tag">V</Tag>}
-                      </span>
-                    </div>
+                    )}
                   </td>
                   <td className="sd-library-table__file">
                     <span className="sd-library-table__file-name">{track.album}</span>
-                    {track.fileSizeFormatted && (
-                      <span className="sd-library-table__muted sd-num">{track.fileSizeFormatted}</span>
-                    )}
                   </td>
                   <td className="sd-table__num">
                     {isEditing ? (
@@ -1046,8 +1030,8 @@ export const Library: React.FC = () => {
                       <span className="sd-library-table__muted">—</span>
                     )}
                   </td>
-                  <td>
-                    {isEditing ? (
+                  {isEditing ? (
+                    <td colSpan={2}>
                       <SelectMenu
                         size="sm"
                         label={t('library.manual_key_label')}
@@ -1063,22 +1047,29 @@ export const Library: React.FC = () => {
                         onKeyDown={(e) => handleMetadataKeyDown(e, track)}
                         wrapperClassName="sd-library-edit sd-library-edit--key"
                       />
-                    ) : track.key ? (
-                      <div
-                        className={clsx('sd-library-key', track.manualFields.includes('camelot') && 'is-manual')}
+                    </td>
+                  ) : track.key ? (
+                    <>
+                      {/* Tonalidad y Camelot en celdas propias: cada una se alinea en su columna */}
+                      <td
+                        className={clsx('sd-library-table__key', track.manualFields.includes('camelot') && 'is-manual')}
                         title={track.manualFields.includes('camelot') ? t('library.manual_value_title') : undefined}
                       >
                         <span className="sd-library-key__name">{track.key}</span>
+                      </td>
+                      <td className="sd-library-table__camelot">
                         {track.camelot && (
                           <Tag tone="surface" className="sd-library-key__camelot">
                             {track.camelot}
                           </Tag>
                         )}
-                      </div>
-                    ) : (
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={2}>
                       <span className="sd-library-table__muted">—</span>
-                    )}
-                  </td>
+                    </td>
+                  )}
                   <td>
                     {isEditing ? (
                       <TextField
@@ -1217,7 +1208,7 @@ export const Library: React.FC = () => {
 
             {filteredTracks.length === 0 && (
               <tr className="sd-table__empty-row">
-                <td colSpan={9}>
+                <td colSpan={11}>
                   <EmptyState
                     icon={localTracks.length === 0 ? Music : Search}
                     title={localTracks.length === 0 ? t('library.empty_local_title') : t('states.empty_title')}

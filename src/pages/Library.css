@@ -71,6 +71,20 @@
   flex: 0 1 22rem;
 }
 
+.sd-library-toolbar__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-2);
+  flex-wrap: wrap;
+}
+
+/* Foco: solo se oscurece el borde existente, sin el contorno adicional superpuesto */
+.sd-library-toolbar__search .sd-text-field__input:focus,
+.sd-library-toolbar__search .sd-text-field__input:focus-visible {
+  border-color: var(--sd-ink);
+  outline: none;
+}
+
 /* Barras contextuales: modo referencia (superficie) y selección (campo inverso) */
 .sd-library-bar {
   display: flex;
@@ -83,6 +97,22 @@
   background-color: var(--sd-surface);
   --sd-ghost-hover: var(--sd-paper);
   --sd-field-bg: var(--sd-paper);
+}
+
+/* Cambio en las referencias: resalte breve que se desvanece, sin mover ni redimensionar la barra */
+.sd-library-bar.is-updated {
+  animation: sd-library-bar-updated var(--sd-duration-slow) var(--sd-ease-out);
+}
+
+@keyframes sd-library-bar-updated {
+  from {
+    background-color: color-mix(in srgb, var(--sd-field-acid) 45%, var(--sd-surface));
+    box-shadow: inset 0 0 0 2px var(--sd-field-acid);
+  }
+}
+
+:root[data-animations='off'] .sd-library-bar.is-updated {
+  animation: none;
 }
 
 .sd-library-bar.sd-field-inverse {
@@ -218,11 +248,36 @@
 
 .sd-library-table th,
 .sd-library-table td {
-  padding-inline: 0.625rem;
+  padding-inline: min(0.625rem, var(--sd-cell-pad-x));
 }
 
 .sd-library-table__file {
   max-width: 10rem;
+}
+
+/* Columnas fijas: alineadas a la izquierda y del ancho de su contenido en todas las filas */
+.sd-library-table .sd-table__num {
+  text-align: left;
+}
+
+/* Asignación a Deck: espacio reservado aunque la pista no esté cargada */
+.sd-library-table__deck {
+  min-width: 8.5rem;
+  white-space: nowrap;
+}
+
+.sd-library-table__decks {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.sd-library-table__key,
+.sd-library-table__camelot {
+  white-space: nowrap;
+}
+
+.sd-library-table td.sd-library-table__key {
+  padding-right: 0;
 }
 
 .sd-library-table__file-name {
@@ -247,12 +302,6 @@
 .sd-energy.is-manual .sd-energy__value {
   text-decoration: underline dotted;
   text-underline-offset: 0.2em;
-}
-
-.sd-library-key {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
 }
 
 .sd-library-key__name {
@@ -407,7 +456,8 @@
   }
 
   .sd-status__spin,
-  .sd-deck-spin {
+  .sd-deck-spin,
+  .sd-library-bar.is-updated {
     animation: none;
   }
 }

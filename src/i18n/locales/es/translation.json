@@ -478,7 +478,8 @@
     "bar_sync_block_master_not_playing": "Reproduce el Deck {{master}}: BAR SYNC necesita el Master sonando.",
     "bar_sync_block_self_playing": "Pausa este deck: BAR SYNC prepara el deck esclavo detenido o en pausa.",
     "bar_sync_block_tempo_mismatch": "Los tempos no coinciden ({{self_bpm}} frente a {{master_bpm}} BPM). Activa SYNC primero: con tempos distintos la fase se pierde en pocos compases y el bombo suena doble.",
-    "bar_sync_reason_rejected_tempo_mismatch": "BAR SYNC requiere el mismo BPM efectivo en ambos decks. Activa SYNC antes de preparar el compás."
+    "bar_sync_reason_rejected_tempo_mismatch": "BAR SYNC requiere el mismo BPM efectivo en ambos decks. Activa SYNC antes de preparar el compás.",
+    "pitch_fader": "Fader de pitch del Deck {{deck}}"
   },
   "mixer": {
     "channel": "CH {{num}}",
@@ -497,7 +498,34 @@
     "curve_cp_short": "CP",
     "curve_lin_short": "LIN",
     "curve_cut_short": "CUT",
-    "mute": "MUTE"
+    "mute": "MUTE",
+    "console_title": "Consola de mezcla",
+    "status_live": "En vivo",
+    "status_standby": "En espera",
+    "eq": "Ecualizador",
+    "volume": "Volumen",
+    "filter_lpf": "LPF",
+    "filter_hpf": "HPF",
+    "filter_lpf_value": "Paso bajo {{value}} %",
+    "filter_hpf_value": "Paso alto {{value}} %",
+    "filter_off": "Filtro neutro",
+    "cue_pfl_title": "Pre-escucha del canal (PFL)",
+    "state_empty": "Sin pista",
+    "state_loading": "Cargando",
+    "state_playing": "Reproduciendo",
+    "state_paused": "En pausa",
+    "signal_present": "con señal",
+    "signal_absent": "sin señal",
+    "meter_channel": "Nivel del canal {{num}}",
+    "meter_master": "Nivel Master",
+    "spectrum_label": "Espectro de la mezcla Master",
+    "no_signal": "Sin señal",
+    "muted": "Silenciado",
+    "mute_on_title": "Master silenciado: pulsa para reactivar la salida",
+    "mute_off_title": "Silenciar la salida Master",
+    "crossfader_title": "Crossfader",
+    "crossfader_label": "Crossfader entre Deck A y Deck B",
+    "crossfader_value": "Deck A {{a}} %, Deck B {{b}} %"
   },
   "notifications": {
     "unread": "{{count}} notificación(es) sin leer",
@@ -721,7 +749,8 @@
       "tracks": "Pistas",
       "tracks_size": "Música",
       "auto_analyze": "Análisis al importar",
-      "animations": "Animaciones"
+      "animations": "Animaciones",
+      "disc": "Disco"
     },
     "accent_default": "Predeterminado",
     "motion_title": "Movimiento",
@@ -731,7 +760,8 @@
     "animations_list": {
       "sidebar": "Luz de la barra lateral que sigue al cursor",
       "selection_bar": "Entrada de la barra de selección de la Biblioteca",
-      "player_visualizer": "Onda de energía de la barra de reproducción"
+      "player_visualizer": "Onda de energía de la barra de reproducción",
+      "mixer": "Giro del disco y movimiento de pomos y faders del Mixer"
     },
     "animations_reduced": "Tu sistema pide reducir el movimiento: las animaciones quedan desactivadas aunque las actives aquí.",
     "lab_title": "Laboratorio",
@@ -754,7 +784,19 @@
     "shortcuts_nav_binding_invalid": "Usa una letra o un número junto a Shift.",
     "shortcuts_nav_binding_duplicate": "Shift + {{key}} ya abre otra sección.",
     "shortcuts_nav_binding_saved": "Shift + {{key}} asignado.",
-    "shortcuts_section": "Sección"
+    "shortcuts_section": "Sección",
+    "disc_title": "Disco de los decks",
+    "disc_desc": "Diseño del disco giratorio que muestran Deck A y Deck B. Solo cambia su aspecto: la reproducción, el BPM, los cues y el SYNC no se ven afectados.",
+    "disc": {
+      "a": "Disco óptico",
+      "b": "Vinilo neón",
+      "c": "Vinilo clásico"
+    },
+    "disc_hint": {
+      "a": "Plateado e iridiscente",
+      "b": "Surcos con reflejos turquesa",
+      "c": "Etiqueta amarilla de estudio"
+    }
   },
   "profile": {
     "title": "Mi Perfil",

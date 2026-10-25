@@ -1,5 +1,5 @@
 import { createTrackFromFile, validateAudioFile } from '../utils/audioValidation.ts';
-import type { Track } from '../types/track.ts';
+import type { Track, TrackOrigin } from '../types/track.ts';
 
 export interface AudioImportDependencies {
   hasDuplicate: (fileName: string, fileSize: number) => Promise<boolean>;
@@ -19,6 +19,8 @@ export interface AudioImportResult {
 export interface AudioImportOptions {
   // Rechaza el archivo si el navegador no puede decodificarlo (p. ej. audio remoto)
   requireDecodable?: boolean;
+  // Mecanismo de importación que se registra en la pista; por defecto, archivo local
+  origin?: TrackOrigin;
 }
 
 /** Implements the Library's existing import policy: keep a valid-looking file if
@@ -65,6 +67,7 @@ export async function importAudioFiles(
     }
 
     const track = createTrackFromFile(file, durationSeconds, contentHash);
+    if (options.origin === 'link') track.origin = 'link';
     try {
       const result = await dependencies.saveTrack(track, file);
       if (!result.persisted) {

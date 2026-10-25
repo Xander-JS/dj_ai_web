@@ -58,6 +58,6 @@ export function importRemoteAudioToLocalLibrary(
   return importFilesToLocalLibrary(
     [createFileFromRemoteAudio(blob, filename)],
     duplicateWarning,
-    { requireDecodable: true },
+    { requireDecodable: true, origin: 'link' },
   );
 }

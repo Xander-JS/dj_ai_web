@@ -6,8 +6,14 @@
 .sd-settings__layout {
   display: grid;
   grid-template-columns: minmax(13rem, 15.5rem) minmax(0, 1fr);
+  /* Navegación y vista arrancan a la misma altura: el borde superior de ambas columnas se
+     alinea con el título de la categoría (los títulos recortan su interlineado superior) */
   align-items: start;
-  gap: var(--sd-gap-5);
+  gap: var(--sd-gap-6);
+  /* Ocupa el alto del área de trabajo: solo el contenido de la categoría se desplaza */
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -20,6 +26,14 @@
   flex-direction: column;
   gap: var(--sd-gap-2);
   min-width: 0;
+}
+
+/* Ambos títulos recortan el aire sobre las mayúsculas: el borde superior de su caja es el de
+   la letra, así «Ajustes» y el título de la categoría quedan a la misma altura sea cual sea su tamaño */
+.sd-settings__title,
+.sd-settings__view-title {
+  text-box-trim: trim-start;
+  text-box-edge: cap alphabetic;
 }
 
 .sd-settings__title {
@@ -96,6 +110,15 @@
 /* --------------------------------------------------------------------------
    Vista de la categoría
    -------------------------------------------------------------------------- */
+/* Zona desplazable de la categoría: alto de la columna y barra al borde de la columna,
+   así la vista conserva su ancho máximo */
+.sd-settings__view-scroll {
+  align-self: stretch;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .sd-settings__view {
   display: flex;
   flex-direction: column;
@@ -669,6 +692,7 @@
 @media (max-width: 1024px) {
   .sd-settings__layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: var(--sd-gap-4);
   }
 

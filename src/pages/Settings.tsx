@@ -32,6 +32,7 @@ import { ShortcutSettings } from '../components/settings/ShortcutSettings';
 import { BeatLengthPreview, CrossfaderCurvePreview } from '../components/settings/SettingsPreviews';
 import { DURATION, EASE_OUT } from '../design-system/motion';
 import { useSystemReducedMotion } from '../design-system/motionPreference';
+import { useSmoothScroll } from '../design-system/smoothScroll';
 import { useAuth } from '../context/AuthContext';
 import {
   ACCENT_COLORS,
@@ -167,6 +168,14 @@ export const Settings: React.FC = () => {
   const baseId = useId();
   const applied = useAppliedStamp();
   const systemReducedMotion = useSystemReducedMotion();
+  const smoothScrollRef = useSmoothScroll<HTMLDivElement>();
+  // Desplazamiento propio del contenido de la categoría: el menú queda fijo y cada categoría
+  // nueva empieza arriba (se reinicia mientras ninguna está a la vista, entre salida y entrada)
+  const viewScrollRef = useRef<HTMLDivElement | null>(null);
+  const setViewScroll = useCallback((element: HTMLDivElement | null) => {
+    viewScrollRef.current = element;
+    return smoothScrollRef(element);
+  }, [smoothScrollRef]);
   const [interfaceNotice, setInterfaceNotice] = useState<'reloading' | 'not_saved' | null>(null);
 
   // Modo experimental: al activarlo se guarda y se recarga una sola vez, solo por acción del usuario.
@@ -228,7 +237,7 @@ export const Settings: React.FC = () => {
   const tabId = (tab: Tab) => `${baseId}-tab-${tab}`;
 
   return (
-    <ConsoleTemplate className="sd-settings">
+    <ConsoleTemplate fill className="sd-settings">
       <div className="sd-settings__layout">
         <aside className="sd-settings__aside">
           <h2 className="sd-settings__title">{t('settings.title')}</h2>
@@ -258,6 +267,9 @@ export const Settings: React.FC = () => {
           </div>
         </aside>
 
+        {/* Cambio de categoría: la saliente se desvanece brevemente y la entrante llega desde la derecha */}
+        <div ref={setViewScroll} className="sd-settings__view-scroll sd-scroll-area">
+        <AnimatePresence mode="wait" initial={false} onExitComplete={() => viewScrollRef.current?.scrollTo({ top: 0 })}>
         <motion.section
           key={activeTab}
           id={panelId}
@@ -266,6 +278,7 @@ export const Settings: React.FC = () => {
           className="sd-settings__view"
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: reduceMotion ? 0 : -8, transition: { duration: DURATION.fast, ease: EASE_OUT } }}
           transition={{ duration: DURATION.base, ease: EASE_OUT }}
         >
           <header className="sd-settings__view-header">
@@ -537,6 +550,8 @@ export const Settings: React.FC = () => {
             {activeTab === 'library' && <LibrarySettings storage={storage} onStorageChange={refreshStorage} />}
           </div>
         </motion.section>
+        </AnimatePresence>
+        </div>
       </div>
     </ConsoleTemplate>
   );

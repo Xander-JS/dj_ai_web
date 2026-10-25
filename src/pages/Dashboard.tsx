@@ -14,7 +14,7 @@ import { VINYL_IMAGE } from '../components/organisms/landingAssets';
 import { SmartRecommendationCard } from '../components/dashboard/SmartRecommendationCard';
 import { resolveReferenceDeck, type ReferenceDeck } from '../components/dashboard/referenceDeck';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { importFilesToLocalLibrary } from '../services/localLibraryImport';
+import { importFilesToLocalLibrary, notifyDuplicateImports } from '../services/localLibraryImport';
 import { analysisSyncManager } from '../services/analysis';
 import { toastStore } from '../services/notifications/toastService';
 import { useDJStore } from '../store/useDJStore';
@@ -66,10 +66,11 @@ export const Dashboard: React.FC = () => {
     if (!fileList || fileList.length === 0) return;
     setIsImporting(true);
     try {
-      await importFilesToLocalLibrary(
+      const { duplicates } = await importFilesToLocalLibrary(
         Array.from(fileList),
         (name) => t('library.duplicate_warning', { name }),
       );
+      notifyDuplicateImports(duplicates, (count) => t('library.toast.duplicates', { count }));
       setLocalTracks(await indexedDBStorage.getAllTracks());
     } catch (err) {
       console.error('[Dashboard] Error al importar pistas:', err);

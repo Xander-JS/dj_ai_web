@@ -3,6 +3,8 @@ import type { Track, TrackOrigin } from '../types/track.ts';
 
 export interface AudioImportDependencies {
   hasDuplicate: (fileName: string, fileSize: number) => Promise<boolean>;
+  // Contenido idéntico (SHA-256) ya guardado, aunque el archivo se haya renombrado
+  hasContentDuplicate?: (contentHash: string) => Promise<boolean>;
   decodeAudioData: (data: ArrayBuffer) => Promise<AudioBuffer>;
   computeFileHash: (file: File) => Promise<string | undefined>;
   saveTrack: (track: Track, file: File) => Promise<{ persisted: boolean; reason?: string }>;
@@ -12,6 +14,8 @@ export interface AudioImportDependencies {
 export interface AudioImportResult {
   successCount: number;
   errors: string[];
+  // Avisos de archivos rechazados por estar ya en la biblioteca (o repetidos en el lote)
+  duplicates: string[];
   // Pistas persistidas en esta importación, en el orden de entrada
   importedTracks: Track[];
 }
@@ -32,7 +36,10 @@ export async function importAudioFiles(
 ): Promise<AudioImportResult> {
   let successCount = 0;
   const errors: string[] = [];
+  const duplicates: string[] = [];
   const importedTracks: Track[] = [];
+  // Huellas ya aceptadas en este lote: un mismo contenido no entra dos veces
+  const batchHashes = new Set<string>();
 
   for (const file of files) {
     const validation = validateAudioFile(file);
@@ -42,7 +49,20 @@ export async function importAudioFiles(
     }
 
     if (await dependencies.hasDuplicate(file.name, file.size)) {
-      errors.push(dependencies.duplicateWarning(file.name));
+      duplicates.push(dependencies.duplicateWarning(file.name));
+      continue;
+    }
+
+    // La huella se calcula antes de decodificar para descartar el duplicado sin más trabajo
+    let contentHash: string | undefined;
+    try {
+      contentHash = await dependencies.computeFileHash(file);
+    } catch (error) {
+      console.warn(`[Library] No se pudo calcular el hash de ${file.name}:`, error);
+    }
+
+    if (contentHash && (batchHashes.has(contentHash) || await dependencies.hasContentDuplicate?.(contentHash))) {
+      duplicates.push(dependencies.duplicateWarning(file.name));
       continue;
     }
 
@@ -59,17 +79,11 @@ export async function importAudioFiles(
       console.warn(`[Library] No se pudo decodificar la duración previa de ${file.name}:`, error);
     }
 
-    let contentHash: string | undefined;
-    try {
-      contentHash = await dependencies.computeFileHash(file);
-    } catch (error) {
-      console.warn(`[Library] No se pudo calcular el hash de ${file.name}:`, error);
-    }
-
     const track = createTrackFromFile(file, durationSeconds, contentHash);
     if (options.origin === 'link') track.origin = 'link';
     try {
       const result = await dependencies.saveTrack(track, file);
+      if (contentHash) batchHashes.add(contentHash);
       if (!result.persisted) {
         errors.push(`"${file.name}" se cargó en memoria temporal pero no se pudo persistir en IndexedDB (${result.reason || 'sin persistencia'}). Se perderá al recargar.`);
       } else {
@@ -81,5 +95,5 @@ export async function importAudioFiles(
     }
   }
 
-  return { successCount, errors, importedTracks };
+  return { successCount, errors, duplicates, importedTracks };
 }

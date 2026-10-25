@@ -6,17 +6,18 @@ import { AlertCircle, ArrowRight, CheckCircle2, ChevronDown, CircleDot, Download
 import { Button } from '../components/atoms/Button';
 import { Icon } from '../components/atoms/Icon';
 import { ProgressBar } from '../components/atoms/ProgressBar';
-import { SelectField } from '../components/atoms/SelectField';
 import { Tag } from '../components/atoms/Tag';
 import { EmptyState } from '../components/molecules/EmptyState';
 import { Notice } from '../components/molecules/Notice';
 import { PageHeader } from '../components/molecules/PageHeader';
 import { Panel } from '../components/molecules/Panel';
 import { SegmentedControl } from '../components/molecules/SegmentedControl';
+import { SelectMenu } from '../components/molecules/SelectMenu';
 import { StepIndicator, type StepItem } from '../components/molecules/StepIndicator';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
 import { DURATION, EASE_OUT } from '../design-system/motion';
 import { useAnimationsEnabled } from '../design-system/motionPreference';
+import { useSmoothScroll } from '../design-system/smoothScroll';
 import { createSessionAudioBufferResolver } from '../session/SessionAudioBufferResolver';
 import { sessionExportCoordinator } from '../session/SessionExportCoordinator';
 import {
@@ -90,6 +91,7 @@ export const Sessions: React.FC = () => {
   const [captureStartedAt, setCaptureStartedAt] = useState(initialCaptureStartedAt);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const animationsEnabled = useAnimationsEnabled();
+  const smoothScrollRef = useSmoothScroll<HTMLDivElement>();
   const [status, setStatus] = useState<SessionPageStatus>(() => {
     const snapshot = initialSessionSnapshot();
     return snapshot.active ? 'recording' : isExportableSession(snapshot.session) ? 'ready' : 'empty';
@@ -362,7 +364,7 @@ export const Sessions: React.FC = () => {
   ];
 
   return (
-    <ConsoleTemplate className="sd-sessions">
+    <ConsoleTemplate ref={smoothScrollRef} className="sd-sessions sd-scroll-area">
       <section className="sd-sessions__page" aria-labelledby="sessions-title">
         <PageHeader
           titleId="sessions-title"
@@ -468,23 +470,31 @@ export const Sessions: React.FC = () => {
                 <small className="sd-sessions-field__hint">{format === 'wav' ? t('sessions.wavInfo') : t('sessions.mp3Info')}</small>
               </div>
 
-              {format === 'mp3' && (
-                <div className="sd-sessions-field">
-                  <label className="sd-sessions-field__label" htmlFor="session-export-bitrate">{t('sessions.bitrate')}</label>
-                  <SelectField
-                    id="session-export-bitrate"
-                    value={bitrateKbps}
-                    disabled={!canExport || exportBusy}
-                    onChange={(event) => setBitrateKbps(Number(event.target.value))}
-                    wrapperClassName="sd-sessions-field__select"
+              {/* Las opciones de MP3 se despliegan y pliegan con su hueco; la salida termina antes de desmontarlas */}
+              <AnimatePresence initial={false}>
+                {format === 'mp3' && (
+                  <motion.div
+                    key="bitrate"
+                    className="sd-sessions-field"
+                    initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
+                    animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
+                    exit={{ height: 0, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+                    transition={readoutTransition}
                   >
-                    {MP3_BITRATES_AT_48_KHZ.map((bitrate) => (
-                      <option key={bitrate} value={bitrate}>{t('sessions.bitrateOption', { bitrate })}</option>
-                    ))}
-                  </SelectField>
-                  <small className="sd-sessions-field__hint">{t('sessions.bitrateInfo')}</small>
-                </div>
-              )}
+                    <span className="sd-sessions-field__label" aria-hidden="true">{t('sessions.bitrate')}</span>
+                    <SelectMenu
+                      label={t('sessions.bitrate')}
+                      placeholder={t('sessions.bitrate')}
+                      value={String(bitrateKbps)}
+                      disabled={!canExport || exportBusy}
+                      options={MP3_BITRATES_AT_48_KHZ.map((bitrate) => ({ value: String(bitrate), label: t('sessions.bitrateOption', { bitrate }) }))}
+                      onChange={(value) => setBitrateKbps(Number(value))}
+                      wrapperClassName="sd-sessions-field__select"
+                    />
+                    <small className="sd-sessions-field__hint">{t('sessions.bitrateInfo')}</small>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </fieldset>
 
             {/* Estado de la operación: tono según la fase; los avisos viven aquí */}

@@ -220,7 +220,8 @@
       "analysis_failed": "Análisis fallido",
       "bpm_updated": "BPM actualizado",
       "metadata_updated": "Metadatos actualizados",
-      "save_failed": "No se pudo guardar"
+      "save_failed": "No se pudo guardar",
+      "duplicates": "{{count}} pistas ya estaban en la biblioteca y se omitieron"
     },
     "bulk": {
       "region": "Acciones sobre la selección",
@@ -894,7 +895,8 @@
     "limit_reached": "Máximo {{max}} referencias",
     "no_compatible": "No se encontraron pistas compatibles. Analiza más pistas (BPM y tonalidad) e inténtalo de nuevo.",
     "generated_name": "Mezcla desde {{title}}",
-    "generated_name_pair": "Mezcla {{start}} → {{end}}"
+    "generated_name_pair": "Mezcla {{start}} → {{end}}",
+    "already_generated": "Esta mezcla de referencia ya se generó"
   },
   "landing": {
     "brand": "SYSTEM DJ",

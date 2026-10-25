@@ -26,7 +26,7 @@ import { LibrarySelectionBar } from '../components/organisms/LibrarySelectionBar
 import { AnalysisQueuePanel } from '../components/organisms/AnalysisQueuePanel';
 import { YouTubeImportModal, type YouTubeImportResult } from '../components/library/YouTubeImportModal';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
-import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary } from '../services/localLibraryImport';
+import { importFilesToLocalLibrary, importRemoteAudioToLocalLibrary, notifyDuplicateImports } from '../services/localLibraryImport';
 import { settingsStore } from '../store/useSettingsStore';
 import type { ExtractedAudio } from '../services/youtubeService';
 import { formatDate } from '../utils/formatters';
@@ -291,7 +291,7 @@ export const Library: React.FC = () => {
     setIsImporting(true);
 
     const files = Array.from(fileList);
-    const { successCount, errors, importedTracks } = await importFilesToLocalLibrary(
+    const { successCount, errors, duplicates, importedTracks } = await importFilesToLocalLibrary(
       files,
       (name) => t('library.duplicate_warning', { name }),
     );
@@ -313,16 +313,23 @@ export const Library: React.FC = () => {
     } else if (errors.length > 0) {
       toastStore.show('error', errors.join(' | '));
     }
+    notifyDuplicateImports(duplicates, (count) => t('library.toast.duplicates', { count }));
   };
 
   // Importación desde YouTube: mismo flujo que un archivo local y análisis automático (si está activado en Ajustes)
   const handleYouTubeAudio = async ({ blob, filename }: ExtractedAudio): Promise<YouTubeImportResult> => {
-    const { successCount, errors, importedTracks } = await importRemoteAudioToLocalLibrary(
+    const { successCount, errors, duplicates, importedTracks } = await importRemoteAudioToLocalLibrary(
       blob,
       filename,
       (name) => t('library.duplicate_warning', { name }),
     );
     await refreshLocalTracks();
+
+    // Ya estaba en la biblioteca: el aviso instantáneo lo explica y el modal se cierra
+    if (duplicates.length > 0) {
+      notifyDuplicateImports(duplicates, (count) => t('library.toast.duplicates', { count }));
+      return { ok: true };
+    }
 
     if (successCount === 0) {
       return { ok: false, error: errors.join(' | ') || undefined };
@@ -565,7 +572,14 @@ export const Library: React.FC = () => {
   const handleGenerateFromSeeds = async () => {
     if (seedTracks.length === 0 || isGenerating) return;
     setIsGenerating(true);
+    const seedIds = seedTracks.map((tr) => tr.id);
+    // Solo aviso instantáneo: el rechazo no se registra en el historial de notificaciones
+    const showAlreadyGenerated = () => toastStore.show('warning', t('seed.already_generated'));
     try {
+      if (await playlistService.findBySeeds(seedIds)) {
+        showAlreadyGenerated();
+        return;
+      }
       const result = buildPlaylistFromSeeds({ seedTracks, candidates: localTracks });
       if (result.trackIds.length <= seedTracks.length) {
         notificationCenter.push({ type: 'warning', messageKey: 'seed.no_compatible' });
@@ -574,8 +588,11 @@ export const Library: React.FC = () => {
       const name = seedTracks.length === 2
         ? t('seed.generated_name_pair', { start: seedTracks[0].title, end: seedTracks[1].title })
         : t('seed.generated_name', { title: seedTracks[0].title });
-      const created = await playlistService.create(name);
-      await playlistService.update(created.id, (p) => addTracksToPlaylist(p, result.trackIds));
+      const created = await playlistService.createSeedMix(name, seedIds, result.trackIds);
+      if (!created) {
+        showAlreadyGenerated();
+        return;
+      }
       notificationCenter.push({
         type: 'success',
         messageKey: 'notifications.seed_mix_generated',
@@ -736,7 +753,11 @@ export const Library: React.FC = () => {
         multiple
         accept=".mp3,.wav,audio/mpeg,audio/wav,audio/mp3"
         hidden
-        onChange={(e) => handleImportFiles(e.target.files)}
+        onChange={(e) => {
+          void handleImportFiles(e.target.files);
+          // Permite volver a elegir el mismo archivo para que su duplicado se notifique
+          e.target.value = '';
+        }}
       />
 
       <div className="sd-library__header">

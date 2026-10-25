@@ -3,19 +3,16 @@
 .sd-selection-bar {
   justify-content: space-between;
   padding-block: 0.375rem;
-  animation: sd-selection-bar-in var(--sd-duration-base) var(--sd-ease-out);
 }
 
-/* Entrada breve al aparecer la selección; respeta Animaciones y movimiento reducido */
-@keyframes sd-selection-bar-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
+/* Hueco animado de la barra (Library.tsx): el margen negativo absorbe el gap de la cabecera
+   y el relleno lo devuelve dentro, así al plegarse a alto 0 no deja espacio residual */
+.sd-selection-bar-slot {
+  margin-top: calc(var(--sd-gap-3) * -1);
 }
 
-:root[data-animations='off'] .sd-selection-bar {
-  animation: none;
+.sd-selection-bar-slot__inner {
+  padding-top: var(--sd-gap-3);
 }
 
 .sd-selection-bar__scope,

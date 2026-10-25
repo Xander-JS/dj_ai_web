@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Slider } from '../ui/Slider';
 import { Badge } from '../ui/Badge';
 import { Waveform } from './Waveform';
+import { ConsoleFader } from './ConsoleFader';
+import { DISC_ASSETS, discImageStyle } from './mixerAssets';
 import { clsx } from 'clsx';
 import { useDJStore, djStore, HOT_CUE_COLORS } from '../../store/useDJStore';
 import { useSeedStore } from '../../store/useSeedStore';
@@ -15,6 +16,9 @@ import { formatMeter, getBarSyncReadiness, getDeckMeter } from '../../utils/barS
 import type { BeatUnit } from '../../types/track';
 import '../ui/Badge.css';
 import './Deck.css';
+
+/** Segundos por vuelta del disco a velocidad nominal: 33⅓ rpm. */
+const JOG_SECONDS_PER_TURN = 1.8;
 
 /** Meters offered by the downbeat editor as [beatsPerBar, beatUnit]. */
 const METER_OPTIONS: ReadonlyArray<readonly [number, BeatUnit]> = [[4, 4], [3, 4], [2, 4], [6, 8]];
@@ -371,8 +375,8 @@ export const Deck: React.FC<DeckProps> = ({
     }
   };
 
-  const handlePitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setPitchDeck(deckName, Number(e.target.value));
+  const handlePitchChange = (value: number) => {
+    setPitchDeck(deckName, value);
   };
 
   const handleUnloadTrack = () => {
@@ -1201,15 +1205,30 @@ export const Deck: React.FC<DeckProps> = ({
           </button>
         </div>
 
-        {/* Jog Wheel */}
-        <div className="deck-jog-wheel-container">
-          <div className={clsx('deck-jog-wheel', isPlaying && 'playing-anim-spin')}>
+        {/* Jog Wheel: disco elegido en Ajustes; gira a 33⅓ rpm escalado por la velocidad real del deck */}
+        <div className="deck-jog-wheel-container" aria-hidden="true">
+          <div
+            className={clsx('deck-jog-wheel', isPlaying && 'is-spinning')}
+            style={{ '--jog-spin-duration': `${(JOG_SECONDS_PER_TURN / Math.max(0.5, deck.playbackRate)).toFixed(3)}s` } as React.CSSProperties}
+            data-testid={`deck-${deckName.toLowerCase()}-jog`}
+            data-disc={settings.jogDisc}
+          >
             <div className="deck-jog-wheel-inner">
+              <div className="deck-jog-disc">
+                <img
+                  className="deck-jog-disc-img"
+                  src={DISC_ASSETS[settings.jogDisc].src}
+                  alt=""
+                  draggable={false}
+                  decoding="async"
+                  style={discImageStyle(DISC_ASSETS[settings.jogDisc])}
+                />
+                <div className="deck-jog-marker"></div>
+              </div>
               <span className="deck-jog-wheel-text">
                 {deckName}
               </span>
             </div>
-            <div className="deck-jog-marker"></div>
           </div>
         </div>
 
@@ -1218,11 +1237,18 @@ export const Deck: React.FC<DeckProps> = ({
           <div className="deck-pitch-slider">
             <span className="deck-pitch-label top">-{pitchRangePercent}%</span>
             <div className="deck-pitch-slider-wrapper">
-              <Slider
+              {/* Como en un CDJ: − arriba, + abajo (100 = +rango) */}
+              <ConsoleFader
                 orientation="vertical"
+                inverted
+                fillFrom={50}
+                tone={deckName === 'A' ? 'a' : 'b'}
                 value={currentPitch}
-                onChange={handlePitchChange}
+                onValueChange={handlePitchChange}
                 disabled={!hasTrack || isLoading}
+                aria-label={t('dj.pitch_fader', { deck: deckName })}
+                aria-valuetext={pitchPercentLabel}
+                data-testid={`deck-${deckName.toLowerCase()}-pitch`}
               />
             </div>
             <span className="deck-pitch-label bottom">+{pitchRangePercent}%</span>

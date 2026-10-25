@@ -172,6 +172,35 @@ export class IndexedDBStorage {
   }
 
   /**
+   * Comprueba si ya hay una pista con exactamente el mismo contenido (SHA-256), aunque se
+   * haya importado con otro nombre. Un mismo tema en otro formato tiene otros bytes y no coincide.
+   */
+  public async hasContentHash(contentHash: string): Promise<boolean> {
+    const wanted = contentHash.toLowerCase();
+    for (const record of this.memoryStore.values()) {
+      if (record.fileMeta.contentHash?.toLowerCase() === wanted) return true;
+    }
+
+    const db = await this.init();
+    if (!db) return false;
+
+    return new Promise((resolve) => {
+      try {
+        const request = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).openCursor();
+        request.onsuccess = () => {
+          const cursor = request.result;
+          if (!cursor) return resolve(false);
+          if ((cursor.value as StoredTrackRecord).fileMeta?.contentHash?.toLowerCase() === wanted) return resolve(true);
+          cursor.continue();
+        };
+        request.onerror = () => resolve(false);
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+
+  /**
    * Evalúa la identidad del contenido y combina defensivamente las confirmaciones manuales.
    * Si la identidad anterior y la actual no coinciden o no está demostrada, no transfiere confirmaciones manuales.
    */

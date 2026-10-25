@@ -6,7 +6,7 @@
 >
 > **Method.** Static inspection of the source on branch `refactor/ui-home` (2026-10-24). Nothing was rendered in a browser for this document. Values marked *not verified* could not be confirmed from code alone.
 >
-> **Update (2026-10-24).** Home (console `/dashboard`), Library, Playlists and Sessions now use this system through `ConsoleTemplate`; the shell's Header and Sidebar were restyled. See §15. Settings, Profile and the notifications panel followed the same day (§16). Accent palette, motion preference, bulk selection and the sidebar panel: §17. Mixer and PlayerBar remain legacy.
+> **Update (2026-10-24).** Home (console `/dashboard`), Library, Playlists and Sessions now use this system through `ConsoleTemplate`; the shell's Header and Sidebar were restyled. See §15. Settings, Profile and the notifications panel followed the same day (§16). Accent palette, motion preference, bulk selection and the sidebar panel: §17. Density, PlayerBar + queue + visualizer, navigation shortcuts and Library filters: §18. The Mixer remains legacy.
 >
 > **Related files.** `docs/DESIGN.md` is an earlier design-intent spec (YAML front matter + prose) for the same system. It is consistent with the code in most respects; known differences are listed in §12.5. When the two disagree, **the code and this document win**.
 
@@ -845,7 +845,7 @@ Added on 2026-10-24. Same poster world as §15, with one composition per screen.
 - `tokens.css` adds a `[data-theme='light']` scope so a nested element can render light tokens inside the dark theme (the theme preview tiles use `data-theme` on a `<span>`).
 - Miniature radii outside the panel/inset/pill scale, all on sub-2rem elements: theme preview inner panel `8px`, keycaps `0.5rem`, beat cells and meter segments `0.25rem`. The popover uses `1.5rem` (inset `1rem` + its `0.5rem` list padding, concentric).
 - Fixed `3.5rem` Kanit 900 for the deck letters (Shortcuts) and the language codes inside fixed-size tiles, where the fluid section step would overflow.
-- Accent swatches render the real `--sd-accent` through a `data-accent` scope (§17.1). Density still only affects the legacy Mixer, decks and PlayerBar.
+- Accent swatches render the real `--sd-accent` through a `data-accent` scope (§17.1). Density now also drives the v2 console tokens (§18.1).
 
 ---
 
@@ -865,7 +865,7 @@ Added on 2026-10-24.
 ### 17.2 Motion preference
 
 - `settings.animations` (default on) → `data-animations="on|off"` on `<html>`. JS: `useAnimationsEnabled()` in `design-system/motionPreference.ts` (preference **and** not `prefers-reduced-motion`); CSS: `:root[data-animations='off'] …` plus the reduced-motion media query.
-- Governed today: the sidebar light (§17.4) and the selection bar's entrance. New optional animations must check the same hook/attribute and be listed in `ANIMATED_SURFACES` (Settings) with an `settings.animations_list.*` label.
+- Governed today: the sidebar light (§17.4), the player-bar visualizer (§18.3) and the selection bar's entrance. New optional animations must check the same hook/attribute and be listed in `ANIMATED_SURFACES` (Settings) with an `settings.animations_list.*` label.
 - `settings.experimentalInterface` (default off) → `data-interface="standard|experimental"`. Only the flag exists; turning it on persists, verifies the stored value (`settingsStore.readPersisted()`) and reloads once. No alternative layout is implemented.
 
 ### 17.3 New components
@@ -884,3 +884,57 @@ Selection rules: a row checkbox is a real `role="checkbox"` button; the header o
 The console sidebar is a raised hardware panel: `--sd-surface` ground, `--sd-radius-panel`, a 1px inset edge (`ink` 10%), one short offset shadow, and a speaker-grille dot texture (`radial-gradient` dots, `ink` 11%, 7px pitch). This is the only console surface with a resting shadow and texture, requested explicitly for the shell. Hover on items steps up to paper; the active item stays the ink pill with an `--sd-indicator` LED.
 
 Cursor light (governed by §17.2): pointer movement writes `--sd-light-x/y` (registered `@property`, 140ms transition) once per animation frame — no React state. Under the cursor the grille dots turn accent with a 9% accent wash, and a 1.5px masked edge lights up near the pointer. Hidden for touch pointers, `(hover: none)`, reduced motion and `data-animations='off'`; the static panel is unchanged in those cases.
+
+---
+
+## 18. Density, player bar, queue, navigation shortcuts and Library filters
+
+Added on 2026-10-24. Checked with TypeScript, ESLint, the test suite (`tests/PlayerShellFeatures.test.ts`) and the production build. **Not rendered in a browser for this update**: layout at each width, both themes and both languages still need a manual look.
+
+### 18.1 Interface density
+
+- `data-density="compact"` on `<html>` (unchanged mechanism). The v2 override is `[data-density='compact'] .desktop-layout { … }` in `tokens.css`, so it only acts inside the console shell. Home/Login/Sign Up and portal panels (`SelectMenu` list, `ConfirmDialog`) keep the standard scale.
+- Compact values: `--sd-gap-1…6` (0.375 / 0.5 / 0.75 / 1 / 1.5 / 2.5rem), `--sd-margin`, `--sd-panel-padding`, `--sd-control-height-sm|md|lg` (2 / 2.25 / 3rem) and the new row tokens. Type sizes do not change.
+- New row tokens (standard → compact): `--sd-row-min-height` 3.5 → 2.75rem, `--sd-row-pad-y` 0.5 → 0.25rem, `--sd-row-gap` 0.25 → 0.125rem, `--sd-cell-pad-x` 0.75 → 0.5rem. They are used by `.sd-table`, Home's `.sd-track-row`, `.sd-playlist-item` and `.sd-sessions-history__row`. **New lists and tables should use these tokens, not literal paddings**, so they follow density.
+- Under `(pointer: coarse)` compact keeps the standard control heights, so touch targets don't get smaller.
+- The legacy `--space-*`/`--size-*` overrides in `index.css` still apply to the Mixer and decks.
+
+### 18.2 Player bar (`layouts/PlayerBar`) — now v2
+
+- A hardware panel from the sidebar family: `--sd-surface` background, `--sd-radius-panel`, a 1px inset edge (ink 10%), no grille and no shadow. It uses the v2 atoms `IconButton`, `Icon` and `Fader` (thinner cap inside `.sd-player`).
+- **Transport = Deck A** (the bar already showed it). There is no second engine. Play/Pause and seek act on Deck A. Prev/Next/Shuffle/Repeat act on the shared queue. Volume is the engine Master, so the deck channel faders are untouched. The fader shows the effective volume (0 while muted), and raising it unmutes.
+- Active modes (shuffle, repeat, open queue) use an ink fill plus a small `--sd-indicator` dot. Repeat cycles off → whole queue → one track (`Repeat` / `Repeat1`). Every icon button has a translated `label`, and toggles use `aria-pressed`.
+- Favourites: `services/favorites/favoritesService` (ids in `localStorage` `systemdj.favorites`). It is the only source of truth for the heart. No favourites model existed before.
+
+### 18.3 Visualizer (`components/player/PlayerVisualizer`)
+
+- A canvas behind the bar's content (`pointer-events: none`, `aria-hidden`), masked so it fades toward the top and keeps the text on a flat background. The colour is the live `--sd-accent`, re-read when `data-accent`/`data-theme` changes.
+- Data: `audioEngine.readMasterSpectrum()` reads the **existing** Master `AnalyserNode` tap (read-only: no new nodes and no change to the graph). The tap sits after master gain, so mute and volume show in the wave. Bands are log-spaced and mirrored (lows in the centre), with fast attack and slow release (`visualizerModel.ts`).
+- Loop: one `requestAnimationFrame`, with no React state per frame. It runs only while a deck plays or the decay is still falling. With nothing playing the canvas is empty: no fake ambient signal.
+- Governed by §17.2: `useAnimationsEnabled()` false → no loop and the canvas is hidden. CSS also hides it under `data-animations='off'` and reduced motion. Playback is unaffected.
+- Setting: Settings → Appearance → Motion → "Player bar wave", with `visualizerIntensity` `subtle | balanced (default) | vivid` (opacity and gain). It is disabled while animations are off.
+
+### 18.4 Queue (`services/player/playerQueue` + `playerService`, `components/player/QueuePanel`)
+
+- One queue. Home (Play on a recent track: the queue becomes the recent list, starting at that track), Playlists (Play = saved order; Shuffle = random order) and the bar all use it. Shuffle reorders only the play order, never the persisted `trackIds`.
+- Panel: the same family as the notifications popover (paper, 2px ink border, radius 1.5rem, no shadow), opening above the queue button. It shows "Now playing" (surface row; accent `Tag` while playing) and "Up next" (numbered, `Pending` paper tag, play-now, remove), plus Clear, which keeps the current track. Escape or an outside click closes it and focus goes back to the button.
+
+### 18.5 Navigation shortcuts
+
+- Shift + 1–7 → Home, Library, Playlists, Mixer, Sessions (sidebar order), Settings, My Profile. They are reassignable in Settings → Shortcuts → Navigation (letter or digit, unique, Shift always required) and persisted as `navigationBindings`.
+- They go through the same global handler as the DJ shortcuts. They are resolved before the mix selectors, ignored in editable/ARIA form controls and with Ctrl/Alt/Meta, and turned off by the same "Enable keyboard shortcuts" switch. The shell registers `navigate` through `services/navigation/consoleNavigator`. Navigating doesn't remount the shell, so playback continues.
+
+### 18.6 Home and Library
+
+- Home's "Recently Added": the whole row is one button (stretched `::after`) that loads the track into the deck selected in "Mix Recommendations". The state is lifted into `Dashboard` (`referenceDeck.ts`). Hover and focus show a paper background plus a 3px `--sd-indicator` inset edge. Play is a separate button, not nested.
+- Library filters: `SegmentedControl` All tracks / My local files, plus a `SelectMenu` for analysis status: any / analyzed (`analyzed` only) / pending (`pending`, `analyzing`) / failed or unsupported. The logic is in `utils/libraryFilters.ts`. **Known limitation:** every import (including YouTube) is stored in IndexedDB, so "My local files" currently matches "All tracks". The filter excludes only `source.type === 'url'`, which no current import produces.
+
+
+---
+
+## 19. Mix recommendations and Sessions layout
+
+Added on 2026-10-24.
+
+- **Mix recommendations (Home).** Each result is a paper card with three zones: a header (rank, title/artist, and a compatibility block on the inverse field whose bar uses sage ≥ 80, acid ≥ 50, soft ink below that, which are the same thresholds as before); readouts for tempo, key and energy (sage = compatible, acid = needs attention, surface = no data, each with a check/alert/dash icon so colour is never the only signal, and energy as a 10-segment meter); and the reasoning plus a suggested transition, with evidence and source tags and the load buttons in the footer. The deck that is not the reference gets the ink button. The deck selector shows the reference's analysed BPM · key. Under a 34rem card width (container query) the score moves below the title and the readouts stack. Calculation and data are unchanged.
+- **Sessions.** New molecule `StepIndicator` (`done` sage + check, `current` ink ring, `upcoming`, `attention` acid) shows record → export → download, derived from the page state. Capture (1) and Export (2) sit side by side; history (3) spans the full width. Export groups the file settings in one paper card and has a status card (aria-live, indicator edge while running) and a primary action with a format summary. Export limits sit in a native `<details>`. While recording, the capture panel offers "Go to Mixer"; the capture keeps running because the shell does not remount.

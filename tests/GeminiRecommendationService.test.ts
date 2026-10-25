@@ -777,7 +777,7 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
       assert.ok(localPublish >= 0 && explanationCall > localPublish);
       assert.match(cardSource, /if \(localResultsReady\)\s*\{\s*setExplanationsUnavailable\(true\)/);
       assert.match(cardSource, /!errorMsg && recommendations\.length > 0/);
-      assert.match(cardSource, /handleLoadTrack\(rec,/);
+      assert.doesNotMatch(cardSource, /handleLoadTrack\(rec,/);
     });
 
     test('Biblioteca con solo la pista de referencia devuelve advertencia sin fallar', async () => {

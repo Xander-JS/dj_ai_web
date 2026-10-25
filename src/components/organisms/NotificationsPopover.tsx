@@ -17,6 +17,7 @@ import { IconButton } from '../atoms/IconButton';
 import { Tag } from '../atoms/Tag';
 import { EmptyState } from '../molecules/EmptyState';
 import { notificationCenter, type AppNotification } from '../../services/notifications/notificationCenter';
+import { useSmoothScroll } from '../../design-system/smoothScroll';
 import './NotificationsPopover.css';
 
 type NotificationCategory = 'analysis' | 'import' | 'session' | 'playlist' | 'account' | 'library' | 'system';
@@ -60,6 +61,7 @@ function formatRelative(createdAt: number, now: number, language: string): strin
  */
 export const NotificationsPopover: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const listScrollRef = useSmoothScroll<HTMLOListElement>();
   const notifications = useSyncExternalStore(notificationCenter.subscribe, notificationCenter.getSnapshot);
   const unreadCount = notifications.filter((n) => !n.read).length;
   const [open, setOpen] = useState(false);
@@ -163,7 +165,7 @@ export const NotificationsPopover: React.FC = () => {
               className="sd-notifications__empty"
             />
           ) : (
-            <ol className="sd-notifications__list" aria-label={t('common.notifications')}>
+            <ol ref={listScrollRef} className="sd-notifications__list sd-scroll-area" aria-label={t('common.notifications')}>
               {notifications.map((n) => (
                 <NotificationItem
                   key={n.id}

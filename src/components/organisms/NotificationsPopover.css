@@ -112,7 +112,6 @@
   overscroll-behavior: contain;
   list-style: none;
   scrollbar-color: var(--sd-ink-soft) transparent;
-  scrollbar-width: thin;
 }
 
 /* Cada aviso entra desde arriba al montarse, como una alerta que se apila */

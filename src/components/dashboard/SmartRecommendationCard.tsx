@@ -5,24 +5,34 @@
 
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Sparkles,
+  SlidersVertical,
   Disc,
-  RotateCcw,
   Loader2,
-  Lightbulb,
   Check,
   Zap,
+  AlertTriangle,
+  Minus,
+  Activity,
+  Music2,
+  ChevronLeft,
+  ChevronRight,
+  type LucideIcon,
 } from 'lucide-react';
+import { clsx } from 'clsx';
 import { Button } from '../atoms/Button';
 import { Icon } from '../atoms/Icon';
+import { IconButton } from '../atoms/IconButton';
 import { Tag } from '../atoms/Tag';
 import { EmptyState } from '../molecules/EmptyState';
-import { Notice } from '../molecules/Notice';
 import { Panel } from '../molecules/Panel';
+import { DURATION, EASE_OUT } from '../../design-system/motion';
+import { useAnimationsEnabled } from '../../design-system/motionPreference';
 import { useDJStore } from '../../store/useDJStore';
 import { indexedDBStorage } from '../../services/storage/IndexedDBStorage';
 import { LatestRequest } from '../../services/ai/LatestRequest';
+import { notificationCenter } from '../../services/notifications/notificationCenter';
 import {
   getTrackRecommendations,
   getTrackRecommendationExplanations,
@@ -31,13 +41,110 @@ import {
   type TrackRecommendation,
 } from '../../services/ai';
 import type { Track } from '../../types/track';
+import { resolveReferenceDeck, type ReferenceDeck } from './referenceDeck';
 import './SmartRecommendationCard.css';
 
-export const SmartRecommendationCard: React.FC = () => {
-  const { t } = useTranslation();
-  const { deckA, deckB, loadTrackToDeckA, loadTrackToDeckB } = useDJStore();
+type FactTone = 'ok' | 'alert' | 'unknown' | 'neutral';
+type ScoreTier = 'high' | 'medium' | 'low' | 'none';
 
-  const [selectedDeck, setSelectedDeck] = useState<'A' | 'B' | null>(null);
+// Icono de estado de cada dato: el color nunca es la única señal
+const FACT_STATE_ICON: Partial<Record<FactTone, LucideIcon>> = {
+  ok: Check,
+  alert: AlertTriangle,
+  unknown: Minus,
+};
+
+const factTone = (compatible: boolean | null | undefined): FactTone =>
+  compatible === true ? 'ok' : compatible === false ? 'alert' : 'unknown';
+
+// Mismos umbrales que ya marcaban la compatibilidad (80 / 50)
+const scoreTier = (score: number | null): ScoreTier =>
+  score === null ? 'none' : score >= 80 ? 'high' : score >= 50 ? 'medium' : 'low';
+
+const ENERGY_SEGMENTS = 10;
+
+/** Desplazamiento lateral de la tarjeta al pasar a la recomendación siguiente o anterior. */
+const CARD_SHIFT_PX = 24;
+
+// Entra por el lado hacia el que se avanza y sale por el contrario; la saliente se retira antes
+// para que las dos tarjetas apenas coincidan mientras se cruzan
+const cardVariants = (exitDuration: number) => ({
+  enter: (direction: number) => ({ opacity: 0, x: direction * CARD_SHIFT_PX }),
+  center: { opacity: 1, x: 0 },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: direction * -CARD_SHIFT_PX,
+    transition: { duration: exitDuration, ease: EASE_OUT },
+  }),
+});
+const CARD_VARIANTS = cardVariants(DURATION.fast);
+const CARD_VARIANTS_STATIC = cardVariants(0);
+
+interface RecommendationFactProps {
+  tone: FactTone;
+  icon: LucideIcon;
+  label: string;
+  value: React.ReactNode;
+  detail?: React.ReactNode;
+  children?: React.ReactNode;
+}
+
+// Lectura de un dato musical: etiqueta, valor grande y qué significa para la mezcla
+const RecommendationFact: React.FC<RecommendationFactProps> = ({ tone, icon, label, value, detail, children }) => {
+  const stateIcon = FACT_STATE_ICON[tone];
+  return (
+    <div className={clsx('smart-rec-fact', `smart-rec-fact--${tone}`, tone === 'ok' && 'sd-field-sage', tone === 'alert' && 'sd-field-acid')}>
+      <dt className="smart-rec-fact__label">
+        <Icon icon={icon} size="xs" />
+        {label}
+        {stateIcon && (
+          <span className="smart-rec-fact__state">
+            <Icon icon={stateIcon} size="xs" />
+          </span>
+        )}
+      </dt>
+      <dd className="smart-rec-fact__value sd-num">{value}</dd>
+      {children}
+      {detail && <dd className="smart-rec-fact__detail">{detail}</dd>}
+    </div>
+  );
+};
+
+// Alto que sigue a su contenido con una transición, en vez de saltar al generar recomendaciones
+const AnimatedHeight: React.FC<{ duration: number; children: React.ReactNode }> = ({ duration, children }) => {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | 'auto'>('auto');
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setHeight(content.offsetHeight));
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <motion.div className="smart-rec-height" initial={false} animate={{ height }} transition={{ duration, ease: EASE_OUT }}>
+      <div ref={contentRef}>{children}</div>
+    </motion.div>
+  );
+};
+
+export interface SmartRecommendationCardProps {
+  /** Elección explícita del deck (controlada por Home, que la comparte con «Añadidas recientemente»). */
+  selectedDeck?: ReferenceDeck | null;
+  onSelectedDeckChange?: (deck: ReferenceDeck) => void;
+}
+
+export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = ({
+  selectedDeck: controlledDeck,
+  onSelectedDeckChange,
+}) => {
+  const { t } = useTranslation();
+  const { deckA, deckB } = useDJStore();
+
+  const [uncontrolledDeck, setUncontrolledDeck] = useState<ReferenceDeck | null>(null);
+  const selectedDeck = controlledDeck !== undefined ? controlledDeck : uncontrolledDeck;
   const [localTracks, setLocalTracks] = useState<Track[]>([]);
   const [recommendationResult, setRecommendationResult] = useState<{
     referenceTrack: Track;
@@ -50,8 +157,10 @@ export const SmartRecommendationCard: React.FC = () => {
   const [isMockResult, setIsMockResult] = useState<boolean>(false);
   const [modelUsed, setModelUsed] = useState<string | null>(null);
   const [explanationsUnavailable, setExplanationsUnavailable] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const recommendationRequest = useRef(new LatestRequest());
+  const animationsEnabled = useAnimationsEnabled();
+  // Recomendación visible: una tarjeta a la vez entre las ya calculadas (no pide otras)
+  const [page, setPage] = useState<{ key: string; index: number; direction: 1 | -1 }>({ key: '', index: 0, direction: 1 });
 
   const invalidateRecommendationRequest = useCallback(() => {
     recommendationRequest.current.invalidate();
@@ -81,11 +190,12 @@ export const SmartRecommendationCard: React.FC = () => {
   }, [localTracks]);
 
   // Selección derivada de deck activo: preferencia explícita o deck con pista cargada
-  const activeDeck: 'A' | 'B' = selectedDeck ?? (deckA.track ? 'A' : (deckB.track ? 'B' : 'A'));
-  const setActiveDeck = (deck: 'A' | 'B') => {
+  const activeDeck = resolveReferenceDeck(selectedDeck, Boolean(deckA.track), Boolean(deckB.track));
+  const setActiveDeck = (deck: ReferenceDeck) => {
     recommendationRequest.current.invalidate();
     setActiveRequest(null);
-    setSelectedDeck(deck);
+    if (controlledDeck === undefined) setUncontrolledDeck(deck);
+    onSelectedDeckChange?.(deck);
   };
 
   // Pista de referencia activa según el deck seleccionado
@@ -107,6 +217,30 @@ export const SmartRecommendationCard: React.FC = () => {
     ? recommendationResult.insufficientCandidateCount
     : 0;
 
+  // La posición se reinicia con cada lista nueva; las explicaciones tardías no la mueven
+  const recommendationsKey = recommendations.map((rec) => rec.trackId).join('|');
+  const pageIndex = page.key === recommendationsKey ? Math.min(page.index, Math.max(0, recommendations.length - 1)) : 0;
+  const goToRecommendation = (direction: 1 | -1) => {
+    const index = pageIndex + direction;
+    if (index < 0 || index >= recommendations.length) return;
+    setPage({ key: recommendationsKey, index, direction });
+  };
+  const slideDirection = page.key === recommendationsKey ? page.direction : 1;
+  const motionTransition = { duration: animationsEnabled ? DURATION.base : 0, ease: EASE_OUT };
+
+  // Cambiar de deck no anima si no cambiaría nada: ambos vacíos, o la misma pista sin recomendaciones calculadas
+  const hasRecommendationsFor = (track: Track | null | undefined) =>
+    Boolean(track) &&
+    recommendationResult !== null &&
+    recommendationResult.referenceTrack === track &&
+    recommendationResult.availableTracks === availableTracks &&
+    recommendationResult.recommendations.length > 0;
+  const isSameDeckTrack = Boolean(deckA.track && deckB.track && deckA.track.id === deckB.track.id);
+  const skipDeckAnimation =
+    (!deckA.track && !deckB.track) ||
+    (isSameDeckTrack && !hasRecommendationsFor(deckA.track) && !hasRecommendationsFor(deckB.track));
+  const deckTransition = skipDeckAnimation ? { ...motionTransition, duration: 0 } : motionTransition;
+
   useLayoutEffect(() => {
     invalidateRecommendationRequest();
     const requestGate = recommendationRequest.current;
@@ -123,7 +257,8 @@ export const SmartRecommendationCard: React.FC = () => {
         !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)
       ) {
         setRecommendationResult(null);
-        setErrorMsg(t('dashboard.reference_analysis_required'));
+        setErrorMsg('dashboard.reference_analysis_required');
+        notificationCenter.push({ type: 'error', messageKey: 'dashboard.reference_analysis_required' });
         return;
       }
 
@@ -131,7 +266,6 @@ export const SmartRecommendationCard: React.FC = () => {
       const isCurrentRequest = () => recommendationRequest.current.isCurrent(request.id);
       setActiveRequest({ id: request.id, referenceTrack, availableTracks });
       setErrorMsg(null);
-      setFeedback(null);
       setExplanationsUnavailable(false);
 
       let localResultsReady = false;
@@ -156,7 +290,7 @@ export const SmartRecommendationCard: React.FC = () => {
           setIsMockResult(response.isMock);
           setModelUsed(response.model || null);
           if (response.warning && response.recommendations.length === 0) {
-            setErrorMsg(response.warning);
+            notificationCenter.push({ type: 'error', messageKey: 'dashboard.no_candidates' });
           }
 
           if (localRecommendations.length > 0) {
@@ -178,18 +312,19 @@ export const SmartRecommendationCard: React.FC = () => {
             }
           }
         } else {
-          let userMessage = response.error || t('dashboard.error_title');
+          let userMessage = response.error || 'dashboard.error_title';
           if (response.errorCode === 'quota_exceeded') {
-            userMessage = t('dashboard.error_quota_exceeded');
+            userMessage = 'dashboard.error_quota_exceeded';
           } else if (response.errorCode === 'auth_error') {
-            userMessage = t('dashboard.error_auth');
+            userMessage = 'dashboard.error_auth';
           } else if (response.errorCode === 'network_error') {
-            userMessage = t('dashboard.error_network');
+            userMessage = 'dashboard.error_network';
           } else if (response.errorCode === 'timeout') {
-            userMessage = t('dashboard.error_timeout');
+            userMessage = 'dashboard.error_timeout';
           }
 
           setErrorMsg(userMessage);
+          notificationCenter.push({ type: 'error', messageKey: userMessage });
           setIsMockResult(false);
         }
       } catch (err: unknown) {
@@ -198,7 +333,9 @@ export const SmartRecommendationCard: React.FC = () => {
           setExplanationsUnavailable(true);
         } else {
           const error = err as { name?: string };
-          setErrorMsg(t(error?.name === 'AbortError' ? 'dashboard.error_timeout' : 'dashboard.error_server'));
+          const messageKey = error?.name === 'AbortError' ? 'dashboard.error_timeout' : 'dashboard.error_server';
+          setErrorMsg(messageKey);
+          notificationCenter.push({ type: 'error', messageKey });
         }
       } finally {
         if (isCurrentRequest()) {
@@ -210,28 +347,14 @@ export const SmartRecommendationCard: React.FC = () => {
     [referenceTrack, availableTracks, t]
   );
 
-  // Cargar una pista recomendada en Deck A o Deck B sin interrumpir el deck opuesto
-  const handleLoadTrack = async (rec: TrackRecommendation, targetDeck: 'A' | 'B') => {
-    const targetTrack = availableTracks.find((tr) => tr.id === rec.trackId);
-    if (!targetTrack) return;
-
-    try {
-      const loadFn = targetDeck === 'A' ? loadTrackToDeckA : loadTrackToDeckB;
-      const loaded = await loadFn(targetTrack);
-      if (loaded) {
-        setFeedback(
-          t('dashboard.loaded_to_deck', {
-            deck: targetDeck === 'A' ? 'Deck A' : 'Deck B',
-          })
-        );
-        setTimeout(() => setFeedback(null), 3500);
-      } else {
-        setErrorMsg(t('dashboard.track_load_failed'));
-      }
-    } catch (err) {
-      console.error('[SmartRecommendationCard] Error al cargar pista:', err);
-      setErrorMsg(t('dashboard.track_load_failed'));
-    }
+  // BPM y tonalidad analizados de la pista de cada deck: la referencia se lee sin abrir el Mixer
+  const deckMeta = (track: Track | null | undefined): string | null => {
+    if (!track || track.analysis?.status !== 'analyzed') return null;
+    const parts = [
+      typeof track.analysis.bpm === 'number' ? `${Math.round(track.analysis.bpm)} BPM` : null,
+      track.analysis.camelot || track.analysis.key || null,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(' · ') : null;
   };
 
   return (
@@ -240,7 +363,7 @@ export const SmartRecommendationCard: React.FC = () => {
       bodyClassName="smart-rec-container"
       title={t('dashboard.smart_recommendations_title')}
       description={t('dashboard.smart_recommendations_subtitle')}
-      icon={Sparkles}
+      icon={SlidersVertical}
       aside={modelUsed && (
         <Tag tone={isMockResult ? 'paper' : 'ink'}>
           {isMockResult ? t('dashboard.badge_mock') : t('dashboard.badge_gemini')}
@@ -257,6 +380,9 @@ export const SmartRecommendationCard: React.FC = () => {
               className={`smart-rec-deck-btn ${activeDeck === 'A' ? 'active' : ''}`}
               onClick={() => setActiveDeck('A')}
             >
+              {activeDeck === 'A' && (
+                <motion.span layoutId="smart-rec-deck-indicator" className="smart-rec-deck-indicator" transition={deckTransition} aria-hidden="true" />
+              )}
               <span className="smart-rec-deck-btn-title">
                 <Icon icon={Disc} size="xs" />
                 {t('dashboard.select_deck_a')}
@@ -264,6 +390,7 @@ export const SmartRecommendationCard: React.FC = () => {
               <span className="smart-rec-deck-btn-track">
                 {deckA.track ? deckA.track.title : t('dashboard.no_track_in_deck')}
               </span>
+              {deckMeta(deckA.track) && <span className="smart-rec-deck-btn-meta sd-num">{deckMeta(deckA.track)}</span>}
             </button>
 
             <button
@@ -272,6 +399,9 @@ export const SmartRecommendationCard: React.FC = () => {
               className={`smart-rec-deck-btn ${activeDeck === 'B' ? 'active' : ''}`}
               onClick={() => setActiveDeck('B')}
             >
+              {activeDeck === 'B' && (
+                <motion.span layoutId="smart-rec-deck-indicator" className="smart-rec-deck-indicator" transition={deckTransition} aria-hidden="true" />
+              )}
               <span className="smart-rec-deck-btn-title">
                 <Icon icon={Disc} size="xs" />
                 {t('dashboard.select_deck_b')}
@@ -279,6 +409,7 @@ export const SmartRecommendationCard: React.FC = () => {
               <span className="smart-rec-deck-btn-track">
                 {deckB.track ? deckB.track.title : t('dashboard.no_track_in_deck')}
               </span>
+              {deckMeta(deckB.track) && <span className="smart-rec-deck-btn-meta sd-num">{deckMeta(deckB.track)}</span>}
             </button>
           </div>
 
@@ -293,7 +424,7 @@ export const SmartRecommendationCard: React.FC = () => {
                 {isLoading ? (
                   <Icon icon={Loader2} size="sm" className="smart-rec-spin" />
                 ) : (
-                  <Icon icon={Sparkles} size="sm" />
+                  <Icon icon={SlidersVertical} size="sm" />
                 )}
                 {recommendations.length > 0
                   ? t('dashboard.refresh_recommendations')
@@ -306,239 +437,232 @@ export const SmartRecommendationCard: React.FC = () => {
           </div>
         </div>
 
-        {referenceTrack && (
-          referenceTrack.analysis?.status !== 'analyzed' ||
-          typeof referenceTrack.analysis.bpm !== 'number' ||
-          !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)
-        ) && (
-          <p className="smart-rec-empty-hint" role="status">{t('dashboard.reference_analysis_required')}</p>
-        )}
-
-        {/* Feedback temporal de carga a Deck */}
-        {feedback && (
-          <Notice tone="success" className="smart-rec-feedback">
-            {feedback}
-          </Notice>
-        )}
-
-        {/* Estados de Contenido */}
-        {isLoading && (
-          <EmptyState
-            status="loading"
-            title={t('dashboard.loading_recommendations')}
-            description={t('dashboard.loading_recommendations_desc')}
-          />
-        )}
-
-        {explanationsUnavailable && recommendations.length > 0 && (
-          <p className="smart-rec-evidence-note" role="status">
-            {t('dashboard.ai_explanation_unavailable')}
-          </p>
-        )}
-
-        {!isLoading && errorMsg && (
-          <Notice
-            tone="error"
-            className="smart-rec-error-box"
-            action={
-              <Button
-                variant="ink"
-                size="sm"
-                onClick={() => handleFetchRecommendations()}
-              >
-                <Icon icon={RotateCcw} size="xs" />
-                {t('dashboard.retry')}
-              </Button>
-            }
+        {/* El contenido de la referencia se funde al cambiar de deck en vez de saltar */}
+        <AnimatedHeight duration={motionTransition.duration}>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={activeDeck}
+            className="smart-rec-stage"
+            initial={skipDeckAnimation ? false : { opacity: 0, y: animationsEnabled ? 8 : 0 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={deckTransition}
           >
-            {errorMsg}
-          </Notice>
-        )}
+            {referenceTrack && (
+              referenceTrack.analysis?.status !== 'analyzed' ||
+              typeof referenceTrack.analysis.bpm !== 'number' ||
+              !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)
+            ) && (
+              <p className="smart-rec-empty-hint" role="status">{t('dashboard.reference_analysis_required')}</p>
+            )}
 
-        {!isLoading && !errorMsg && !referenceTrack && (
-          <EmptyState
-            icon={Disc}
-            className="smart-rec-empty-box"
-            title={t('dashboard.no_deck_track_prompt')}
-          />
-        )}
+            {/* Estados de Contenido */}
+            {isLoading && (
+              <EmptyState
+                status="loading"
+                title={t('dashboard.loading_recommendations')}
+                description={t('dashboard.loading_recommendations_desc')}
+              />
+            )}
 
-        {!isLoading &&
-          !errorMsg &&
-          referenceTrack &&
-          recommendations.length === 0 && insufficientCandidateCount === 0 && (
-            <div className="smart-rec-empty-box">
-              <Icon icon={Sparkles} size="lg" />
-              <p>
-                {t('dashboard.current_track_info', {
-                  title: referenceTrack.title,
-                  bpm: referenceTrack.analysis?.bpm ? `${referenceTrack.analysis.bpm} BPM` : t('dashboard.bpm_na', 'BPM N/A'),
-                  key: referenceTrack.analysis?.camelot || referenceTrack.analysis?.key || t('dashboard.key_na', 'Camelot N/A'),
-                  action: t('dashboard.get_recommendations'),
-                })}
+            {explanationsUnavailable && recommendations.length > 0 && (
+              <p className="smart-rec-evidence-note" role="status">
+                {t('dashboard.ai_explanation_unavailable')}
               </p>
-            </div>
-          )}
+            )}
 
-        {!isLoading && !errorMsg && insufficientCandidateCount > 0 && (
-          <p className="smart-rec-evidence-note" role="status">
-            {t('dashboard.insufficient_evidence', { count: insufficientCandidateCount })}
-          </p>
-        )}
+            {!isLoading && !errorMsg && !referenceTrack && (
+              <EmptyState
+                icon={Disc}
+                className="smart-rec-empty-box"
+                title={t('dashboard.no_deck_track_prompt')}
+              />
+            )}
 
-        {/* Lista de Recomendaciones Obtenidas */}
-        {!errorMsg && recommendations.length > 0 && (
-          <div className="smart-rec-list">
-            {recommendations.map((rec, index) => {
-              const scoreClass =
-                rec.compatibilityScore === null
-                  ? ''
-                  : rec.compatibilityScore >= 80
-                  ? 'smart-rec-score-high'
-                  : rec.compatibilityScore >= 50
-                  ? 'smart-rec-score-medium'
-                  : 'smart-rec-score-low';
-              const missingEvidence = [
-                rec.tempoEvaluation?.relation === 'unknown' ? t('dashboard.bpm_label', 'BPM') : null,
-                rec.harmonicEvaluation?.relation === 'unknown' ? t('dashboard.key_label', 'Key') : null,
-              ].filter((value): value is string => value !== null).join(', ');
-
-              return (
-                <div key={rec.trackId} className="smart-rec-item">
-                  {/* Encabezado del item */}
-                  <div className="smart-rec-item-header">
-                    <div className="smart-rec-item-title-col">
-                      <span className="smart-rec-item-title">
-                        <span className="smart-rec-item-rank sd-num">{index + 1}</span>
-                        {rec.title || t('dashboard.untitled_track', 'Pista sin título')}
-                      </span>
-                      {rec.artist ? (
-                        <span className="smart-rec-item-artist">{rec.artist}</span>
-                      ) : null}
-                    </div>
-
-                    <div className="smart-rec-item-badges">
-                      {rec.compatibilityScore !== null && (
-                        <span className={`smart-rec-score-badge ${scoreClass}`}>
-                          {rec.compatibilityScore}%
-                        </span>
-                      )}
-                      <span className="smart-rec-evidence-tag">
-                        {rec.evidenceStatus === 'partial'
-                          ? t('dashboard.partial_evidence', { missing: missingEvidence })
-                          : t('dashboard.full_evidence')}
-                      </span>
-                      {rec.isMock ? (
-                        <span className="smart-rec-mock-tag">
-                          {t('dashboard.badge_mock')}
-                        </span>
-                      ) : (
-                        <span className="smart-rec-gemini-tag">
-                          {t('dashboard.ai_generated', 'Sugerencia IA')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Metadatos musicales verificados */}
-                  <div className="smart-rec-meta-tags">
-                    {rec.bpm ? (
-                      <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
-                        {rec.bpm} BPM
-                      </span>
-                    ) : (
-                      <span className="smart-rec-tag smart-rec-tag-na">
-                        {t('dashboard.bpm_na', 'BPM N/A')}
-                      </span>
-                    )}
-                    {rec.tempoEvaluation?.pitchShiftPercent !== undefined && rec.tempoEvaluation.relation === 'in_range' && (
-                      <span className="smart-rec-tag">
-                        {t('dashboard.pitch_label')}: {rec.tempoEvaluation.pitchShiftPercent > 0 ? '+' : ''}{rec.tempoEvaluation.pitchShiftPercent}%
-                      </span>
-                    )}
-                    {rec.tempoEvaluation?.relation === 'out_of_range' && (
-                      <span className="smart-rec-tag smart-rec-tag--alert">
-                        {t('dashboard.pitch_out_of_range', 'Pitch > ±8%')}
-                      </span>
-                    )}
-                    {rec.tempoEvaluation?.relation === 'half_time' && (
-                      <span className="smart-rec-tag">
-                        {t('dashboard.half_tempo', '½ Tempo')} (~{rec.tempoEvaluation.effectiveBpm} BPM)
-                      </span>
-                    )}
-                    {rec.tempoEvaluation?.relation === 'double_time' && (
-                      <span className="smart-rec-tag">
-                        {t('dashboard.double_tempo', '2x Tempo')} (~{rec.tempoEvaluation.effectiveBpm} BPM)
-                      </span>
-                    )}
-                    {(rec.camelot || rec.key) ? (
-                      <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
-                        {t('dashboard.key_label', 'Key')}: {rec.camelot || rec.key}
-                      </span>
-                    ) : (
-                      <span className="smart-rec-tag smart-rec-tag-na">
-                        {t('dashboard.key_na', 'Camelot N/A')}
-                      </span>
-                    )}
-                    {rec.harmonicEvaluation?.relation === 'incompatible' && (
-                      <span className="smart-rec-tag smart-rec-tag--alert">
-                        {t('dashboard.different_harmony', 'Armonía diferente')}
-                      </span>
-                    )}
-                    {rec.energy !== undefined && (
-                      <span className="smart-rec-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
-                        <Icon icon={Zap} size="xs" />
-                        {rec.energy}/10
-                      </span>
-                    )}
-                    {rec.isAnalysisVerified && (
-                      <span className="smart-rec-verified-tag" title={t('dashboard.local_verified', 'Datos verificados')}>
-                        <Icon icon={Check} size="xs" />
-                        {t('dashboard.local_verified', 'Datos verificados')}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Gemini text is optional; local evidence remains the fallback. */}
-                  {rec.aiExplanation && (
-                    <span className="smart-rec-gemini-tag">{t('dashboard.ai_explanation_label')}</span>
-                  )}
-                  <p className="smart-rec-justification">{rec.aiExplanation || rec.justification}</p>
-
-                  {/* Sugerencia de técnica de transición */}
-                  {rec.transitionSuggestion && (
-                    <div className="smart-rec-transition">
-                      <Icon icon={Lightbulb} size="sm" />
-                      <span>{rec.transitionSuggestion}</span>
-                    </div>
-                  )}
-
-                  {/* Botones de acción para cargar en Deck A o Deck B */}
-                  <div className="smart-rec-item-actions">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleLoadTrack(rec, 'A')}
-                      title={t('dashboard.load_deck_a')}
-                    >
-                      <Icon icon={Disc} size="sm" />
-                      {t('dashboard.load_deck_a')}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleLoadTrack(rec, 'B')}
-                      title={t('dashboard.load_deck_b')}
-                    >
-                      <Icon icon={Disc} size="sm" />
-                      {t('dashboard.load_deck_b')}
-                    </Button>
-                  </div>
+            {!isLoading &&
+              !errorMsg &&
+              referenceTrack &&
+              recommendations.length === 0 && insufficientCandidateCount === 0 && (
+                <div className="smart-rec-empty-box">
+                  <Icon icon={SlidersVertical} size="lg" />
+                  <p>
+                    {t('dashboard.current_track_info', {
+                      title: referenceTrack.title,
+                      bpm: referenceTrack.analysis?.bpm ? `${referenceTrack.analysis.bpm} BPM` : t('dashboard.bpm_na', 'BPM N/A'),
+                      key: referenceTrack.analysis?.camelot || referenceTrack.analysis?.key || t('dashboard.key_na', 'Camelot N/A'),
+                      action: t('dashboard.get_recommendations'),
+                    })}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+
+            {!isLoading && !errorMsg && insufficientCandidateCount > 0 && (
+              <p className="smart-rec-evidence-note" role="status">
+                {t('dashboard.insufficient_evidence', { count: insufficientCandidateCount })}
+              </p>
+            )}
+
+            {/* Recomendaciones obtenidas: una tarjeta a la vez, con navegación entre las calculadas */}
+            {!errorMsg && recommendations.length > 0 && (
+              <>
+                <div className="smart-rec-pager">
+                  <p className="smart-rec-list-head" role="status">
+                    {t('dashboard.results_summary', { count: recommendations.length, title: referenceTrack?.title ?? '' })}
+                  </p>
+                  {recommendations.length > 1 && (
+                    <div className="smart-rec-pager__nav" role="group" aria-label={t('dashboard.recommendation_nav')}>
+                      <IconButton
+                        icon={<Icon icon={ChevronLeft} size="sm" />}
+                        size="sm"
+                        label={t('dashboard.recommendation_prev')}
+                        disabled={pageIndex === 0}
+                        onClick={() => goToRecommendation(-1)}
+                      />
+                      <span className="smart-rec-pager__count sd-num" aria-live="polite">
+                        {t('dashboard.recommendation_position', { current: pageIndex + 1, total: recommendations.length })}
+                      </span>
+                      <IconButton
+                        icon={<Icon icon={ChevronRight} size="sm" />}
+                        size="sm"
+                        label={t('dashboard.recommendation_next')}
+                        disabled={pageIndex >= recommendations.length - 1}
+                        onClick={() => goToRecommendation(1)}
+                      />
+                    </div>
+                  )}
+                </div>
+                <ol className="smart-rec-list" start={pageIndex + 1}>
+                  <AnimatePresence mode="popLayout" initial={false} custom={slideDirection}>
+                    {recommendations.slice(pageIndex, pageIndex + 1).map((rec) => {
+                      const index = pageIndex;
+                      const score = rec.compatibilityScore;
+                      const tier = scoreTier(score);
+                      const missingEvidence = [
+                        rec.tempoEvaluation?.relation === 'unknown' ? t('dashboard.bpm_label', 'BPM') : null,
+                        rec.harmonicEvaluation?.relation === 'unknown' ? t('dashboard.key_label', 'Key') : null,
+                      ].filter((value): value is string => value !== null).join(', ');
+
+                      const tempo = rec.tempoEvaluation;
+                      const pitch = tempo?.pitchShiftPercent;
+                      const signedPitch = pitch !== undefined ? `${pitch > 0 ? '+' : ''}${pitch}%` : '';
+                      const tempoDetail =
+                        tempo?.relation === 'exact' ? t('dashboard.tempo_exact')
+                        : tempo?.relation === 'in_range' ? (pitch !== undefined ? `${t('dashboard.pitch_label')} ${signedPitch}` : t('dashboard.tempo_in_range'))
+                        : tempo?.relation === 'half_time' ? `${t('dashboard.half_tempo', '½ Tempo')} (~${tempo.effectiveBpm} BPM)`
+                        : tempo?.relation === 'double_time' ? `${t('dashboard.double_tempo', '2x Tempo')} (~${tempo.effectiveBpm} BPM)`
+                        : tempo?.relation === 'out_of_range' ? t('dashboard.pitch_out_of_range', 'Pitch > ±8%')
+                        : t('dashboard.fact_unknown');
+
+                      const harmonic = rec.harmonicEvaluation?.relation;
+                      const harmonicDetail =
+                        harmonic === 'same_key' ? t('dashboard.harmonic_same_key')
+                        : harmonic === 'relative' ? t('dashboard.harmonic_relative')
+                        : harmonic === 'adjacent' ? t('dashboard.harmonic_adjacent')
+                        : harmonic === 'incompatible' ? t('dashboard.different_harmony', 'Armonía diferente')
+                        : t('dashboard.fact_unknown');
+
+                      const energyLevel = rec.energy !== undefined ? Math.round(rec.energy) : null;
+
+                      return (
+                        <motion.li
+                          key={rec.trackId}
+                          className={`smart-rec-item smart-rec-item--${tier}`}
+                          custom={slideDirection}
+                          variants={animationsEnabled ? CARD_VARIANTS : CARD_VARIANTS_STATIC}
+                          initial="enter"
+                          animate="center"
+                          exit="exit"
+                          transition={motionTransition}
+                        >
+                          {/* Cabecera: posición, pista y compatibilidad global */}
+                          <div className="smart-rec-item-header">
+                            <span className="smart-rec-item-rank sd-num" aria-hidden="true">
+                              {String(index + 1).padStart(2, '0')}
+                            </span>
+                            <div className="smart-rec-item-title-col">
+                              <h4 className="smart-rec-item-title">
+                                {rec.title || t('dashboard.untitled_track', 'Pista sin título')}
+                              </h4>
+                              {rec.artist ? (
+                                <span className="smart-rec-item-artist">{rec.artist}</span>
+                              ) : null}
+                            </div>
+
+                            <div className={`smart-rec-score smart-rec-score--${tier} sd-field-inverse`}>
+                              <span className="smart-rec-score__label">{t('dashboard.match_score')}</span>
+                              <span className="smart-rec-score__value sd-num">
+                                {score !== null ? <>{score}<small>%</small></> : t('dashboard.score_na')}
+                              </span>
+                              {score !== null && (
+                                <span className="smart-rec-score__bar" aria-hidden="true">
+                                  <span className="smart-rec-score__fill" style={{ transform: `scaleX(${Math.min(100, Math.max(0, score)) / 100})` }} />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Metadatos musicales verificados: qué dice cada dato sobre la mezcla */}
+                          <dl className="smart-rec-facts">
+                            <RecommendationFact
+                              tone={factTone(tempo?.compatible)}
+                              icon={Activity}
+                              label={t('dashboard.fact_tempo')}
+                              value={rec.bpm ? `${rec.bpm} BPM` : t('dashboard.bpm_na', 'BPM N/A')}
+                              detail={tempoDetail}
+                            />
+                            <RecommendationFact
+                              tone={factTone(rec.harmonicEvaluation?.compatible)}
+                              icon={Music2}
+                              label={t('dashboard.key_label', 'Key')}
+                              value={rec.camelot || rec.key || t('dashboard.key_na', 'Camelot N/A')}
+                              detail={harmonicDetail}
+                            />
+                            <RecommendationFact
+                              tone={energyLevel !== null ? 'neutral' : 'unknown'}
+                              icon={Zap}
+                              label={t('dashboard.fact_energy')}
+                              value={energyLevel !== null ? `${rec.energy}/10` : t('dashboard.energy_na')}
+                            >
+                              {energyLevel !== null && (
+                                <dd className="smart-rec-energy" aria-hidden="true">
+                                  {Array.from({ length: ENERGY_SEGMENTS }, (_, segment) => (
+                                    <span key={segment} className={clsx('smart-rec-energy__cell', segment < energyLevel && 'is-on')} />
+                                  ))}
+                                </dd>
+                              )}
+                            </RecommendationFact>
+                          </dl>
+
+                          {/* Procedencia de la evidencia */}
+                          <div className="smart-rec-item-footer">
+                            <div className="smart-rec-item-badges">
+                              <Tag tone={rec.evidenceStatus === 'partial' ? 'acid' : 'sage'}>
+                                {rec.evidenceStatus === 'partial'
+                                  ? t('dashboard.partial_evidence', { missing: missingEvidence })
+                                  : t('dashboard.full_evidence')}
+                              </Tag>
+                              {rec.isAnalysisVerified && (
+                                <Tag tone="surface" className="smart-rec-verified-tag">
+                                  <Icon icon={Check} size="xs" />
+                                  {t('dashboard.local_verified', 'Datos verificados')}
+                                </Tag>
+                              )}
+                              <Tag tone={rec.isMock ? 'surface' : 'ink'} className="smart-rec-source-tag">
+                                {rec.isMock ? t('dashboard.badge_mock') : t('dashboard.ai_generated', 'Sugerencia IA')}
+                              </Tag>
+                            </div>
+
+                          </div>
+                        </motion.li>
+                      );
+                    })}
+                  </AnimatePresence>
+                </ol>
+              </>
+            )}
+          </motion.div>
+        </AnimatePresence>
+        </AnimatedHeight>
     </Panel>
   );
 };

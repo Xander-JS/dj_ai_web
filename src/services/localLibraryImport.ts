@@ -7,16 +7,32 @@
 import { importAudioFiles, type AudioImportOptions, type AudioImportResult } from './audioImportService';
 import { indexedDBStorage } from './storage/IndexedDBStorage';
 import { notificationCenter } from './notifications/notificationCenter';
+import { toastStore } from './notifications/toastService';
 import { audioEngine } from '../audio';
 import { computeFileHash } from '../utils/cryptoHash';
 
-export async function importFilesToLocalLibrary(
+// Las importaciones (archivos, arrastre, YouTube, Inicio) se encadenan: cada una comprueba
+// duplicados cuando las anteriores ya guardaron sus pistas, aunque se lancen a la vez
+let importChain: Promise<unknown> = Promise.resolve();
+
+export function importFilesToLocalLibrary(
   files: File[],
   duplicateWarning: (fileName: string) => string,
   options: AudioImportOptions = {},
 ): Promise<AudioImportResult> {
+  const run = importChain.then(() => runLocalLibraryImport(files, duplicateWarning, options));
+  importChain = run.catch(() => undefined);
+  return run;
+}
+
+async function runLocalLibraryImport(
+  files: File[],
+  duplicateWarning: (fileName: string) => string,
+  options: AudioImportOptions,
+): Promise<AudioImportResult> {
   const result = await importAudioFiles(files, {
     hasDuplicate: (name, size) => indexedDBStorage.hasDuplicate(name, size),
+    hasContentDuplicate: (hash) => indexedDBStorage.hasContentHash(hash),
     decodeAudioData: (data) => audioEngine.decodeAudioData(data),
     computeFileHash,
     saveTrack: (track, file) => indexedDBStorage.saveTrack(track, file),
@@ -60,4 +76,10 @@ export function importRemoteAudioToLocalLibrary(
     duplicateWarning,
     { requireDecodable: true, origin: 'link' },
   );
+}
+
+/** Un único aviso instantáneo por intento con los archivos rechazados por estar ya en la biblioteca. */
+export function notifyDuplicateImports(duplicates: readonly string[], countMessage: (count: number) => string): void {
+  if (duplicates.length === 0) return;
+  toastStore.show('warning', duplicates.length === 1 ? duplicates[0] : countMessage(duplicates.length));
 }

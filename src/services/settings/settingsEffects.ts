@@ -12,6 +12,7 @@ import { settingsStore, type AppSettings } from '../../store/useSettingsStore';
 import { applyAppearanceToRoot } from './appearance';
 import { installKeyboardShortcuts, type MixParam } from '../keyboard/keyboardShortcuts';
 import { transitionPlayer } from '../../audio/transitionPlayer';
+import { navigateToSection } from '../navigation/consoleNavigator';
 import type { DeckId } from '../../types/deck';
 
 let uninstallShortcuts: (() => void) | null = null;
@@ -44,7 +45,13 @@ function setShortcutsEnabled(enabled: boolean): void {
       setHotCue: (deckId, slot) => djStore.setHotCue(deckId, slot),
       getMixValue,
       setMixValue,
-    }, () => settingsStore.getSnapshot().shortcutBindings);
+      navigate: (section) => {
+        navigateToSection(section);
+      },
+    },
+    () => settingsStore.getSnapshot().shortcutBindings,
+    window,
+    () => settingsStore.getSnapshot().navigationBindings);
   } else if (!enabled && uninstallShortcuts) {
     uninstallShortcuts();
     uninstallShortcuts = null;

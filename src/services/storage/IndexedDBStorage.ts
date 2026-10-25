@@ -4,7 +4,7 @@
  * Base de datos: SystemDJ_Storage | Almacenes: tracks, playlists, recorded_sessions
  */
 
-import type { Track, TrackAnalysis, HotCue, TrackDownbeat } from '../../types/track.ts';
+import type { Track, TrackAnalysis, HotCue, TrackDownbeat, TrackOrigin } from '../../types/track.ts';
 import type { Playlist } from '../../types/playlist.ts';
 import { computeFileHash, getVerifiedBlobHash } from '../../utils/cryptoHash.ts';
 import { isDownbeatConfirmed, createSuggestedDownbeat } from '../../utils/downbeat.ts';
@@ -25,6 +25,7 @@ export interface StoredTrackRecord {
   duration: number;
   durationFormatted: string;
   type: 'audio' | 'video';
+  origin?: TrackOrigin;
   audioBlob: Blob;
   fileMeta: {
     fileName: string;
@@ -305,6 +306,7 @@ export class IndexedDBStorage {
       duration: track.duration,
       durationFormatted: track.durationFormatted,
       type: track.type,
+      ...(track.origin === 'link' ? { origin: 'link' as const } : {}),
       audioBlob,
       fileMeta: {
         fileName: track.fileMeta?.fileName || track.title,
@@ -1168,6 +1170,7 @@ export class IndexedDBStorage {
         blob: record.audioBlob,
         indexedDbKey: record.id,
       },
+      ...(record.origin ? { origin: record.origin } : {}),
       fileMeta: record.fileMeta,
       // Compatibilidad con pistas históricas sin metadatos de análisis
       analysis: normalizeTrackAnalysis(record.analysis || { status: 'pending' }),

@@ -55,6 +55,10 @@
     "badge_mock": "Motor local determinista",
     "match_score": "Compatibilidad",
     "transition_tip": "Transición sugerida",
+    "recommendation_nav": "Navegar entre recomendaciones",
+    "recommendation_prev": "Recomendación anterior",
+    "recommendation_next": "Recomendación siguiente",
+    "recommendation_position": "{{current}} de {{total}}",
     "load_deck_a": "Cargar en Deck A",
     "load_deck_b": "Cargar en Deck B",
     "loaded_to_deck": "Pista cargada con éxito en {{deck}}",
@@ -67,6 +71,7 @@
     "load_demo_deck_a": "Cargar Demo en Deck A",
     "load_local_track_first": "Carga una pista local en un deck para recibir recomendaciones.",
     "reference_analysis_required": "Analiza la pista de referencia y verifica su BPM y tonalidad antes de pedir recomendaciones.",
+    "no_candidates": "No hay suficientes pistas candidatas en la biblioteca para comparar.",
     "track_load_failed": "No se pudo cargar el archivo de audio. Comprueba que esté disponible en tu biblioteca.",
     "bpm_na": "BPM N/A",
     "key_na": "Camelot N/A",
@@ -84,17 +89,37 @@
     "pitch_label": "Ajuste de pitch",
     "half_tempo": "Tempo a la mitad",
     "double_tempo": "Tempo al doble",
-    "key_label": "Tonalidad"
+    "key_label": "Tonalidad",
+    "recent_target": "Clic en una pista: se carga en el Deck {{deck}} elegido en Recomendaciones. Play la reproduce.",
+    "recent_load_aria": "Cargar {{title}} de {{artist}} en el Deck {{deck}}",
+    "recent_load_hint": "Cargar en el Deck {{deck}}",
+    "recent_play_aria": "Reproducir {{title}}",
+    "recent_pause_aria": "Pausar {{title}}",
+    "results_summary_one": "{{count}} sugerencia para «{{title}}», ordenada por compatibilidad",
+    "results_summary_other": "{{count}} sugerencias para «{{title}}», ordenadas por compatibilidad",
+    "fact_tempo": "Tempo",
+    "fact_energy": "Energía",
+    "fact_unknown": "Sin datos para evaluar",
+    "energy_na": "Sin dato",
+    "score_na": "N/D",
+    "tempo_exact": "Mismo tempo",
+    "tempo_in_range": "Dentro del rango de pitch",
+    "harmonic_same_key": "Misma tonalidad",
+    "harmonic_relative": "Relativa mayor/menor",
+    "harmonic_adjacent": "Adyacente en la rueda Camelot",
+    "musical_reasoning": "Razón musical",
+    "load_next_deck_hint": "Carga en el deck libre, sin tocar la pista de referencia",
+    "load_reference_deck_hint": "Reemplaza la pista de referencia en este deck"
   },
   "library": {
     "title": "Biblioteca Musical",
     "search_tracks": "Buscar en tu biblioteca...",
-    "filter_all": "Todo",
-    "filter_audio": "Audio",
-    "filter_video": "Video",
+    "filter_all": "Todas las pistas",
     "filter_local": "Mis Archivos Locales",
+    "filter_link": "Subidas por enlace",
     "filters_label": "Filtrar pistas",
     "badge_local": "LOCAL",
+    "badge_link": "LINK",
     "import_btn": "Importar archivos",
     "importing": "Importando pistas...",
     "import_youtube_btn": "Importar desde YouTube",
@@ -121,6 +146,7 @@
     "drag_drop_title": "Arrastra tus canciones MP3 o WAV aquí",
     "drag_drop_subtitle": "O haz clic para seleccionar archivos desde tu dispositivo",
     "col_title": "Título",
+    "col_deck": "Deck",
     "col_artist": "Artista",
     "col_album": "Álbum",
     "col_bpm": "BPM",
@@ -184,6 +210,18 @@
     "manual_invalid_energy": "La energía debe ser un número entero entre {{min}} y {{max}}.",
     "manual_invalid_camelot": "Selecciona una tonalidad Camelot válida.",
     "manual_save_error": "No se pudieron guardar los metadatos de \"{{title}}\": {{error}}",
+    "toast": {
+      "imported": "Pistas cargadas correctamente",
+      "added_to_deck": "Agregado a {{deck}}",
+      "load_failed": "No se pudo cargar en {{deck}}",
+      "deleted": "Canción eliminada",
+      "analyzed": "Análisis completado",
+      "reanalyzed": "Reanálisis completado",
+      "analysis_failed": "Análisis fallido",
+      "bpm_updated": "BPM actualizado",
+      "metadata_updated": "Metadatos actualizados",
+      "save_failed": "No se pudo guardar"
+    },
     "bulk": {
       "region": "Acciones sobre la selección",
       "select_all": "Seleccionar todas ({{count}})",
@@ -229,6 +267,19 @@
       "dismiss": "Cerrar resumen",
       "status_queued": "En cola",
       "status_queued_title": "Esperando turno en la cola de análisis"
+    },
+    "analysis_filter_label": "Estado del análisis",
+    "analysis_filter": {
+      "all": "Cualquier estado de análisis",
+      "analyzed": "Analizadas",
+      "pending": "Pendientes de análisis",
+      "failed": "Con error o no compatibles"
+    },
+    "analysis_filter_desc": {
+      "all": "Sin filtrar por análisis",
+      "analyzed": "Análisis completado",
+      "pending": "Sin analizar o analizándose ahora",
+      "failed": "El análisis falló o el audio no lo admite"
     }
   },
   "playlists": {
@@ -254,7 +305,12 @@
     "empty_playlist_desc": "Añade pistas con el selector superior o desde la vista Biblioteca.",
     "no_library_title": "Tu biblioteca está vacía",
     "no_library_desc": "Importa archivos MP3 o WAV en la Biblioteca para añadirlos a playlists.",
-    "search_tracks": "Buscar por título o artista"
+    "search_tracks": "Buscar por título o artista",
+    "play_sequential": "Reproducir en orden",
+    "pause_playlist": "Pausar",
+    "shuffle_play": "Reproducir en aleatorio",
+    "shuffle_on": "Aleatorio activado: pulsa para volver al orden de la playlist",
+    "playing_now": "Sonando"
   },
   "player": {
     "play": "Reproducir",
@@ -264,7 +320,34 @@
     "shuffle": "Aleatorio",
     "repeat": "Repetir",
     "volume": "Volumen",
-    "queue": "Cola de reproducción"
+    "queue": "Cola de reproducción",
+    "seek": "Posición de la pista",
+    "mute": "Silenciar",
+    "unmute": "Quitar silencio",
+    "favorite": "Añadir a favoritas",
+    "unfavorite": "Quitar de favoritas",
+    "shuffle_enable": "Activar aleatorio",
+    "shuffle_disable": "Desactivar aleatorio",
+    "shuffle_on": "Aleatorio",
+    "repeat_label": "Repetir: {{mode}}",
+    "repeat_mode": {
+      "off": "desactivado",
+      "all": "toda la cola",
+      "one": "esta pista"
+    },
+    "queue_pending_count_one": "{{count}} pista pendiente",
+    "queue_pending_count_other": "{{count}} pistas pendientes",
+    "queue_empty_title": "La cola está vacía",
+    "queue_empty_desc": "Reproduce una playlist o una pista reciente de Inicio para llenarla.",
+    "queue_now": "Sonando",
+    "queue_next": "A continuación",
+    "queue_clear": "Vaciar",
+    "queue_no_pending": "No quedan pistas pendientes.",
+    "queue_play_now": "Reproducir ahora",
+    "queue_remove": "Quitar {{title}} de la cola",
+    "status_playing": "Sonando",
+    "status_paused": "En pausa",
+    "status_pending": "Pendiente"
   },
   "dj": {
     "deck_a": "DECK A",
@@ -499,7 +582,7 @@
       "amber": "Ámbar"
     },
     "density_title": "Densidad de la interfaz",
-    "density_desc": "Compacta reduce los espacios del Mixer, los decks y la barra de reproducción.",
+    "density_desc": "Compacta reduce espacios, filas, rellenos y alturas de control en toda la consola. El texto mantiene su tamaño.",
     "density": {
       "standard": "Estándar",
       "compact": "Compacta"
@@ -608,7 +691,7 @@
     "auto_transition_bars": "{{beats}} beats = {{bars}} compases de 4 tiempos",
     "shortcuts_fixed_title": "Atajos fijos",
     "shortcuts_fixed_desc": "Estas teclas no se pueden reasignar.",
-    "shortcuts_disabled_note": "Los atajos están desactivados: ninguna tecla actuará sobre los decks hasta que los actives.",
+    "shortcuts_disabled_note": "Los atajos están desactivados: ninguna tecla actuará sobre los decks ni abrirá secciones hasta que los actives.",
     "storage_desc": "Pistas, playlists y sesiones se guardan en el almacenamiento de este navegador.",
     "storage_browser": "Navegador",
     "storage_tracks": "Pistas",
@@ -646,7 +729,8 @@
     "animations_scope": "Incluye",
     "animations_list": {
       "sidebar": "Luz de la barra lateral que sigue al cursor",
-      "selection_bar": "Entrada de la barra de selección de la Biblioteca"
+      "selection_bar": "Entrada de la barra de selección de la Biblioteca",
+      "player_visualizer": "Onda de energía de la barra de reproducción"
     },
     "animations_reduced": "Tu sistema pide reducir el movimiento: las animaciones quedan desactivadas aunque las actives aquí.",
     "lab_title": "Laboratorio",
@@ -655,7 +739,21 @@
     "experimental_tag": "En preparación",
     "experimental_on_note": "Activado. La nueva disposición llegará en una próxima versión.",
     "experimental_reloading": "Guardado. Recargando la página…",
-    "experimental_not_saved": "Este navegador no permitió guardar la preferencia, así que la página no se recargará."
+    "experimental_not_saved": "Este navegador no permitió guardar la preferencia, así que la página no se recargará.",
+    "visualizer_title": "Onda de la barra de reproducción",
+    "visualizer_desc": "Intensidad de la onda que reacciona al audio real del Master. Usa tu color de acento y se detiene con las animaciones desactivadas.",
+    "visualizer_intensity": {
+      "subtle": "Sutil",
+      "balanced": "Equilibrada",
+      "vivid": "Intensa"
+    },
+    "shortcuts_nav_title": "Navegación",
+    "shortcuts_nav_desc": "Mantén Shift y pulsa la tecla para abrir la sección. No actúan mientras escribes. Pulsa una tecla para reasignarla (Esc cancela).",
+    "shortcuts_nav_binding_aria": "Abrir {{section}}: Shift + {{key}}. Pulsa para reasignar.",
+    "shortcuts_nav_binding_invalid": "Usa una letra o un número junto a Shift.",
+    "shortcuts_nav_binding_duplicate": "Shift + {{key}} ya abre otra sección.",
+    "shortcuts_nav_binding_saved": "Shift + {{key}} asignado.",
+    "shortcuts_section": "Sección"
   },
   "profile": {
     "title": "Mi Perfil",
@@ -692,7 +790,7 @@
     "title": "Grabación y exportación de sesiones",
     "subtitle": "Graba una mezcla, finaliza su instantánea y exporta un archivo WAV o MP3.",
     "captureTitle": "Captura de sesión",
-    "captureActive": "La captura está activa. Finalízala para crear una instantánea estable para exportar.",
+    "captureActive": "Grabación en curso. Finaliza para exportar",
     "captureFinalized": "Hay una instantánea de sesión finalizada lista para exportar.",
     "captureEmpty": "Todavía no hay una sesión finalizada disponible.",
     "recording": "Grabando",
@@ -713,7 +811,7 @@
     "mp3Info": "Estéreo, 48 kHz, audio MPEG Layer III.",
     "bitrate": "Tasa de bits MP3",
     "bitrateOption": "{{bitrate}} kbps",
-    "bitrateInfo": "Una tasa más alta genera archivos más grandes. Los valores admitidos aparecen arriba.",
+    "bitrateInfo": "Una tasa más alta genera archivos más grandes",
     "export": "Exportar archivo",
     "retryExport": "Reintentar exportación",
     "cancelExport": "Cancelar exportación",
@@ -755,7 +853,27 @@
     "historyCount": "{{count}} / {{max}}",
     "historyEmpty": "Aún no hay sesiones guardadas. Exporta una sesión finalizada para conservarla aquí.",
     "historyDuration": "Duración {{duration}}",
-    "historyDownload": "Descargar {{format}}"
+    "historyDownload": "Descargar {{format}}",
+    "settingsTitle": "Ajustes del archivo",
+    "limitsTitle": "Límites de exportación",
+    "exportSummaryWav": "WAV · 48 kHz · estéreo",
+    "exportSummaryMp3": "MP3 · 48 kHz · {{bitrate}} kbps",
+    "openMixer": "Ir al Mixer",
+    "captureHint": "Inicia la captura y mezcla en el Mixer. Al finalizar se crea la instantánea que podrás exportar.",
+    "captureActiveHint": "Puedes ir al Mixer y volver: la captura sigue activa hasta que la finalices.",
+    "captureReplaceHint": "Iniciar una nueva captura reemplaza esta instantánea. Las sesiones exportadas siguen en el historial.",
+    "readoutDuration": "Duración",
+    "readoutEvents": "Eventos grabados",
+    "steps": {
+      "label": "Pasos para grabar y exportar una sesión",
+      "capture": "Graba y finaliza",
+      "captureHint": "Inicia una captura",
+      "export": "Exporta el archivo",
+      "exportHint": "Disponible al finalizar la captura",
+      "download": "Descarga y conserva",
+      "downloadHint": "Se guardan las últimas {{max}} en este equipo",
+      "downloadDone": "Archivo listo para guardar"
+    }
   },
   "seed": {
     "mode_title": "Modo referencia",
@@ -772,7 +890,8 @@
     "generating": "Generando…",
     "generate_disabled": "Marca primero al menos una pista de referencia",
     "clear": "Quitar referencias",
-    "replaced": "Solo se permiten {{max}} pistas de referencia: \"{{removed}}\" se reemplazó por \"{{added}}\".",
+    "updated": "Referencia actualizada",
+    "limit_reached": "Máximo {{max}} referencias",
     "no_compatible": "No se encontraron pistas compatibles. Analiza más pistas (BPM y tonalidad) e inténtalo de nuevo.",
     "generated_name": "Mezcla desde {{title}}",
     "generated_name_pair": "Mezcla {{start}} → {{end}}"

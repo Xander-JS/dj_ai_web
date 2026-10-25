@@ -1,0 +1,132 @@
+/* Secuencia de pasos: tres (o más) celdas iguales sobre la superficie; se apilan en móvil */
+.sd-steps {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--sd-gap-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-gap-2);
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--sd-radius-inset);
+  background-color: var(--sd-surface);
+  color: var(--sd-ink);
+  transition:
+    box-shadow var(--sd-duration-base) var(--sd-ease-out),
+    color var(--sd-duration-base) var(--sd-ease-out);
+}
+
+/* Paso en curso: aro de tinta, como la opción elegida de ChoiceTiles */
+.sd-step--current,
+.sd-step--attention {
+  box-shadow: inset 0 0 0 2px var(--sd-ink);
+}
+
+.sd-step__marker {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--sd-radius-pill);
+  background-color: var(--sd-paper);
+  color: var(--sd-ink-soft);
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-black);
+  line-height: 1;
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    color var(--sd-duration-base) var(--sd-ease-out);
+}
+
+/* Al pasar a en curso late el marcador; al completarse, el check que entra. Solo escala, sin mover lo vecino */
+.sd-step--current .sd-step__marker,
+.sd-step--done .sd-step__marker > * {
+  animation: sd-step-advance var(--sd-duration-slow) var(--sd-ease-out);
+}
+
+@keyframes sd-step-advance {
+  0% {
+    transform: scale(0.82);
+  }
+
+  45% {
+    transform: scale(1.08);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.sd-step--current .sd-step__marker {
+  background-color: var(--sd-ink);
+  color: var(--sd-paper);
+}
+
+.sd-step--done .sd-step__marker,
+.sd-step--attention .sd-step__marker {
+  color: var(--sd-field-ink);
+}
+
+.sd-step__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.sd-step__label {
+  font-size: var(--sd-text-note);
+  font-weight: var(--sd-weight-medium);
+  line-height: 1.25;
+  transition: color var(--sd-duration-base) var(--sd-ease-out);
+}
+
+.sd-step--upcoming .sd-step__label {
+  color: var(--sd-ink-soft);
+}
+
+.sd-step__hint {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--sd-ink-soft);
+}
+
+@media (max-width: 720px) {
+  .sd-steps {
+    grid-auto-flow: row;
+  }
+
+  .sd-step__hint {
+    white-space: normal;
+  }
+}
+
+:root[data-animations='off'] .sd-step,
+:root[data-animations='off'] .sd-step__marker,
+:root[data-animations='off'] .sd-step__label,
+:root[data-animations='off'] .sd-step__marker > * {
+  transition-duration: 0ms;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sd-step,
+  .sd-step__marker,
+  .sd-step__label,
+  .sd-step__marker > * {
+    transition-duration: 0ms;
+    animation: none;
+  }
+}

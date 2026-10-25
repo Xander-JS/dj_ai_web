@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Download, Disc3, History, Radio, Square, XCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { AlertCircle, ArrowRight, CheckCircle2, ChevronDown, CircleDot, Download, Disc3, History, Info, Loader2, Radio, Square, XCircle, type LucideIcon } from 'lucide-react';
 import { Button } from '../components/atoms/Button';
 import { Icon } from '../components/atoms/Icon';
 import { ProgressBar } from '../components/atoms/ProgressBar';
@@ -11,7 +13,10 @@ import { Notice } from '../components/molecules/Notice';
 import { PageHeader } from '../components/molecules/PageHeader';
 import { Panel } from '../components/molecules/Panel';
 import { SegmentedControl } from '../components/molecules/SegmentedControl';
+import { StepIndicator, type StepItem } from '../components/molecules/StepIndicator';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
+import { DURATION, EASE_OUT } from '../design-system/motion';
+import { useAnimationsEnabled } from '../design-system/motionPreference';
 import { createSessionAudioBufferResolver } from '../session/SessionAudioBufferResolver';
 import { sessionExportCoordinator } from '../session/SessionExportCoordinator';
 import {
@@ -45,19 +50,46 @@ function initialSessionSnapshot(): { active: boolean; session: RecordedSession |
   return { active, session: active ? null : sessionRecorder.getSession() };
 }
 
+/** Inicio (reloj de pared) de la captura en curso, solo para mostrar su duración en vivo. */
+function initialCaptureStartedAt(): number | null {
+  return sessionRecorder.isActive ? (sessionRecorder.getSession()?.createdAtEpochMs ?? Date.now()) : null;
+}
+
+const CAPTURE_CLOCK_TICK_MS = 1000;
+
 function phaseStatus(phase: SessionExportPhase): SessionPageStatus {
   return phase;
 }
 
+// Icono y tono de la línea de estado de la exportación (presentación, no lógica)
+const STATUS_ICON: Record<SessionPageStatus, LucideIcon> = {
+  empty: Info,
+  ready: CircleDot,
+  recording: Radio,
+  preparing: Loader2,
+  rendering: Loader2,
+  encoding: Loader2,
+  finalizing: Loader2,
+  completed: CheckCircle2,
+  cancelled: XCircle,
+  error: AlertCircle,
+};
+
 export const Sessions: React.FC = () => {
   const { t } = useTranslation();
-  const { startSessionCapture, finalizeSessionCapture } = useDJStore();
+  const { deckA, deckB, startSessionCapture, finalizeSessionCapture } = useDJStore();
+  // Solo se puede iniciar la captura mientras suena audio en algún deck
+  const isAudioPlaying = deckA.playbackState === 'playing' || deckB.playbackState === 'playing';
+  const navigate = useNavigate();
   const exportBusy = useSyncExternalStore(
     sessionExportCoordinator.subscribe,
     sessionExportCoordinator.getSnapshot,
     () => false,
   );
   const [capture, setCapture] = useState(initialSessionSnapshot);
+  const [captureStartedAt, setCaptureStartedAt] = useState(initialCaptureStartedAt);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const animationsEnabled = useAnimationsEnabled();
   const [status, setStatus] = useState<SessionPageStatus>(() => {
     const snapshot = initialSessionSnapshot();
     return snapshot.active ? 'recording' : isExportableSession(snapshot.session) ? 'ready' : 'empty';
@@ -120,6 +152,13 @@ export const Sessions: React.FC = () => {
     await loadStoredSessions();
   };
 
+  // Durante la captura la lectura de duración sigue el tiempo transcurrido
+  useEffect(() => {
+    if (!capture.active) return;
+    const timer = setInterval(() => setClockNow(Date.now()), CAPTURE_CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, [capture.active]);
+
   const handleDownloadStored = (record: StoredSessionRecord, format: StoredSessionFormat): void => {
     const audio = record.files[format];
     if (!audio) return;
@@ -147,7 +186,9 @@ export const Sessions: React.FC = () => {
   const handleStartCapture = (): void => {
     try {
       clearDownload();
-      startSessionCapture();
+      const started = startSessionCapture();
+      setCaptureStartedAt(started.createdAtEpochMs);
+      setClockNow(started.createdAtEpochMs);
       setCapture({ active: true, session: null });
       setStatus('recording');
       setErrorMessage('');
@@ -276,12 +317,49 @@ export const Sessions: React.FC = () => {
   };
 
   const canExport = !capture.active && isExportableSession(capture.session);
+  const captureDurationMs = capture.active
+    ? Math.max(0, clockNow - (captureStartedAt ?? clockNow))
+    : (capture.session?.durationMs ?? 0);
+  const readoutTransition = { duration: animationsEnabled ? DURATION.base : 0, ease: EASE_OUT };
   const operationActive = ['preparing', 'rendering', 'encoding', 'finalizing'].includes(status);
   const canCancel = ['preparing', 'rendering', 'encoding'].includes(status) && hasActiveHandle;
   const retryLabel = status === 'error' || status === 'cancelled' ? t('sessions.retryExport') : t('sessions.export');
   const statusText = t(`sessions.status.${status}`);
 
   const captureTone = capture.active ? 'accent' : canExport ? 'sage' : 'surface';
+  const exportSummary = format === 'mp3'
+    ? t('sessions.exportSummaryMp3', { bitrate: bitrateKbps })
+    : t('sessions.exportSummaryWav');
+
+  // Guía del flujo: grabar → exportar → descargar; refleja el estado real de la página
+  const steps: StepItem[] = [
+    {
+      id: 'capture',
+      label: t('sessions.steps.capture'),
+      state: capture.active ? 'current' : canExport ? 'done' : 'current',
+      hint: capture.active
+        ? t('sessions.recording')
+        : canExport && capture.session
+          ? t('sessions.eventCount', { count: capture.session.events.length })
+          : t('sessions.steps.captureHint'),
+    },
+    {
+      id: 'export',
+      label: t('sessions.steps.export'),
+      state: !canExport ? 'upcoming' : status === 'completed' ? 'done' : status === 'error' ? 'attention' : 'current',
+      hint: canExport
+        ? (operationActive && progressPercent !== null ? `${statusText} · ${Math.round(progressPercent)}%` : statusText)
+        : t('sessions.steps.exportHint'),
+    },
+    {
+      id: 'download',
+      label: t('sessions.steps.download'),
+      state: status === 'completed' && download ? 'done' : 'upcoming',
+      hint: status === 'completed' && download
+        ? t('sessions.steps.downloadDone')
+        : t('sessions.steps.downloadHint', { max: MAX_STORED_SESSIONS }),
+    },
+  ];
 
   return (
     <ConsoleTemplate className="sd-sessions">
@@ -292,100 +370,74 @@ export const Sessions: React.FC = () => {
           description={t('sessions.subtitle')}
         />
 
-        <div className="sd-sessions__grid">
-          <div className="sd-sessions__column">
-            {/* Captura: el campo del panel sigue el estado real de la grabación */}
-            <Panel
-              tone={captureTone}
-              className="sd-sessions-capture"
-              icon={Radio}
-              title={t('sessions.captureTitle')}
-              description={capture.active ? t('sessions.captureActive') : canExport ? t('sessions.captureFinalized') : t('sessions.captureEmpty')}
-              aside={
-                <Tag tone={capture.active ? 'ink' : 'paper'} className="sd-sessions-capture__status">
-                  {capture.active && <span className="sd-sessions-capture__dot" aria-hidden="true" />}
-                  {capture.active ? t('sessions.recording') : canExport ? t('sessions.available') : t('sessions.unavailable')}
-                </Tag>
-              }
-            >
-              <div className="sd-sessions-capture__actions">
-                {capture.active ? (
-                  <Button type="button" variant="ink" size="lg" disabled={exportBusy} onClick={handleFinalizeCapture}>
-                    <Icon icon={Square} size="md" />
-                    {t('sessions.finishCapture')}
-                  </Button>
-                ) : (
-                  <Button type="button" variant={canExport ? 'ink' : 'accent'} size="lg" disabled={exportBusy} onClick={handleStartCapture}>
-                    <Icon icon={Radio} size="md" />
-                    {canExport ? t('sessions.startNewCapture') : t('sessions.startCapture')}
-                  </Button>
-                )}
-                {capture.session && !capture.active && (
-                  <span className="sd-sessions-capture__meta sd-num">
-                    {t('sessions.eventCount', { count: capture.session.events.length })}
-                  </span>
-                )}
-              </div>
-            </Panel>
+        <StepIndicator className="sd-sessions__steps" label={t('sessions.steps.label')} steps={steps} />
 
-          {/* Historial de sesiones exportadas */}
+        <div className="sd-sessions__grid">
+          {/* Paso 1 — Captura: el campo del panel sigue el estado real de la grabación */}
           <Panel
-            className="sd-sessions-history"
-            icon={History}
-            title={t('sessions.historyTitle')}
-            description={t('sessions.historySubtitle', { max: MAX_STORED_SESSIONS })}
+            tone={captureTone}
+            className="sd-sessions-capture"
+            icon={Radio}
+            title={t('sessions.captureTitle')}
+            description={capture.active ? t('sessions.captureActive') : canExport ? t('sessions.captureFinalized') : t('sessions.captureEmpty')}
             aside={
-              <Tag tone="paper" className="sd-num">
-                {t('sessions.historyCount', { count: storedSessions.length, max: MAX_STORED_SESSIONS })}
+              <Tag tone={capture.active ? 'ink' : 'paper'} className="sd-sessions-capture__status">
+                {capture.active && <span className="sd-sessions-capture__dot" aria-hidden="true" />}
+                {capture.active ? t('sessions.recording') : canExport ? t('sessions.available') : t('sessions.unavailable')}
               </Tag>
             }
           >
-            {historyNotice && <Notice tone="warning">{historyNotice}</Notice>}
-
-            {storedSessions.length === 0 ? (
-              <div role="status">
-                <EmptyState icon={Disc3} title={t('sessions.historyEmpty')} />
+            {/* La duración está visible desde el estado inicial (00:00, detenida) y avanza al grabar;
+                los eventos guardados salen con un fundido y su columna se conserva, así la duración
+                no cambia de sitio ni de ancho */}
+            <dl className="sd-sessions-readouts">
+              <div className="sd-sessions-readout">
+                <dt>{t('sessions.readoutDuration')}</dt>
+                <dd className="sd-num">{formatDuration(captureDurationMs / 1000).padStart(5, '0')}</dd>
               </div>
-            ) : (
-              <ul className="sd-sessions-history__list">
-                {storedSessions.map((record) => {
-                  const recordedAt = new Date(record.recordedAt).toLocaleString();
-                  const title = record.title?.trim();
-                  return (
-                    <li key={record.id} className="sd-sessions-history__row" data-testid={`stored-session-${record.id}`}>
-                      <div className="sd-sessions-history__info">
-                        <span className="sd-sessions-history__title">{title || recordedAt}</span>
-                        <span className="sd-sessions-history__meta sd-num">
-                          {title && <>{recordedAt}{' · '}</>}
-                          {t('sessions.historyDuration', { duration: formatDuration(record.durationMs / 1000) })}
-                          {' · '}
-                          {t('sessions.eventCount', { count: record.eventCount })}
-                        </span>
-                      </div>
-                      <div className="sd-sessions-history__actions">
-                        {STORED_FORMATS.filter((storedFormat) => record.files[storedFormat]).map((storedFormat) => (
-                          <Button
-                            key={storedFormat}
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            aria-label={t('sessions.historyDownload', { format: storedFormat.toUpperCase() })}
-                            onClick={() => handleDownloadStored(record, storedFormat)}
-                          >
-                            <Icon icon={Download} size="sm" />
-                            {storedFormat.toUpperCase()}
-                          </Button>
-                        ))}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Panel>
-          </div>
+              <AnimatePresence initial={false}>
+                {capture.session && !capture.active && (
+                  <motion.div
+                    key="events"
+                    className="sd-sessions-readout"
+                    initial={{ opacity: 0, scale: animationsEnabled ? 0.96 : 1 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: animationsEnabled ? 0.96 : 1 }}
+                    transition={readoutTransition}
+                  >
+                    <dt>{t('sessions.readoutEvents')}</dt>
+                    <dd className="sd-num">{capture.session.events.length}</dd>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </dl>
 
-          {/* Exportación de la instantánea finalizada */}
+            <div className="sd-sessions-capture__actions">
+              {capture.active ? (
+                <Button type="button" variant="ink" size="lg" disabled={exportBusy} onClick={handleFinalizeCapture}>
+                  <Icon icon={Square} size="md" />
+                  {t('sessions.finishCapture')}
+                </Button>
+              ) : (
+                <Button type="button" variant={canExport ? 'ink' : 'accent'} size="lg" disabled={exportBusy || !isAudioPlaying} onClick={handleStartCapture}>
+                  <Icon icon={Radio} size="md" />
+                  {canExport ? t('sessions.startNewCapture') : t('sessions.startCapture')}
+                </Button>
+              )}
+              {capture.active && (
+                <Button type="button" variant="ghost" size="lg" onClick={() => navigate('/mixer')}>
+                  {t('sessions.openMixer')}
+                  <Icon icon={ArrowRight} size="md" />
+                </Button>
+              )}
+            </div>
+
+            <p className="sd-sessions-note sd-sessions-capture__hint">
+              {capture.active ? t('sessions.captureActiveHint') : canExport ? t('sessions.captureReplaceHint') : t('sessions.captureHint')}
+            </p>
+          </Panel>
+
+          {/* Paso 2 — Exportación de la instantánea finalizada */}
           <Panel
             className="sd-sessions-export"
             icon={Download}
@@ -393,12 +445,14 @@ export const Sessions: React.FC = () => {
             description={t('sessions.exportSubtitle')}
           >
             {!canExport && (
-              <Notice tone="info">
+              <Notice tone="info" className="sd-sessions-export__notice">
                 {capture.active ? t('sessions.finishBeforeExport') : t('sessions.noExportableSession')}
               </Notice>
             )}
 
-            <div className="sd-sessions-export__options">
+            {/* Ajustes del archivo agrupados en una sola tarjeta */}
+            <fieldset className="sd-sessions-export__options" disabled={!canExport || exportBusy}>
+              <legend className="sd-sessions-group-label">{t('sessions.settingsTitle')}</legend>
               <div className="sd-sessions-field">
                 <span className="sd-sessions-field__label" aria-hidden="true">{t('sessions.format')}</span>
                 <SegmentedControl
@@ -431,15 +485,26 @@ export const Sessions: React.FC = () => {
                   <small className="sd-sessions-field__hint">{t('sessions.bitrateInfo')}</small>
                 </div>
               )}
-            </div>
+            </fieldset>
 
-            <div className="sd-sessions-export__status" aria-live="polite" aria-atomic="true">
-              <div className="sd-sessions-export__status-line">
-                {status === 'completed' && <Icon icon={CheckCircle2} size="md" />}
-                {status === 'cancelled' && <Icon icon={XCircle} size="md" />}
-                <strong>{statusText}</strong>
-                {operationActive && progressPercent !== null && <span className="sd-num">{Math.round(progressPercent)}%</span>}
-              </div>
+            {/* Estado de la operación: tono según la fase; los avisos viven aquí */}
+            <div
+              className={`sd-sessions-export__status sd-sessions-export__status--${status}`}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {/* Sin sesión exportable el aviso informativo ya explica el estado */}
+              {(canExport || status === 'error') && (
+                <div className="sd-sessions-export__status-line">
+                  <Icon
+                    icon={STATUS_ICON[status]}
+                    size="md"
+                    className={operationActive ? 'sd-sessions-spin' : undefined}
+                  />
+                  <strong>{statusText}</strong>
+                  {operationActive && progressPercent !== null && <span className="sd-sessions-export__percent sd-num">{Math.round(progressPercent)}%</span>}
+                </div>
+              )}
               {operationActive && (
                 <ProgressBar
                   value={progressPercent ?? undefined}
@@ -474,8 +539,10 @@ export const Sessions: React.FC = () => {
                 size="lg"
                 disabled={!canExport || exportBusy || operationActive}
                 aria-busy={operationActive}
+                aria-describedby="session-export-summary"
                 onClick={handleStartExport}
               >
+                <Icon icon={Download} size="md" />
                 {retryLabel}
               </Button>
               {canCancel && (
@@ -483,11 +550,77 @@ export const Sessions: React.FC = () => {
                   {t('sessions.cancelExport')}
                 </Button>
               )}
+              <span id="session-export-summary" className="sd-sessions-export__summary sd-num">{exportSummary}</span>
             </div>
 
-            <p className="sd-sessions-note">{t('sessions.limitInfo')}</p>
+            <details className="sd-sessions-limits">
+              <summary>
+                <Icon icon={Info} size="sm" />
+                {t('sessions.limitsTitle')}
+                <Icon icon={ChevronDown} size="sm" className="sd-sessions-limits__chevron" />
+              </summary>
+              <p className="sd-sessions-note">{t('sessions.limitInfo')}</p>
+            </details>
           </Panel>
         </div>
+
+        {/* Paso 3 — Historial de sesiones exportadas */}
+        <Panel
+          className="sd-sessions-history"
+          icon={History}
+          title={t('sessions.historyTitle')}
+          description={t('sessions.historySubtitle', { max: MAX_STORED_SESSIONS })}
+          aside={
+            <Tag tone="paper" className="sd-num">
+              {t('sessions.historyCount', { count: storedSessions.length, max: MAX_STORED_SESSIONS })}
+            </Tag>
+          }
+        >
+          {historyNotice && <Notice tone="warning" className="sd-sessions-history__notice">{historyNotice}</Notice>}
+
+          {storedSessions.length === 0 ? (
+            <div role="status">
+              <EmptyState icon={Disc3} title={t('sessions.historyEmpty')} />
+            </div>
+          ) : (
+            <ul className="sd-sessions-history__list">
+              {storedSessions.map((record) => {
+                const recordedAt = new Date(record.recordedAt).toLocaleString();
+                const title = record.title?.trim();
+                return (
+                  <li key={record.id} className="sd-sessions-history__row" data-testid={`stored-session-${record.id}`}>
+                    <span className="sd-sessions-history__disc" aria-hidden="true">
+                      <Icon icon={Disc3} size="md" />
+                    </span>
+                    <div className="sd-sessions-history__info">
+                      <span className="sd-sessions-history__title">{title || recordedAt}</span>
+                      <span className="sd-sessions-history__meta sd-num">
+                        {title && <Tag tone="surface">{recordedAt}</Tag>}
+                        <Tag tone="surface">{t('sessions.historyDuration', { duration: formatDuration(record.durationMs / 1000) })}</Tag>
+                        <Tag tone="surface">{t('sessions.eventCount', { count: record.eventCount })}</Tag>
+                      </span>
+                    </div>
+                    <div className="sd-sessions-history__actions">
+                      {STORED_FORMATS.filter((storedFormat) => record.files[storedFormat]).map((storedFormat) => (
+                        <Button
+                          key={storedFormat}
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          aria-label={t('sessions.historyDownload', { format: storedFormat.toUpperCase() })}
+                          onClick={() => handleDownloadStored(record, storedFormat)}
+                        >
+                          <Icon icon={Download} size="sm" />
+                          {storedFormat.toUpperCase()}
+                        </Button>
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
       </section>
     </ConsoleTemplate>
   );

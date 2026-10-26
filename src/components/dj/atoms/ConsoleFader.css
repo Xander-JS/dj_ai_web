@@ -34,7 +34,7 @@
   position: absolute;
   border-radius: var(--slot-thickness);
   background-color: var(--console-slot);
-  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.8), 0 1px 0 rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.8), 0 1px 0 rgb(255 255 255 / 0.06);
 }
 
 .console-fader--vertical .console-fader__slot {
@@ -56,7 +56,7 @@
   position: absolute;
   border-radius: inherit;
   background-color: var(--console-tone);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--console-tone) calc(var(--console-glow) * 100%), transparent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--console-tone) 80%, transparent);
   transition: inset 70ms linear;
 }
 
@@ -218,7 +218,7 @@
 }
 
 .console-fader:has(.console-fader__input:focus-visible) .console-fader__cap-body {
-  outline: 2px solid var(--console-tone);
+  outline: 2px solid var(--console-focus);
   outline-offset: 2px;
 }
 

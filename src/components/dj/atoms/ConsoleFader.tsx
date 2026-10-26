@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { clsx } from 'clsx';
-import { FADER_CAP_GEOMETRY as C, MIXER_ASSETS } from './mixerAssets';
+import { FADER_CAP_GEOMETRY as C, MIXER_ASSETS } from '../mixerAssets';
 import type { ConsoleTone } from './ConsoleKnob';
-import './consoleTheme.css';
+import '../consoleTheme.css';
 import './ConsoleFader.css';
 
 export interface ConsoleFaderProps {

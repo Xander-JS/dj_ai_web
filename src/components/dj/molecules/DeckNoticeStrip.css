@@ -1,0 +1,10 @@
+/* Altura reservada aunque no haya avisos: el disco no salta al cargar una pista */
+.deck-notice-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 18px;
+  min-width: 0;
+}

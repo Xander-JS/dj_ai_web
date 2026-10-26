@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { clsx } from 'clsx';
-import { KNOB_MAIN_GEOMETRY as K, MIXER_ASSETS } from './mixerAssets';
-import './consoleTheme.css';
+import { KNOB_MAIN_GEOMETRY as K, MIXER_ASSETS } from '../mixerAssets';
+import '../consoleTheme.css';
 import './ConsoleKnob.css';
 
 export type ConsoleTone = 'a' | 'b' | 'master';
@@ -14,11 +14,17 @@ export interface ConsoleKnobProps {
   defaultValue?: number;
   /** El arco nace en el centro (EQ, filtro, ganancia) en lugar de en el mínimo. */
   bipolar?: boolean;
-  label: string;
+  /** Serigrafía bajo el pomo (el MASTER no la lleva: su cabecera ya lo nombra). */
+  label?: string;
+  /** Serigrafía a la izquierda y a la derecha del pomo (FILTER: LPF / HPF). */
+  startLabel?: string;
+  endLabel?: string;
   'aria-label': string;
   'aria-valuetext'?: string;
   'data-testid'?: string;
-  size?: 'main' | 'compact';
+  /** `master`: un poco mayor que los de canal. */
+  size?: 'channel' | 'master';
+  /** Canales: cuerpo anodizado y arco del color del deck. Master: aluminio y luz neutra. */
   tone: ConsoleTone;
   disabled?: boolean;
   onValueChange: (value: number) => void;
@@ -59,9 +65,9 @@ const CAP_BOX_STYLE: React.CSSProperties = {
 
 /**
  * Potenciómetro rotativo con knob-main.png. El valor vive en un <input type="range"> nativo
- * (teclado, lectores de pantalla, atajos) y el giro del pomo y el arco luminoso se derivan
- * siempre de `value`, así que reflejan también los cambios que llegan del store o de los atajos.
- * Arrastre vertical con puntero; doble clic restablece `defaultValue`.
+ * (teclado, lectores de pantalla, atajos) y el giro del pomo, su indicador blanco y el arco
+ * luminoso se derivan siempre de `value`, así que reflejan también los cambios que llegan del
+ * store o de los atajos. Arrastre vertical con puntero; doble clic restablece `defaultValue`.
  */
 export const ConsoleKnob: React.FC<ConsoleKnobProps> = ({
   value,
@@ -70,7 +76,9 @@ export const ConsoleKnob: React.FC<ConsoleKnobProps> = ({
   defaultValue,
   bipolar = false,
   label,
-  size = 'main',
+  startLabel,
+  endLabel,
+  size = 'channel',
   tone,
   disabled = false,
   onValueChange,
@@ -113,42 +121,47 @@ export const ConsoleKnob: React.FC<ConsoleKnobProps> = ({
   return (
     <div
       className={clsx('console-knob', `console-knob--${size}`, `console-tone-${tone}`, disabled && 'is-disabled')}
-      style={{ '--knob-angle': `${angle - K.indicatorAngle}deg` } as React.CSSProperties}
+      style={{ '--knob-angle': `${angle - K.indicatorAngle}deg`, '--knob-pointer': `${angle}deg` } as React.CSSProperties}
     >
-      <div
-        className="console-knob__dial"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onDoubleClick={defaultValue !== undefined && !disabled ? () => commit(defaultValue) : undefined}
-      >
-        <img className="console-knob__scale" src={MIXER_ASSETS.knobMain} alt="" draggable={false} decoding="async" />
-        <svg className="console-knob__arc" viewBox={VIEWBOX} aria-hidden="true">
-          <path className="console-knob__arc-track" d={TRACK_PATH} />
-        </svg>
-        {hasArc && (
-          <svg className="console-knob__arc console-knob__arc--value" viewBox={VIEWBOX} aria-hidden="true">
-            <path className="console-knob__arc-value" d={arcPath(originAngle, angle)} />
+      <span className="console-knob__row">
+        {startLabel && <span className="console-knob__side console-knob__side--start" aria-hidden="true">{startLabel}</span>}
+        <div
+          className="console-knob__dial"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onDoubleClick={defaultValue !== undefined && !disabled ? () => commit(defaultValue) : undefined}
+        >
+          <img className="console-knob__scale" src={MIXER_ASSETS.knobMain} alt="" draggable={false} decoding="async" />
+          <svg className="console-knob__arc" viewBox={VIEWBOX} aria-hidden="true">
+            <path className="console-knob__arc-track" d={TRACK_PATH} />
           </svg>
-        )}
-        <span className="console-knob__cap" style={CAP_BOX_STYLE} aria-hidden="true">
-          <img src={MIXER_ASSETS.knobMain} alt="" draggable={false} decoding="async" style={CAP_IMAGE_STYLE} />
-        </span>
-        <input
-          ref={inputRef}
-          type="range"
-          className="console-knob__input"
-          min={min}
-          max={max}
-          step={1}
-          value={clamped}
-          disabled={disabled}
-          onChange={(e) => onValueChange(Number(e.target.value))}
-          {...aria}
-        />
-      </div>
-      <span className="console-knob__label" aria-hidden="true">{label}</span>
+          {hasArc && (
+            <svg className="console-knob__arc console-knob__arc--value" viewBox={VIEWBOX} aria-hidden="true">
+              <path className="console-knob__arc-value" d={arcPath(originAngle, angle)} />
+            </svg>
+          )}
+          <span className="console-knob__cap" style={CAP_BOX_STYLE} aria-hidden="true">
+            <img src={MIXER_ASSETS.knobMain} alt="" draggable={false} decoding="async" style={CAP_IMAGE_STYLE} />
+          </span>
+          <span className="console-knob__pointer" style={CAP_BOX_STYLE} aria-hidden="true" />
+          <input
+            ref={inputRef}
+            type="range"
+            className="console-knob__input"
+            min={min}
+            max={max}
+            step={1}
+            value={clamped}
+            disabled={disabled}
+            onChange={(e) => onValueChange(Number(e.target.value))}
+            {...aria}
+          />
+        </div>
+        {endLabel && <span className="console-knob__side console-knob__side--end" aria-hidden="true">{endLabel}</span>}
+      </span>
+      {label && <span className="console-knob__label" aria-hidden="true">{label}</span>}
     </div>
   );
 };

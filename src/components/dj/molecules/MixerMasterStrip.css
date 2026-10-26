@@ -1,0 +1,44 @@
+/* Columna MASTER: pomo algo mayor, vúmetro estéreo alto y MUTE al pie */
+.mixer-master {
+  --knob-width-master: calc(var(--mixer-knob, 2.4rem) * 1.25);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mixer-gap, 8px);
+  min-width: 0;
+  min-height: 0;
+  padding-inline: 4px;
+}
+
+/* Con MUTE el arco del pomo se atenúa; el valor nominal no cambia */
+.mixer-master.is-muted .console-knob__arc-value {
+  opacity: 0.3;
+}
+
+.mixer-master__meter {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  min-height: 6rem;
+  padding: 3px;
+  border-radius: 3px;
+  background: var(--console-meter-bg);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.8), 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+
+.mixer-master__meter .level-meter {
+  width: 7px;
+  min-height: 0;
+  border-radius: 1px;
+  box-shadow: none;
+}
+
+.mixer-master__mute {
+  flex: none;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 10px;
+  font-size: 9px;
+}

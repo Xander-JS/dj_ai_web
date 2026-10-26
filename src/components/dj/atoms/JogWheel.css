@@ -1,0 +1,121 @@
+/* Disco: el tamaño lo fija el contenedor (ancho); siempre circular */
+.jog-wheel {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Aro metálico torneado con marcas radiales finas */
+.jog-wheel__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, rgb(0 0 0 / 0.55) 0deg 0.8deg, transparent 0.8deg 6deg),
+    conic-gradient(from 210deg, hsl(0 0% 100% / 0.28), hsl(0 0% 100% / 0) 22%, hsl(0 0% 100% / 0.22) 50%, hsl(0 0% 100% / 0) 72%, hsl(0 0% 100% / 0.28)),
+    var(--jog-metal) center / cover,
+    hsl(220 5% 52%);
+  background-blend-mode: normal, overlay, normal, normal;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.75),
+    0 10px 22px -6px rgb(0 0 0 / 0.85),
+    inset 0 1px 0 hsl(0 0% 100% / 0.35),
+    inset 0 -2px 3px rgb(0 0 0 / 0.5);
+}
+
+/* Plato: lo que gira (disco de Ajustes, aro interior y etiqueta) */
+.jog-wheel__platter {
+  position: absolute;
+  inset: 6.5%;
+  border-radius: 50%;
+  background: hsl(225 7% 9%);
+  box-shadow: 0 0 0 2px hsl(225 8% 6%), inset 0 0 18px rgb(0 0 0 / 0.8);
+  will-change: transform;
+}
+
+.jog-wheel.is-spinning .jog-wheel__platter {
+  animation: jogWheelSpin var(--jog-spin-duration, 1.8s) linear infinite;
+}
+
+.jog-wheel__disc {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.jog-wheel__disc img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+
+/* Aro interior: separa la etiqueta del plato */
+.jog-wheel__inner-ring {
+  position: absolute;
+  inset: 27%;
+  border-radius: 50%;
+  border: 1px solid hsl(0 0% 100% / 0.1);
+  background: radial-gradient(circle, transparent 68%, rgb(0 0 0 / 0.45) 70%, rgb(0 0 0 / 0.15) 100%);
+  box-shadow: 0 0 0 3px rgb(0 0 0 / 0.35);
+}
+
+/* Etiqueta central en el color del deck */
+.jog-wheel__label {
+  position: absolute;
+  inset: 32%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25em;
+  border-radius: 50%;
+  border: 2px solid var(--console-tone);
+  background: radial-gradient(circle at 50% 35%, hsl(225 8% 10%), hsl(225 10% 4%));
+  box-shadow:
+    0 0 14px -4px color-mix(in srgb, var(--console-tone) 70%, transparent),
+    inset 0 0 10px rgb(0 0 0 / 0.8);
+  container-type: inline-size;
+}
+
+.jog-wheel__marker {
+  width: 2.2cqi;
+  min-width: 2px;
+  height: 11cqi;
+  border-radius: 2px;
+  background: var(--console-tone);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--console-tone) 80%, transparent);
+}
+
+.jog-wheel__letter {
+  color: var(--console-tone);
+  font-family: var(--font-family-sans);
+  font-size: 36cqi;
+  font-weight: 600;
+  line-height: 0.95;
+}
+
+.jog-wheel__caption {
+  color: var(--console-silkscreen-dim);
+  font-family: var(--font-family-sans);
+  font-size: 8cqi;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  /* Compensa el espaciado final para que quede centrado */
+  margin-right: -0.2em;
+}
+
+@keyframes jogWheelSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jog-wheel.is-spinning .jog-wheel__platter { animation: none; }
+}
+
+:root[data-animations='off'] .jog-wheel.is-spinning .jog-wheel__platter {
+  animation: none;
+}

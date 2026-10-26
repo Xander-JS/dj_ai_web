@@ -1,4 +1,4 @@
-import React, { useCallback, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { Check, ChevronDown, Search } from 'lucide-react';
@@ -12,13 +12,6 @@ export interface SelectMenuOption<T extends string = string> {
   /** Segunda línea (artista, detalle); también se usa al buscar */
   description?: string;
   disabled?: boolean;
-}
-
-/** Control imperativo opcional: abrir o cerrar la lista desde fuera (p. ej. un atajo de teclado). */
-export interface SelectMenuHandle {
-  open(): void;
-  /** Abre la lista con el foco en las opciones (no en el buscador) o la cierra si ya está abierta. */
-  toggle(): void;
 }
 
 export interface SelectMenuProps<T extends string> {
@@ -41,16 +34,6 @@ export interface SelectMenuProps<T extends string> {
   /** Teclas con la lista cerrada (p. ej. Enter para guardar una fila); preventDefault evita abrirla */
   onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
   wrapperClassName?: string;
-  handleRef?: React.Ref<SelectMenuHandle>;
-  /** Se llama cada vez que la lista se abre (p. ej. para refrescar las opciones) */
-  onOpen?: () => void;
-  /** Al elegir o cerrar con Escape el foco vuelve al disparador (predeterminado). Con false se
-      libera, para que los atajos globales sigan activos (consola del Mixer). */
-  returnFocus?: boolean;
-  /** Tecla pulsada con la lista abierta fuera del buscador; si devuelve true, se consume */
-  onMenuKey?: (event: React.KeyboardEvent) => boolean;
-  /** Clase extra del panel flotante (va en un portal, fuera del envoltorio) */
-  menuClassName?: string;
 }
 
 const VIEWPORT_GAP = 8;
@@ -80,11 +63,6 @@ export function SelectMenu<T extends string>({
   autoFocus,
   onKeyDown,
   wrapperClassName,
-  handleRef,
-  onOpen,
-  returnFocus = true,
-  onMenuKey,
-  menuClassName,
 }: SelectMenuProps<T>) {
   const baseId = useId();
   const listId = `${baseId}-list`;
@@ -94,8 +72,6 @@ export function SelectMenu<T extends string>({
   const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const typeaheadRef = useRef({ text: '', timer: 0 });
-  // Abierta con toggle(): el foco va a las opciones para que la misma tecla pueda cerrarla
-  const focusListRef = useRef(false);
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -120,41 +96,18 @@ export function SelectMenu<T extends string>({
     setQuery('');
     setActiveIndex(selectedIndex !== -1 ? selectedIndex : firstEnabled(options));
     setOpen(true);
-    onOpen?.();
   };
 
-
-  const closeMenu = useCallback((restoreFocus: boolean, releaseFocus = false) => {
+  const closeMenu = useCallback((restoreFocus: boolean) => {
     setOpen(false);
-    if (restoreFocus) {
-      triggerRef.current?.focus();
-    } else if (releaseFocus && document.activeElement instanceof HTMLElement && (
-      menuRef.current?.contains(document.activeElement) || document.activeElement === triggerRef.current
-    )) {
-      document.activeElement.blur();
-    }
+    if (restoreFocus) triggerRef.current?.focus();
   }, []);
-
-  useImperativeHandle(handleRef, () => ({
-    open: () => {
-      focusListRef.current = false;
-      openMenu();
-    },
-    toggle: () => {
-      if (open) {
-        closeMenu(returnFocus, !returnFocus);
-        return;
-      }
-      focusListRef.current = true;
-      openMenu();
-    },
-  }));
 
   const choose = (index: number) => {
     const option = visible[index];
     if (!option || option.disabled) return;
     onChange(option.value);
-    closeMenu(returnFocus, !returnFocus);
+    closeMenu(true);
   };
 
   // Posición: se escribe directamente en el estilo de la lista (sin renders por scroll o resize)
@@ -201,8 +154,7 @@ export function SelectMenu<T extends string>({
   // Foco al abrir y cierre al pulsar fuera
   useLayoutEffect(() => {
     if (!open) return;
-    (searchable && !focusListRef.current ? searchRef.current : listRef.current)?.focus({ preventScroll: true });
-    focusListRef.current = false;
+    (searchable ? searchRef.current : listRef.current)?.focus({ preventScroll: true });
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
@@ -224,10 +176,6 @@ export function SelectMenu<T extends string>({
 
   const handleMenuKeyDown = (event: React.KeyboardEvent) => {
     const inSearch = event.target === searchRef.current;
-    if (!inSearch && onMenuKey?.(event)) {
-      event.preventDefault();
-      return;
-    }
     const last = visible.length - 1;
     switch (event.key) {
       case 'ArrowDown':
@@ -267,7 +215,7 @@ export function SelectMenu<T extends string>({
       case 'Escape':
         event.preventDefault();
         event.stopPropagation();
-        closeMenu(returnFocus, !returnFocus);
+        closeMenu(true);
         break;
       case 'Tab':
         // El foco vuelve al disparador y el tabulador sigue desde allí
@@ -325,7 +273,7 @@ export function SelectMenu<T extends string>({
       <Icon icon={ChevronDown} size="sm" className="sd-select-field__chevron sd-select-menu__chevron" />
 
       {open && createPortal(
-        <div ref={menuRef} className={clsx('sd-select-menu__panel', menuClassName)} onKeyDown={handleMenuKeyDown}>
+        <div ref={menuRef} className="sd-select-menu__panel" onKeyDown={handleMenuKeyDown}>
           {searchable && (
             <label className="sd-select-menu__search">
               <Icon icon={Search} size="sm" />

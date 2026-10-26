@@ -456,6 +456,11 @@
   gap: var(--sd-gap-3);
 }
 
+/* Crossfader y su curva: comunes a los dos decks, a todo el ancho bajo ellos */
+.sd-shortcut-deck--mixer {
+  grid-column: 1 / -1;
+}
+
 /* Letra del deck como la serigrafía de un reproductor */
 .sd-shortcut-deck__name {
   font-size: 3.5rem;

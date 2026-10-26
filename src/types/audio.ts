@@ -32,6 +32,8 @@ export interface DeckAudioGraph {
   volumeNode: GainNode;
   crossfaderGainNode: GainNode;
   analyserNode: AnalyserNode;
+  /** Desplazador de tono de KEY LOCK; se crea la primera vez que se activa en el deck. */
+  keyLockNode?: AudioWorkletNode | null;
 }
 
 /**
@@ -65,6 +67,7 @@ export interface IAudioEngineService {
   setDeckPlaybackRate(deckId: DeckId, rate: number): void;
   setDeckPitchBend(deckId: DeckId, bendAmount: number): void;
   getDeckPitchBend(deckId: DeckId): number;
+  setDeckKeyLock?(deckId: DeckId, enabled: boolean): void;
   
   // Mixer y DSP en tiempo real
   setChannelGain(deckId: DeckId, gainValue: number): void;
@@ -80,6 +83,7 @@ export interface IAudioEngineService {
   getDeckDuration(deckId: DeckId): number;
   getDeckVUMeter(deckId: DeckId): number; // Nivel visual UI (0 a 100) pre-crossfader
   getMasterVUMeter(): number;             // Nivel visual UI (0 a 100) mezcla Master
+  getMasterStereoVUMeter(): { left: number; right: number }; // Niveles L / R (0 a 100) mezcla Master
   getDeckRMS(deckId: DeckId): number;    // Medición matemática RMS pura (0.0 a 1.0+) pre-crossfader
   getMasterRMS(): number;                // Medición matemática RMS pura (0.0 a 1.0+) mezcla Master
   isDeckPlaying(deckId: DeckId): boolean;

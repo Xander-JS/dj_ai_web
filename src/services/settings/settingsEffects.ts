@@ -14,7 +14,6 @@ import { installKeyboardShortcuts } from '../keyboard/keyboardShortcuts';
 import { createDJShortcutTarget } from '../keyboard/djShortcutTarget';
 import { transitionPlayer } from '../../audio/transitionPlayer';
 import { navigateToSection } from '../navigation/consoleNavigator';
-import { toggleTrackPicker } from '../console/trackPickerBridge';
 import { toggleSessionCaptureWithFeedback } from '../session/sessionCaptureFeedback';
 
 let uninstallShortcuts: (() => void) | null = null;
@@ -24,7 +23,6 @@ function setShortcutsEnabled(enabled: boolean): void {
     uninstallShortcuts = installKeyboardShortcuts(
       createDJShortcutTarget({
         toggleRecording: () => toggleSessionCaptureWithFeedback(),
-        toggleTrackPicker: (deckId) => toggleTrackPicker(deckId),
         navigate: (section) => {
           navigateToSection(section);
         },

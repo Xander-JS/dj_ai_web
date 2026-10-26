@@ -12,14 +12,18 @@
  * - CUE y Pitch Bend son momentáneos: keydown los inicia y keyup los libera; perder el foco los cancela.
  * - ← / → mueven el crossfader y Shift + ← / → cambian su curva; mientras se mantiene una tecla
  *   selectora de mezcla (GAIN, HI, MID, LOW, FILTER de cada deck, reasignables) ajustan ese parámetro.
- * - Comandos de consola reasignables: MUTE (B), grabación de sesión (5) y mostrar / ocultar el
- *   selector de canciones de cada deck (V para el Deck A, N para el Deck B).
+ * - Comandos de consola reasignables: MUTE (B), grabación de sesión (5) y los botones LOAD A / LOAD B
+ *   de la pantalla digital (V para el Deck A, N para el Deck B).
+ * - Con el menú de la pantalla abierto, sus ocho teclas de navegación (flechas, Inicio, Fin, Enter,
+ *   Esc) no llegan a los atajos: ↑ / ↓ no mueven el Master ni ← / → el crossfader. Las combinaciones
+ *   con una tecla mantenida (F / J + ↑ / ↓, selectoras) y con Shift siguen actuando.
  * - Shift + tecla de sección (1–7 por defecto, reasignables) abre Inicio, Biblioteca,
  *   Playlists, Mixer, Sesiones, Ajustes o Mi perfil; se resuelve antes que las selectoras de mezcla.
  * - Al desactivar los atajos se retiran los oyentes, sin coste residual.
  */
 
 import type { DeckId } from '../../types/deck';
+import { SCREEN_NAV_CODES } from '../console/screenMenuModel.ts';
 
 export type ShortcutAction =
   | { type: 'play'; deckId: DeckId }
@@ -242,7 +246,7 @@ export function formatKeyCode(code: string): string {
   return code.replace(/^Key|^Digit/, '');
 }
 
-/** Tecla que se mantiene pulsada para modificar las flechas, Espacio o el selector de canciones. */
+/** Tecla que se mantiene pulsada para modificar las flechas o Espacio. */
 export type HeldKey =
   | { kind: 'mix'; id: MixShortcutId }
   | { kind: 'deck'; deckId: DeckId };
@@ -324,14 +328,22 @@ function isArrowKeyTarget(target: EventTarget | null, code: string): boolean {
   return role !== null && ARROW_KEY_ROLES.has(role);
 }
 
+/**
+ * Marca de las listas que no deben bloquear los atajos aunque tengan el foco (las de la pantalla
+ * digital: solo usan las ocho teclas de navegación, que la pantalla ya retira de los atajos).
+ */
+export const SHORTCUTS_PASSTHROUGH_ATTRIBUTE = 'data-dj-shortcuts';
+
 /** Evita disparar atajos mientras el usuario escribe o maneja un control nativo (o su equivalente ARIA). */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as HTMLElement).tagName !== 'string') return false;
   const element = target as HTMLElement;
   const tag = element.tagName.toLowerCase();
-  const role = typeof element.getAttribute === 'function' ? element.getAttribute('role') : null;
+  const attribute = (name: string) => (typeof element.getAttribute === 'function' ? element.getAttribute(name) : null);
+  const role = attribute('role');
+  const passthrough = attribute(SHORTCUTS_PASSTHROUGH_ATTRIBUTE) === 'pass';
   return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable === true
-    || (role !== null && FORM_CONTROL_ROLES.has(role));
+    || (role !== null && FORM_CONTROL_ROLES.has(role) && !passthrough);
 }
 
 /** Acciones del DJ que consumen los atajos (inyectables en pruebas). */
@@ -358,8 +370,10 @@ export interface ShortcutTarget {
   cycleCrossfaderCurve(direction: -1 | 1): void;
   /** Inicia o detiene la grabación de la sesión; sin él la tecla de grabación no hace nada. */
   toggleRecording?(): unknown;
-  /** Muestra u oculta el selector de canciones del deck en la consola; sin él el atajo no hace nada. */
-  toggleTrackPicker?(deckId: DeckId): unknown;
+  /** Pulsa LOAD A / LOAD B en la pantalla digital; sin él el atajo no hace nada. */
+  pressLoadButton?(deckId: DeckId): unknown;
+  /** true mientras la pantalla digital consume sus teclas de navegación (menú abierto). */
+  isNavigationCaptured?(): boolean;
   /** Abre una sección de la consola; sin él los atajos de navegación no hacen nada. */
   navigate?(section: NavSection): void;
 }
@@ -437,6 +451,8 @@ export function createShortcutHandlers(
 
     const activeCode = heldKeys[heldKeys.length - 1];
     const held = activeCode ? findHeldKey(bindings, activeCode) : null;
+    // Las teclas sueltas de navegación son de la pantalla mientras su menú está abierto
+    if (!held && !event.shiftKey && SCREEN_NAV_CODES.has(event.code) && target.isNavigationCaptured?.()) return;
     const action = resolveShortcut(event, held, bindings);
     if (!action) return;
     event.preventDefault();
@@ -489,7 +505,7 @@ export function createShortcutHandlers(
         void target.toggleRecording?.();
         break;
       case 'library':
-        void target.toggleTrackPicker?.(action.deckId);
+        void target.pressLoadButton?.(action.deckId);
         break;
       case 'hotcue':
         if (target.hasHotCue(action.deckId, action.slot)) {

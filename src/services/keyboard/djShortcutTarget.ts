@@ -1,12 +1,13 @@
 /**
  * SYSTEM DJ — DJ store shortcut target
  * Conecta las acciones de los atajos con el DJ store: los mismos parámetros que mueven los
- * controles de la consola (volumen de canal, Master, Pitch Bend, curva, EQ…). La grabación, el
- * selector de canciones y la navegación se inyectan porque dependen de la interfaz.
+ * controles de la consola (volumen de canal, Master, Pitch Bend, curva, EQ…) y los botones LOAD de
+ * la pantalla digital. La grabación y la navegación se inyectan porque dependen de la interfaz.
  */
 
 import { djStore } from '../../store/useDJStore.ts';
 import { stepCrossfaderCurve } from '../../store/useSettingsStore.ts';
+import { digitalScreenStore } from '../console/digitalScreenStore.ts';
 import type { DeckId } from '../../types/deck.ts';
 import type { MixParam, ShortcutTarget } from './keyboardShortcuts.ts';
 
@@ -24,7 +25,7 @@ function setMixValue(deckId: DeckId, param: MixParam, value: number): void {
 }
 
 export function createDJShortcutTarget(
-  ui: Pick<ShortcutTarget, 'toggleRecording' | 'toggleTrackPicker' | 'navigate'> = {},
+  ui: Pick<ShortcutTarget, 'toggleRecording' | 'navigate'> = {},
 ): ShortcutTarget {
   return {
     togglePlayDeck: (deckId) => djStore.togglePlayDeck(deckId),
@@ -51,6 +52,9 @@ export function createDJShortcutTarget(
     cycleCrossfaderCurve: (direction) => {
       djStore.setCrossfaderCurve(stepCrossfaderCurve(djStore.getSnapshot().mixer.crossfaderCurve, direction));
     },
+    // Sin pantalla montada (fuera del Mixer) no hacen nada
+    pressLoadButton: (deckId) => digitalScreenStore.pressLoad(deckId),
+    isNavigationCaptured: () => digitalScreenStore.isCapturingNavigation(),
     ...ui,
   };
 }

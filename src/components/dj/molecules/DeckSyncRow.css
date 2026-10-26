@@ -1,0 +1,21 @@
+/* Cuatro teclas iguales, alineadas con las cuatro columnas de pads de debajo */
+.deck-sync-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--deck-pad-gap);
+  height: var(--deck-key-height);
+}
+
+.deck-sync-row__key {
+  width: 100%;
+  padding: 0 3px;
+  font-size: clamp(8px, 2.3cqi, 12px);
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  text-align: center;
+  /* En decks estrechos la serigrafía pasa a dos líneas (BAR / SYNC), como en el hardware */
+  white-space: normal;
+  text-wrap: balance;
+  overflow: hidden;
+}

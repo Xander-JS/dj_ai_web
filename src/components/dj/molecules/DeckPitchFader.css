@@ -1,0 +1,108 @@
+/* Placa empotrada del fader de tempo */
+.deck-pitch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 4px 6px;
+  border: 1px solid hsl(0 0% 100% / 0.07);
+  border-radius: 8px;
+  background: hsl(225 7% 7%);
+  box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.7), 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+
+.deck-pitch__range {
+  color: var(--console-silkscreen-dim);
+  font-family: var(--font-family-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.deck-pitch__track {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  min-height: 4rem;
+}
+
+/* Línea de 0 % en el color del deck, cruzando la ranura */
+.deck-pitch__track::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: var(--console-tone);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--console-tone) 70%, transparent);
+  pointer-events: none;
+}
+
+.deck-pitch__track .console-fader {
+  --cap-short: 1.15rem;
+  min-height: 0;
+}
+
+.deck-pitch__caption {
+  color: var(--console-silkscreen-dim);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.12em;
+  margin-right: -0.12em;
+}
+
+.deck-pitch__bends {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  width: 100%;
+}
+
+/* Pitch bend: botones momentáneos pequeños; se iluminan mientras se mantienen */
+.deck-pitch__bend {
+  height: 22px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--console-key-edge);
+  border-radius: 3px;
+  background: linear-gradient(180deg, hsl(0 0% 100% / 0.07), hsl(0 0% 100% / 0) 45%), var(--console-key-body);
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.55);
+  color: var(--console-silkscreen-dim);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.deck-pitch__bend:hover:not(:disabled) {
+  color: var(--console-silkscreen);
+}
+
+.deck-pitch__bend.is-active {
+  color: color-mix(in srgb, var(--console-tone) 35%, #fff);
+  border-color: var(--console-tone);
+  box-shadow: inset 0 0 8px -2px color-mix(in srgb, var(--console-tone) 70%, transparent), 0 0 8px -3px var(--console-tone);
+  transform: translateY(1px);
+}
+
+.deck-pitch__bend:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.deck-pitch__bend:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-pitch__bend.is-active { transform: none; }
+}

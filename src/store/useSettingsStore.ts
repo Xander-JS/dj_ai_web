@@ -14,6 +14,8 @@ import type { CrossfaderCurve } from '../types/mixer';
 import {
   DEFAULT_NAVIGATION_BINDINGS,
   DEFAULT_SHORTCUT_BINDINGS,
+  migrateLegacyConsoleBindings,
+  migrateLegacyShortcutBindings,
   sanitizeNavigationBindings,
   sanitizeShortcutBindings,
   type NavigationBindings,
@@ -50,7 +52,7 @@ export interface AppSettings {
   /** Tolerancia máxima de SYNC como fracción (0.08 = ±8 %), entre SYNC_RANGE_MIN y SYNC_RANGE_MAX. */
   syncRange: number;
   shortcutsEnabled: boolean;
-  /** Teclas selectoras de GAIN / HI / MID / LOW / FILTER por deck. */
+  /** Teclas selectoras de GAIN / HI / MID / LOW / FILTER por deck y comandos de consola reasignables. */
   shortcutBindings: ShortcutBindings;
   /** Tecla (con Shift) que abre cada sección principal. */
   navigationBindings: NavigationBindings;
@@ -80,7 +82,14 @@ export const ACCENT_HUES: Record<AccentColor, number> = {
 };
 export const VISUALIZER_INTENSITIES: readonly VisualizerIntensity[] = ['subtle', 'balanced', 'vivid'];
 export const JOG_DISCS: readonly JogDisc[] = ['a', 'b', 'c'];
+/** Mismo orden que el selector de la consola: CP, LIN, CUT. */
 export const CROSSFADER_CURVES: readonly CrossfaderCurve[] = ['constant-power', 'linear', 'cut'];
+
+/** Curva anterior (-1) o siguiente (1) en el orden de la consola, de forma circular. */
+export function stepCrossfaderCurve(curve: CrossfaderCurve, direction: -1 | 1): CrossfaderCurve {
+  const index = Math.max(0, CROSSFADER_CURVES.indexOf(curve));
+  return CROSSFADER_CURVES[(index + direction + CROSSFADER_CURVES.length) % CROSSFADER_CURVES.length];
+}
 export const PITCH_RANGES: readonly PitchRange[] = [0.06, 0.08, 0.16];
 export const BUFFER_SIZES: readonly AudioBufferSize[] = [256, 512, 1024];
 export const AUTO_TRANSITION_BEATS: readonly AutoTransitionBeats[] = [8, 16, 32];
@@ -114,14 +123,24 @@ export const DEFAULT_SETTINGS: AppSettings = {
  * predeterminado era `violet`; desde la v2 el acento es global y el predeterminado es el naranja
  * de la identidad. Un `violet` sin versión casi siempre es el valor por defecto heredado, no una
  * elección, y se migra al naranja; cualquier otro acento guardado se respeta.
+ * La v3 cambia las selectoras de mezcla predeterminadas (F y J pasan a identificar los decks):
+ * las que seguían en su valor anterior adoptan el nuevo. En la v4 MUTE pasa de Y a B.
  */
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 4;
 
 export function migrateStoredSettings(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const source = raw as Record<string, unknown>;
-  if (typeof source.settingsVersion === 'number' && source.settingsVersion >= SETTINGS_VERSION) return raw;
-  return source.accentColor === 'violet' ? { ...source, accentColor: DEFAULT_SETTINGS.accentColor } : raw;
+  const version = typeof source.settingsVersion === 'number' ? source.settingsVersion : 0;
+  if (version >= SETTINGS_VERSION) return raw;
+  let migrated = source;
+  if (version < 2 && source.accentColor === 'violet') migrated = { ...migrated, accentColor: DEFAULT_SETTINGS.accentColor };
+  if (version < 3 && source.shortcutBindings) {
+    migrated = { ...migrated, shortcutBindings: migrateLegacyShortcutBindings(source.shortcutBindings) };
+  } else if (version < 4 && source.shortcutBindings) {
+    migrated = { ...migrated, shortcutBindings: migrateLegacyConsoleBindings(source.shortcutBindings) };
+  }
+  return migrated;
 }
 
 /** Acota la tolerancia de SYNC a ±4–20 % en pasos de 1 %. */

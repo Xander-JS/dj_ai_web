@@ -16,10 +16,10 @@
 import 'fake-indexeddb/auto';
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { djStore } from '../src/store/useDJStore.ts';
 import { audioEngine } from '../src/audio/index.ts';
+import { getEffectiveLevels } from '../src/services/console/mixerPanelModel.ts';
+import { readMixerSource } from './helpers/mixerSource.ts';
 
 // Web Audio API mock para Node.js
 class MockAudioParam {
@@ -253,11 +253,8 @@ describe('Fase 21 Etapa 5 — Vúmetros RMS Reales en Tiempo Real', () => {
     assert.equal(nominal, 99);
   });
 
-  test('7. Eliminación definitiva de Math.random() en MixerConsole.tsx', () => {
-    const consoleCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/MixerConsole.tsx'),
-      'utf-8'
-    );
+  test('7. Eliminación definitiva de Math.random() en el mixer', () => {
+    const consoleCode = readMixerSource();
 
     // No debe existir Math.random en el archivo
     assert.equal(consoleCode.includes('Math.random()'), false, 'MixerConsole.tsx no debe contener Math.random()');
@@ -266,14 +263,11 @@ describe('Fase 21 Etapa 5 — Vúmetros RMS Reales en Tiempo Real', () => {
 
     // Debe contener las llamadas directas al motor de audio
     assert.ok(consoleCode.includes('audioEngine.getDeckVUMeter'), 'Debe consultar getDeckVUMeter del motor');
-    assert.ok(consoleCode.includes('audioEngine.getMasterVUMeter'), 'Debe consultar getMasterVUMeter del motor');
+    assert.ok(consoleCode.includes('audioEngine.getMasterStereoVUMeter'), 'Debe consultar el nivel Master L / R del motor');
   });
 
   test('8. Rendimiento: No se publican los niveles de 30 Hz en el store global', () => {
-    const consoleCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/MixerConsole.tsx'),
-      'utf-8'
-    );
+    const consoleCode = readMixerSource();
 
     // El store global no contiene propiedades de vúmetro de alta frecuencia
     assert.equal(consoleCode.includes('djStore.setVuLevel'), false, 'No debe publicar vúmetros en useDJStore');
@@ -282,14 +276,11 @@ describe('Fase 21 Etapa 5 — Vúmetros RMS Reales en Tiempo Real', () => {
     // Se usan estados locales useState(0) para las lecturas
     assert.ok(consoleCode.includes('const [vuA, setVuA] = useState(0)'), 'vuA debe ser estado local');
     assert.ok(consoleCode.includes('const [vuB, setVuB] = useState(0)'), 'vuB debe ser estado local');
-    assert.ok(consoleCode.includes('const [vuMaster, setVuMaster] = useState(0)'), 'vuMaster debe ser estado local');
+    assert.ok(consoleCode.includes('const [vuMaster, setVuMaster] = useState<StereoLevel>(SILENT_STEREO)'), 'vuMaster (L / R) debe ser estado local');
   });
 
   test('9. Control de ciclo de vida: Animación y temporizadores se limpian y respetan el estado playing', () => {
-    const consoleCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/MixerConsole.tsx'),
-      'utf-8'
-    );
+    const consoleCode = readMixerSource();
 
     // Verifica que existe condición de salida si no hay reproducción activa
     assert.ok(consoleCode.includes('if (!isAnyPlaying)'), 'Debe detenerse si no hay reproducción activa');
@@ -297,10 +288,24 @@ describe('Fase 21 Etapa 5 — Vúmetros RMS Reales en Tiempo Real', () => {
     // Verifica la función de limpieza que cancela la animación
     assert.ok(consoleCode.includes('safeCancelAnimationFrame'), 'Debe cancelar la animación al desmontar o detener');
 
-    // Verifica que se derivan niveles efectivos en reposo
-    assert.ok(consoleCode.includes('effectiveVuA = isPlayingA ? vuA : 0'), 'Canal A debe reportar 0 si no reproduce');
-    assert.ok(consoleCode.includes('effectiveVuB = isPlayingB ? vuB : 0'), 'Canal B debe reportar 0 si no reproduce');
-    assert.ok(consoleCode.includes('effectiveVuMaster = isAnyPlaying && !isMasterMuted ? vuMaster : 0'), 'Master debe reportar 0 si no reproduce o está muteado');
+    // Los niveles efectivos se derivan del modelo puro: 0 en reposo y Master a 0 con MUTE
+    assert.ok(consoleCode.includes('getEffectiveLevels({ isPlayingA, isPlayingB, isMasterMuted'), 'El mixer debe derivar los niveles efectivos');
+    const loud = { levelA: 70, levelB: 60, master: { left: 80, right: 75 } };
+    assert.deepEqual(
+      getEffectiveLevels({ ...loud, isPlayingA: false, isPlayingB: false, isMasterMuted: false }),
+      { a: 0, b: 0, master: { left: 0, right: 0 } },
+      'Sin reproducción todos los niveles son 0'
+    );
+    assert.deepEqual(
+      getEffectiveLevels({ ...loud, isPlayingA: true, isPlayingB: false, isMasterMuted: false }),
+      { a: 70, b: 0, master: { left: 80, right: 75 } },
+      'Canal B debe reportar 0 si no reproduce'
+    );
+    assert.deepEqual(
+      getEffectiveLevels({ ...loud, isPlayingA: true, isPlayingB: true, isMasterMuted: true }).master,
+      { left: 0, right: 0 },
+      'Master debe reportar 0 con MUTE'
+    );
   });
 
   test('10. La consola conserva intacta toda la funcionalidad de controles de la Etapa 4', () => {

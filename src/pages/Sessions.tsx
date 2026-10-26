@@ -33,6 +33,7 @@ import { sessionRecorder, type RecordedSession } from '../session/SessionRecorde
 import { createStoredSessionRecord, MAX_STORED_SESSIONS, type StoredSessionFormat, type StoredSessionRecord } from '../session/SessionHistory';
 import type { SessionExportResult } from '../session/SessionExporter';
 import { notificationCenter } from '../services/notifications/notificationCenter';
+import { sessionCaptureControl } from '../services/session/sessionCaptureControl';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage';
 import { formatDuration } from '../utils/formatters';
 import { useDJStore } from '../store/useDJStore';
@@ -78,7 +79,7 @@ const STATUS_ICON: Record<SessionPageStatus, LucideIcon> = {
 
 export const Sessions: React.FC = () => {
   const { t } = useTranslation();
-  const { deckA, deckB, startSessionCapture, finalizeSessionCapture } = useDJStore();
+  const { deckA, deckB } = useDJStore();
   // Solo se puede iniciar la captura mientras suena audio en algún deck
   const isAudioPlaying = deckA.playbackState === 'playing' || deckB.playbackState === 'playing';
   const navigate = useNavigate();
@@ -154,6 +155,28 @@ export const Sessions: React.FC = () => {
     await loadStoredSessions();
   };
 
+  // La captura puede iniciarse o detenerse aquí, desde la consola del Mixer o con su atajo:
+  // la vista sigue siempre el estado real del grabador
+  useEffect(() => sessionCaptureControl.subscribe(() => {
+    const snapshot = sessionCaptureControl.getSnapshot();
+    if (snapshot.active) {
+      releaseSessionDownload(downloadRef.current);
+      downloadRef.current = null;
+      setDownload(null);
+      const startedAt = snapshot.startedAtEpochMs ?? Date.now();
+      setCaptureStartedAt(startedAt);
+      setClockNow(startedAt);
+      setCapture({ active: true, session: null });
+      setStatus('recording');
+    } else {
+      const finalized = sessionRecorder.getSession();
+      const valid = isExportableSession(finalized) ? finalized : null;
+      setCapture({ active: false, session: valid });
+      setStatus(valid ? 'ready' : 'empty');
+    }
+    setErrorMessage('');
+  }), []);
+
   // Durante la captura la lectura de duración sigue el tiempo transcurrido
   useEffect(() => {
     if (!capture.active) return;
@@ -185,31 +208,23 @@ export const Sessions: React.FC = () => {
     setDownload(null);
   };
 
+  // El estado de la vista lo aplica la suscripción a sessionCaptureControl; aquí solo los fallos
   const handleStartCapture = (): void => {
-    try {
-      clearDownload();
-      const started = startSessionCapture();
-      setCaptureStartedAt(started.createdAtEpochMs);
-      setClockNow(started.createdAtEpochMs);
-      setCapture({ active: true, session: null });
-      setStatus('recording');
-      setErrorMessage('');
-    } catch (error) {
+    const result = sessionCaptureControl.start();
+    if (result.status === 'error') {
       setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(result.error instanceof Error ? result.error.message : String(result.error));
+    } else if (result.status === 'blocked' && result.reason !== 'already-active') {
+      setStatus('error');
+      setErrorMessage(t(`mixer.rec_blocked_${result.reason.replace('-', '_')}`));
     }
   };
 
   const handleFinalizeCapture = (): void => {
-    try {
-      const finalized = finalizeSessionCapture();
-      const valid = isExportableSession(finalized) ? finalized : null;
-      setCapture({ active: false, session: valid });
-      setStatus(valid ? 'ready' : 'empty');
-      setErrorMessage('');
-    } catch (error) {
+    const result = sessionCaptureControl.stop();
+    if (result.status === 'error') {
       setStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(result.error instanceof Error ? result.error.message : String(result.error));
     }
   };
 

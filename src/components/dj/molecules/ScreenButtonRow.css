@@ -1,0 +1,12 @@
+/* Cinco teclas de igual ancho sobre el borde superior del marco de la pantalla */
+.screen-button-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  height: var(--screen-key-height, 26px);
+}
+
+/* Serigrafía de LOAD en el color de su deck, encendida o no */
+.screen-button-row__load:not(.is-lit) {
+  color: color-mix(in srgb, var(--console-tone) 55%, var(--console-silkscreen-dim));
+}

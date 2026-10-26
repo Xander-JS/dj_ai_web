@@ -2,7 +2,7 @@
  * SYSTEM DJ — Test Suite: Atajos de consola, grabación y selector de canciones
  * Convención F = Deck A / J = Deck B (Espacio, volumen y Pitch Bend), Master y MUTE, curva del
  * crossfader, selectoras de EQ/FILTER, comandos reasignables y su migración, control compartido
- * de la grabación de sesión y puente del selector de canciones de la consola.
+ * de la grabación de sesión y botones LOAD de la pantalla digital.
  */
 
 import 'fake-indexeddb/auto';
@@ -38,7 +38,7 @@ import {
 import { djStore } from '../src/store/useDJStore.ts';
 import { SessionRecorder } from '../src/session/SessionRecorder.ts';
 import { SessionCaptureControl, type SessionCaptureDeps } from '../src/services/session/sessionCaptureControl.ts';
-import { registerTrackPicker, toggleTrackPicker } from '../src/services/console/trackPickerBridge.ts';
+import { digitalScreenStore } from '../src/services/console/digitalScreenStore.ts';
 import type { DeckId } from '../src/types/deck.ts';
 
 interface FakeKeyEvent {
@@ -105,7 +105,7 @@ function recordingTarget() {
     pitchBend: (deckId, direction) => calls.push(`bend:${deckId}:${direction}`),
     cycleCrossfaderCurve: (direction) => calls.push(`curve:${direction}`),
     toggleRecording: () => calls.push('record'),
-    toggleTrackPicker: (deckId) => calls.push(`picker:${deckId}`),
+    pressLoadButton: (deckId) => calls.push(`picker:${deckId}`),
     navigate: (section) => calls.push(`nav:${section}`),
   };
   return { target, calls };
@@ -608,40 +608,47 @@ describe('Grabación de sesión — control compartido', () => {
   });
 });
 
-describe('Selector de canciones — puente de la consola', () => {
-  it('abre el selector del deck registrado y deja de hacerlo al desmontarse', () => {
-    const opened: string[] = [];
-    assert.equal(toggleTrackPicker('A'), false);
-    const unregisterA = registerTrackPicker('A', () => opened.push('A'));
-    const unregisterB = registerTrackPicker('B', () => opened.push('B'));
-    assert.equal(toggleTrackPicker('A'), true);
-    assert.equal(toggleTrackPicker('B'), true);
-    unregisterA();
-    assert.equal(toggleTrackPicker('A'), false);
-    unregisterB();
-    assert.deepEqual(opened, ['A', 'B']);
+describe('Botones LOAD de la pantalla digital — atajos V / N', () => {
+  it('solo actúan con la pantalla montada (dentro del Mixer)', () => {
+    digitalScreenStore.reset();
+    const target = createDJShortcutTarget();
+    assert.equal(target.pressLoadButton!('A'), false);
+    assert.equal(digitalScreenStore.getSnapshot().view, 'normal');
+    const detach = digitalScreenStore.attach();
+    assert.equal(target.pressLoadButton!('A'), true);
+    assert.equal(digitalScreenStore.getSnapshot().view, 'menu');
+    assert.equal(target.isNavigationCaptured!(), true);
+    detach();
+    assert.equal(digitalScreenStore.getSnapshot().view, 'normal');
+    assert.equal(target.isNavigationCaptured!(), false);
+    assert.equal(target.pressLoadButton!('B'), false);
   });
 });
 
 describe('Consola — integración visual e i18n', () => {
   const read = (file: string) => fs.readFileSync(path.resolve(process.cwd(), file), 'utf-8');
 
-  it('la consola incluye los selectores A / B y el panel REC; Sesiones usa el control compartido', () => {
-    const consoleCode = read('src/components/dj/MixerConsole.tsx');
-    assert.match(consoleCode, /<ConsoleTrackPicker deckId="A" \/>/);
-    assert.match(consoleCode, /<ConsoleRecPanel \/>/);
-    assert.match(consoleCode, /<ConsoleTrackPicker deckId="B" \/>/);
-    const pickerCode = read('src/components/dj/ConsoleTrackPicker.tsx');
-    // Los atajos se consultan en Ajustes: la consola no muestra teclas (V / N, F + 6, REC)
-    for (const file of ['src/components/dj/MixerConsole.tsx', 'src/components/dj/ConsoleTrackPicker.tsx', 'src/components/dj/ConsoleRecPanel.tsx']) {
+  it('la carga y REC viven en la pantalla digital, no en la consola; Sesiones usa el control compartido', () => {
+    const consoleCode = read('src/components/dj/organisms/MixerConsole.tsx');
+    assert.doesNotMatch(consoleCode, /ConsoleTrackPicker|ConsoleRecPanel|mixer-deckbar/);
+    for (const removed of ['ConsoleTrackPicker.tsx', 'ConsoleRecPanel.tsx']) {
+      assert.equal(fs.existsSync(path.resolve(process.cwd(), 'src/components/dj', removed)), false, removed);
+    }
+    // Los atajos se consultan en Ajustes: la pantalla no muestra teclas (V / N, 5)
+    for (const file of [
+      'src/components/dj/organisms/MixerConsole.tsx',
+      'src/components/dj/organisms/DigitalScreen.tsx',
+      'src/components/dj/molecules/ScreenButtonRow.tsx',
+    ]) {
       // Solo el código: los comentarios pueden mencionar el atajo sin mostrarlo
       const code = read(file).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
       assert.doesNotMatch(code, /formatKeyCode|DECK_KEY_CODES|<kbd|F \+ 6|J \+ 6/, file);
     }
-    const recCode = read('src/components/dj/ConsoleRecPanel.tsx');
-    assert.ok(recCode.indexOf('console-rec-readout') < recCode.indexOf('console-rec-btn'), 'el tiempo va sobre el botón REC');
-    assert.match(pickerCode, /loadTrackToDeck\(deckId, track\)/);
-    assert.match(pickerCode, /indexedDBStorage\s*\.getAllTracks\(\)/);
+    const screenCode = read('src/components/dj/organisms/DigitalScreen.tsx');
+    assert.match(screenCode, /toggleSessionCaptureWithFeedback\(\)/);
+    const loadCode = read('src/services/console/libraryLoadFeedback.ts');
+    assert.match(loadCode, /loadTrackToDeck\(deckId, track\)/);
+    assert.match(loadCode, /indexedDBStorage\.getAllTracks\(\)/);
     const sessionsCode = read('src/pages/Sessions.tsx');
     assert.match(sessionsCode, /sessionCaptureControl\.subscribe/);
     assert.match(sessionsCode, /sessionCaptureControl\.start\(\)/);
@@ -652,7 +659,7 @@ describe('Consola — integración visual e i18n', () => {
     const es = JSON.parse(read('src/i18n/locales/es/translation.json'));
     const en = JSON.parse(read('src/i18n/locales/en/translation.json'));
     const mixerKeys = Object.keys(es.mixer).filter((k) => k.startsWith('rec_') || k.startsWith('picker_'));
-    assert.ok(mixerKeys.length >= 20);
+    assert.ok(mixerKeys.length >= 10);
     for (const k of mixerKeys) assert.equal(typeof en.mixer[k], 'string', `mixer.${k}`);
     assert.equal(en.mixer.rec_saved, 'Session saved');
     assert.equal(es.mixer.rec_saved, 'Sesión guardada');

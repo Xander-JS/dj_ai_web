@@ -225,19 +225,19 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
 
     // Las clases compartidas de insignia de estado viven en Badge.css.
     const cssContent = fs.readFileSync(path.resolve(process.cwd(), 'src/components/ui/Badge.css'), 'utf-8');
-    const deckCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.css'), 'utf-8');
     const libraryCss = fs.readFileSync(path.resolve(process.cwd(), 'src/pages/Library.css'), 'utf-8');
-    const deckSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'), 'utf-8');
+    const deckModel = fs.readFileSync(path.resolve(process.cwd(), 'src/services/console/deckPanelModel.ts'), 'utf-8');
     for (const status of statuses) {
       assert.ok(
         cssContent.includes(`.status-badge-${status}`),
         `Falta clase CSS compartida .status-badge-${status} en Badge.css`
       );
     }
-    assert.ok(deckCss.includes('.dj-deck .status-badge'), 'Deck debe conservar su variante compacta');
-    assert.ok(deckCss.includes('padding: 2px var(--space-2)'), 'Deck debe conservar el padding compacto original');
-    assert.ok(deckSource.includes("import '../ui/Badge.css';"), 'Deck debe cargar los estilos compartidos al entrar por la ruta lazy de Mixer');
-    assert.equal(deckCss.includes('.status-badge-pending'), false, 'Deck no debe duplicar los estados compartidos');
+    // El deck muestra el estado con su propio aviso de consola, con los mismos textos de Biblioteca
+    assert.ok(deckModel.includes('msg(`library.status_${shown}`)'), 'El aviso del deck reutiliza los textos de estado de Biblioteca');
+    for (const status of statuses) {
+      assert.ok(deckModel.includes(`'library.status_${status}_title'`), `El aviso del deck explica el estado ${status}`);
+    }
     assert.equal(libraryCss.includes('.status-badge-pending'), false, 'Library no debe duplicar los estados compartidos');
   });
 
@@ -487,7 +487,6 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
 
   it('4.11 Tema claro y oscuro: Estilos usan exclusivamente tokens semánticos del sistema de diseño', () => {
     const badgeCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/ui/Badge.css'), 'utf-8');
-    const deckCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.css'), 'utf-8');
 
     // Las clases compartidas deben usar tokens CSS y color-mix, manteniendo la densidad del Deck.
     const analysisSectionMatch = badgeCss.indexOf('/* Shared analysis status badges used by Library and Deck. */');
@@ -509,7 +508,6 @@ describe('Fase 22 — Etapa 4: Integración del Análisis Musical en la Bibliote
     assert.ok(analysisStyles.includes('var(--color-error)'));
     assert.ok(analysisStyles.includes('var(--color-warning)'));
     assert.ok(analysisStyles.includes('var(--text-secondary)'));
-    assert.ok(deckCss.includes('padding: 2px var(--space-2)'));
   });
 
   it('4.12 Ausencia de regresiones en las funcionalidades existentes de la Biblioteca (carga en Decks)', async () => {

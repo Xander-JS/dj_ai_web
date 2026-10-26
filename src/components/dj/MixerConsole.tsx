@@ -8,6 +8,8 @@ import { bandRanges, updateLevels } from '../player/visualizerModel';
 import type { PlaybackState } from '../../types/deck';
 import { ConsoleKnob } from './ConsoleKnob';
 import { ConsoleFader } from './ConsoleFader';
+import { ConsoleTrackPicker } from './ConsoleTrackPicker';
+import { ConsoleRecPanel } from './ConsoleRecPanel';
 import { MIXER_ASSETS } from './mixerAssets';
 import './consoleTheme.css';
 import './MixerConsole.css';
@@ -349,6 +351,13 @@ export const MixerConsole: React.FC = () => {
           {isAnyPlaying ? t('mixer.status_live') : t('mixer.status_standby')}
         </span>
       </header>
+
+      {/* Carga desde la biblioteca y grabación de la sesión, alineadas con CH 1 | MASTER | CH 2 */}
+      <div className="mixer-deckbar" data-testid="mixer-deckbar">
+        <ConsoleTrackPicker deckId="A" />
+        <ConsoleRecPanel />
+        <ConsoleTrackPicker deckId="B" />
+      </div>
 
       <div className="mixer-channels-area">
         <ChannelStrip

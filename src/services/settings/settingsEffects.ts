@@ -10,48 +10,29 @@ import { audioEngine } from '../../audio';
 import { djStore } from '../../store/useDJStore';
 import { settingsStore, type AppSettings } from '../../store/useSettingsStore';
 import { applyAppearanceToRoot } from './appearance';
-import { installKeyboardShortcuts, type MixParam } from '../keyboard/keyboardShortcuts';
+import { installKeyboardShortcuts } from '../keyboard/keyboardShortcuts';
+import { createDJShortcutTarget } from '../keyboard/djShortcutTarget';
 import { transitionPlayer } from '../../audio/transitionPlayer';
 import { navigateToSection } from '../navigation/consoleNavigator';
-import type { DeckId } from '../../types/deck';
+import { toggleTrackPicker } from '../console/trackPickerBridge';
+import { toggleSessionCaptureWithFeedback } from '../session/sessionCaptureFeedback';
 
 let uninstallShortcuts: (() => void) | null = null;
 
-function getMixValue(deckId: DeckId, param: MixParam): number {
-  const channel = deckId === 'A' ? djStore.getSnapshot().mixer.channelA : djStore.getSnapshot().mixer.channelB;
-  return param === 'gain' ? channel.gain : channel.eq[param];
-}
-
-function setMixValue(deckId: DeckId, param: MixParam, value: number): void {
-  if (param === 'gain') djStore.setChannelGain(deckId, value);
-  else if (param === 'filter') djStore.setChannelFilter(deckId, value);
-  else djStore.setChannelEq(deckId, param, value);
-}
-
 function setShortcutsEnabled(enabled: boolean): void {
   if (enabled && !uninstallShortcuts && typeof window !== 'undefined') {
-    uninstallShortcuts = installKeyboardShortcuts({
-      togglePlayDeck: (deckId) => djStore.togglePlayDeck(deckId),
-      handleCueDown: (deckId) => djStore.handleCueDown(deckId),
-      handleCueUp: (deckId) => djStore.handleCueUp(deckId),
-      toggleSync: (deckId) => djStore.toggleSync(deckId),
-      getCrossfader: () => djStore.getSnapshot().mixer.crossfader,
-      setCrossfader: (position) => djStore.setCrossfader(position),
-      hasHotCue: (deckId, slot) => {
-        const deck = deckId === 'A' ? djStore.getSnapshot().deckA : djStore.getSnapshot().deckB;
-        return deck.hotCues.some((cue) => cue.id === slot);
-      },
-      jumpToHotCue: (deckId, slot) => djStore.jumpToHotCue(deckId, slot),
-      setHotCue: (deckId, slot) => djStore.setHotCue(deckId, slot),
-      getMixValue,
-      setMixValue,
-      navigate: (section) => {
-        navigateToSection(section);
-      },
-    },
-    () => settingsStore.getSnapshot().shortcutBindings,
-    window,
-    () => settingsStore.getSnapshot().navigationBindings);
+    uninstallShortcuts = installKeyboardShortcuts(
+      createDJShortcutTarget({
+        toggleRecording: () => toggleSessionCaptureWithFeedback(),
+        toggleTrackPicker: (deckId) => toggleTrackPicker(deckId),
+        navigate: (section) => {
+          navigateToSection(section);
+        },
+      }),
+      () => settingsStore.getSnapshot().shortcutBindings,
+      window,
+      () => settingsStore.getSnapshot().navigationBindings,
+    );
   } else if (!enabled && uninstallShortcuts) {
     uninstallShortcuts();
     uninstallShortcuts = null;

@@ -12,8 +12,6 @@ const BASE = '/assets/mixer';
 export const MIXER_ASSETS = {
   knobMain: `${BASE}/knobs/knob-main.png`,
   faderCap: `${BASE}/faders/fader-cap.png`,
-  buttonOff: `${BASE}/buttons/button-off.png`,
-  buttonOn: `${BASE}/buttons/button-on.png`,
   brushedMetal: `${BASE}/textures/brushed-metal.jpg`,
 } as const;
 

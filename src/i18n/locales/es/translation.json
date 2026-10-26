@@ -525,7 +525,27 @@
     "mute_off_title": "Silenciar la salida Master",
     "crossfader_title": "Crossfader",
     "crossfader_label": "Crossfader entre Deck A y Deck B",
-    "crossfader_value": "Deck A {{a}} %, Deck B {{b}} %"
+    "crossfader_value": "Deck A {{a}} %, Deck B {{b}} %",
+    "picker_label": "Deck {{deck}}",
+    "picker_placeholder": "Cargar pista…",
+    "picker_aria": "Cargar una pista de la biblioteca en el Deck {{deck}}",
+    "picker_search": "Buscar en la biblioteca",
+    "picker_no_results": "Ninguna pista coincide",
+    "picker_empty": "La biblioteca está vacía",
+    "picker_library_error": "No se pudo leer la biblioteca.",
+    "rec_panel": "Grabación de la sesión",
+    "rec_label": "REC",
+    "rec_start": "Iniciar la grabación de la sesión",
+    "rec_stop": "Detener y guardar la grabación",
+    "rec_status": "Estado de grabación",
+    "rec_on": "ON",
+    "rec_off": "OFF",
+    "rec_elapsed": "Tiempo de la sesión",
+    "rec_saved": "Sesión guardada",
+    "rec_empty": "La grabación terminó sin eventos: no hay sesión que guardar.",
+    "rec_blocked_no_audio": "Reproduce un deck para empezar a grabar la sesión.",
+    "rec_blocked_export_busy": "Espera a que termine la exportación en curso para grabar.",
+    "rec_error": "No se pudo cambiar el estado de la grabación."
   },
   "notifications": {
     "unread": "{{count}} notificación(es) sin leer",
@@ -649,14 +669,20 @@
     "shortcuts": {
       "play_a": "Reproducir / Pausar Deck A",
       "play_b": "Reproducir / Pausar Deck B",
+      "volume_a": "Subir / bajar el volumen del Deck A",
+      "volume_b": "Subir / bajar el volumen del Deck B",
+      "pitch_bend_a": "Pitch Bend del Deck A (mientras se mantiene)",
+      "pitch_bend_b": "Pitch Bend del Deck B (mientras se mantiene)",
       "cue_a": "CUE Deck A",
       "sync_a": "SYNC Deck A",
       "cue_b": "CUE Deck B",
       "sync_b": "SYNC Deck B",
-      "crossfader_a": "Mover el crossfader hacia A",
-      "crossfader_b": "Mover el crossfader hacia B",
+      "crossfader_a_mix": "Mover el crossfader hacia A",
+      "crossfader_b_mix": "Mover el crossfader hacia B",
+      "crossfader_curve_mix": "Curva del crossfader anterior / siguiente (CP, LIN, CUT)",
       "hotcues_a": "Hot Cues 1–4 del Deck A",
-      "hotcues_b": "Hot Cues 1–4 del Deck B"
+      "hotcues_b": "Hot Cues 1–4 del Deck B",
+      "master_mix": "Subir / bajar el volumen Master"
     },
     "shortcuts_mix_title": "Atajos de mezcla",
     "shortcuts_mix_desc": "Mantén la tecla selectora y usa ← / → para ajustar el parámetro. Sin selectora, las flechas mueven el crossfader. Pulsa una tecla para reasignarla (Esc cancela).",
@@ -665,7 +691,7 @@
     "shortcuts_press_key": "Pulsa una tecla…",
     "shortcuts_binding_aria": "{{action}} Deck {{deck}}: tecla {{key}}. Pulsa para reasignar.",
     "shortcuts_binding_saved": "Tecla {{key}} asignada.",
-    "shortcuts_binding_invalid": "Usa una letra o un número como tecla selectora.",
+    "shortcuts_binding_invalid": "Usa una letra (incluida la Ñ) o un número como tecla.",
     "shortcuts_binding_reserved": "La tecla {{key}} ya la usa un atajo fijo.",
     "shortcuts_binding_duplicate": "La tecla {{key}} ya está asignada a otro comando.",
     "shortcuts_mix": {
@@ -796,7 +822,19 @@
       "a": "Plateado e iridiscente",
       "b": "Surcos con reflejos turquesa",
       "c": "Etiqueta amarilla de estudio"
-    }
+    },
+    "shortcuts_mixer_group": "Crossfader",
+    "shortcuts_mixer_short": "XF",
+    "shortcuts_console_title": "Atajos de consola",
+    "shortcuts_console_desc": "Pulsa una tecla para reasignarla (Esc cancela).",
+    "shortcuts_console_binding_aria": "{{action}}: tecla {{key}}. Pulsa para reasignar.",
+    "shortcuts_console": {
+      "mute": "Silenciar / reactivar el Master",
+      "record": "Iniciar / detener la grabación",
+      "libraryA": "Mostrar / ocultar la lista de canciones del Deck A",
+      "libraryB": "Mostrar / ocultar la lista de canciones del Deck B"
+    },
+    "shortcuts_nav_binding_reserved": "Shift + {{key}} ya lo usa el Pitch Bend de un deck."
   },
   "profile": {
     "title": "Mi Perfil",

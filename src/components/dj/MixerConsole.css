@@ -73,6 +73,16 @@
 }
 
 /* --------------------------------------------------------------------------
+   Barra de decks: selector A | REC | selector B, en las mismas columnas que los canales
+   -------------------------------------------------------------------------- */
+.mixer-deckbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-2);
+}
+
+/* --------------------------------------------------------------------------
    Columnas de canal
    -------------------------------------------------------------------------- */
 .mixer-channels-area {
@@ -592,7 +602,8 @@
     gap: var(--space-2);
   }
 
-  .mixer-channels-area {
+  .mixer-channels-area,
+  .mixer-deckbar {
     gap: var(--space-1);
   }
 
@@ -625,6 +636,10 @@
    Cada canal reparte sus pomos en horizontal y el fader queda a su lado.
    -------------------------------------------------------------------------- */
 @media (max-width: 900px) {
+  .mixer-deckbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1fr);
+  }
+
   .mixer-channels-area {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1fr);
     gap: var(--space-2);

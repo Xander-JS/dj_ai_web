@@ -25,6 +25,26 @@ import { indexedDBStorage } from '../src/services/storage/IndexedDBStorage.ts';
 import { createTrackFromFile } from '../src/utils/audioValidation.ts';
 import { createManualDownbeatConfirmation, createSuggestedDownbeat, isDownbeatConfirmed } from '../src/utils/downbeat.ts';
 import type { Track } from '../src/types/track.ts';
+import type { DeckId } from '../src/types/deck.ts';
+import { getDeckBarSyncHint, getDeckNotices, getDeckSyncKeys, type DeckPanelInput, type PanelMessage } from '../src/services/console/deckPanelModel.ts';
+
+/** Entrada del modelo del panel con el estado real del store, como la arma el deck. */
+function panelInput(deckName: DeckId, overrides: Partial<DeckPanelInput> = {}): DeckPanelInput {
+  const snap = djStore.getSnapshot();
+  return {
+    deckName,
+    deck: deckName === 'A' ? snap.deckA : snap.deckB,
+    otherDeck: deckName === 'A' ? snap.deckB : snap.deckA,
+    syncMasterDeck: snap.syncMasterDeck,
+    seedIndex: -1,
+    isTriggeringAnalysis: false,
+    isPreparingBarSync: false,
+    syncLimitPercent: 8,
+    ...overrides,
+  };
+}
+
+const keyOf = (message: PanelMessage): string => ('key' in message ? message.key : message.text);
 
 const HASH_MASTER = '1111111111111111111111111111111111111111111111111111111111111111';
 const HASH_SLAVE = '2222222222222222222222222222222222222222222222222222222222222222';
@@ -187,14 +207,9 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // 1. El botón BAR SYNC aparece junto a SYNC y ALIGN
   // =========================================================================
   it('1. El botón BAR SYNC aparece junto a SYNC y ALIGN en el transporte de ambos decks', () => {
-    const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
-      'utf-8'
-    );
-    const cssSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.css'),
-      'utf-8'
-    );
+    const rowSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/molecules/DeckSyncRow.tsx'), 'utf-8');
+    const deckSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'), 'utf-8');
+    const keyCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/atoms/ConsoleKey.css'), 'utf-8');
     const esJson = JSON.parse(
       fs.readFileSync(path.resolve(process.cwd(), 'src/i18n/locales/es/translation.json'), 'utf-8')
     );
@@ -202,18 +217,22 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
       fs.readFileSync(path.resolve(process.cwd(), 'src/i18n/locales/en/translation.json'), 'utf-8')
     );
 
-    // 1.1 Verificar existencia y orden en el contenedor de transporte
-    assert.ok(deckSource.includes('className="deck-transport"'), 'Debe existir el contenedor deck-transport');
-    assert.ok(deckSource.includes('data-testid={`deck-${deckName.toLowerCase()}-sync`}'), 'Debe existir deck-sync');
-    assert.ok(deckSource.includes('data-testid={`deck-${deckName.toLowerCase()}-align`}'), 'Debe existir deck-align');
-    assert.ok(deckSource.includes('data-testid={`deck-${deckName.toLowerCase()}-barsync`}'), 'Debe existir deck-barsync');
+    // 1.1 Fila de sincronización: BAR SYNC, ALIGN, SYNC y KEY LOCK, en ese orden, en ambos decks
+    assert.ok(deckSource.includes('<DeckSyncRow'), 'El deck debe montar la fila de sincronización');
+    const order = ['barSync', 'align', 'sync', 'keyLock'].map((key) => rowSource.indexOf(`renderKey(keys.${key},`));
+    assert.ok(order.every((index) => index !== -1), 'Las cuatro teclas se renderizan');
+    assert.deepEqual([...order].sort((x, y) => x - y), order, 'Orden BAR SYNC · ALIGN · SYNC · KEY LOCK');
+    assert.ok(rowSource.includes('data-testid={`deck-${id}-${name}`}'), 'Cada tecla tiene su data-testid por deck');
+    for (const deck of ['A', 'B'] as const) {
+      const keys = getDeckSyncKeys(panelInput(deck));
+      assert.deepEqual(Object.keys(keys), ['barSync', 'align', 'sync', 'keyLock']);
+    }
 
-    // 1.2 Verificar estilos CSS del botón BAR SYNC
-    assert.ok(cssSource.includes('.btn-dj-barsync'), 'Debe existir la regla CSS .btn-dj-barsync');
-    assert.ok(cssSource.includes('.barsync-armed'), 'Debe existir .barsync-armed en Deck.css');
-    assert.ok(cssSource.includes('.barsync-aligned'), 'Debe existir .barsync-aligned en Deck.css');
-    assert.ok(cssSource.includes('.barsync-completed'), 'Debe existir .barsync-completed en Deck.css');
-    assert.ok(cssSource.includes('.barsync-rejected'), 'Debe existir .barsync-rejected en Deck.css');
+    // 1.2 Las luces de estado de las teclas existen como tonos del átomo ConsoleKey
+    for (const tone of ['amber', 'green', 'red', 'deck']) {
+      assert.ok(keyCss.includes(`.console-key--${tone}`), `Falta el tono .console-key--${tone}`);
+    }
+    assert.ok(keyCss.includes('.console-key.is-filled'), 'SYNC ✓ se rellena con el color del deck');
 
     // 1.3 Verificar paridad estricta i18n
     const requiredKeys = [
@@ -225,8 +244,7 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
       'bar_sync_completed',
       'bar_sync_cancelled',
       'bar_sync_rejected',
-      'bar_sync_badge_downbeat',
-      'bar_sync_badge_downbeat_title',
+      'bar_sync_notice',
       'bar_sync_armed_badge_tooltip',
       'bar_sync_already_aligned_badge_tooltip',
       'bar_sync_armed_btn_tooltip',
@@ -272,43 +290,56 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // 3. Los estados de preparación y rechazo se representan correctamente
   // =========================================================================
   it('3. Los estados de preparación y rechazo se representan correctamente sin ambigüedad', async () => {
-    const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
-      'utf-8'
-    );
+    const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4, 300);
+    const slaveTrack = createConfiguredTrack('slave.mp3', 120, HASH_SLAVE, 0.5, 4, 300);
+    await djStore.loadTrackToDeckA(masterTrack);
+    await djStore.loadTrackToDeckB(slaveTrack);
 
-    // 3.1 Badge solo se renderiza cuando status no es idle
-    assert.ok(deckSource.includes("barSync && barSync.status !== 'idle'"), 'Badge debe ocultarse en estado idle');
+    // 3.1 En reposo no hay aviso de BAR SYNC y la tecla está apagada
+    assert.equal(getDeckNotices(panelInput('B')).some((n) => n.id === 'barsync'), false, 'Aviso oculto en idle');
+    const idle = getDeckSyncKeys(panelInput('B')).barSync;
+    assert.equal(keyOf(idle.label), 'dj.bar_sync');
+    assert.equal(idle.light, null);
 
-    // 3.2 Representación de armed
-    assert.ok(deckSource.includes("barSync.status === 'armed'"), 'Debe comprobar status armed');
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_armed'"), 'Badge armed usa i18n');
-    assert.ok(deckSource.includes("disp: formatDeltaSeconds(barSync.displacementSec)"), 'Badge armed incluye desplazamiento');
-    assert.ok(deckSource.includes("t('dj.bar_sync_armed_badge_tooltip'"), 'Badge armed usa tooltip i18n con posiciones');
-    assert.ok(deckSource.includes("t('dj.bar_sync_armed_btn_tooltip'"), 'Botón armed usa tooltip i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_armed')"), 'Etiqueta de botón armed usa i18n');
+    // 3.2 ARMADO: tecla ámbar y aviso con las posiciones y el desplazamiento en el tooltip
+    await djStore.playDeckA();
+    audioEngine.seekDeck('B', 8.2);
+    djStore.prepareBarSync('B');
+    assert.equal(djStore.getSnapshot().deckB.barSync.status, 'armed');
+    const armedKey = getDeckSyncKeys(panelInput('B')).barSync;
+    assert.equal(keyOf(armedKey.label), 'dj.bar_sync_armed');
+    assert.equal(armedKey.light, 'amber');
+    assert.equal(keyOf(armedKey.tooltip), 'dj.bar_sync_armed_btn_tooltip');
+    const armedNotice = getDeckNotices(panelInput('B')).find((n) => n.id === 'barsync');
+    assert.ok(armedNotice, 'Aviso visible en armed');
+    assert.equal(keyOf(armedNotice.tooltip), 'dj.bar_sync_armed_badge_tooltip');
+    const armedValues = 'key' in armedNotice.tooltip ? armedNotice.tooltip.values ?? {} : {};
+    assert.ok(typeof armedValues.disp === 'string', 'El tooltip incluye el desplazamiento');
+    assert.ok(typeof armedValues.prepared === 'string', 'El tooltip incluye la posición preparada');
 
-    // 3.3 Representación de already_aligned
-    assert.ok(deckSource.includes("barSync.status === 'already_aligned'"), 'Debe comprobar status already_aligned');
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_aligned'"), 'Badge already_aligned usa i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_already_aligned_badge_tooltip'"), 'Badge already_aligned usa tooltip i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_aligned_btn_tooltip'"), 'Botón already_aligned usa tooltip i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_already_aligned')"), 'Etiqueta de botón already_aligned usa i18n');
+    // 3.3 Cancelado: ni ámbar ni verde
+    djStore.cancelBarSync('B');
+    const cancelledKey = getDeckSyncKeys(panelInput('B')).barSync;
+    assert.equal(cancelledKey.light, null);
+    assert.equal(keyOf(cancelledKey.tooltip), 'dj.bar_sync_cancelled_tooltip');
+    const cancelledNotice = getDeckNotices(panelInput('B')).find((n) => n.id === 'barsync');
+    assert.equal(keyOf(cancelledNotice!.tooltip), 'dj.bar_sync_cancelled_tooltip');
 
-    // 3.4 Representación de completed
-    assert.ok(deckSource.includes("barSync.status === 'completed'"), 'Debe comprobar status completed');
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_completed')"), 'Badge completed usa i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_completed')"), 'Etiqueta de botón completed usa i18n');
-
-    // 3.5 Representación de cancelled
-    assert.ok(deckSource.includes("barSync.status === 'cancelled'"), 'Debe comprobar status cancelled');
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_cancelled')"), 'Badge cancelled usa i18n');
-
-    // 3.6 Representación de rejected_*
-    assert.ok(deckSource.includes("barSyncStatus?.startsWith('rejected_')"), 'Debe detectar prefijo rejected_');
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_rejected')"), 'Badge rejected usa i18n');
-    assert.ok(deckSource.includes("t('dj.bar_sync_rejected')"), 'Etiqueta de botón rejected usa i18n');
-    assert.ok(deckSource.includes('t(barSyncReasonKey)'), 'El motivo de rechazo usa traducción según el estado');
+    // 3.4 Rechazo: tecla roja, aviso rojo y motivo traducido según el estado
+    await djStore.playDeckB();
+    djStore.prepareBarSync('B');
+    const status = djStore.getSnapshot().deckB.barSync.status;
+    assert.ok(status.startsWith('rejected_'), `Debe rechazarse con el Slave sonando (${status})`);
+    const rejectedKey = getDeckSyncKeys(panelInput('B')).barSync;
+    assert.equal(keyOf(rejectedKey.label), 'dj.bar_sync_rejected');
+    assert.equal(rejectedKey.light, 'red');
+    assert.equal(keyOf(rejectedKey.tooltip), `dj.bar_sync_reason_${status}`);
+    const rejectedNotice = getDeckNotices(panelInput('B')).find((n) => n.id === 'barsync');
+    assert.equal(rejectedNotice?.light, 'red');
+    assert.equal(keyOf(rejectedNotice!.tooltip), `dj.bar_sync_reason_${status}`);
+    const hint = getDeckBarSyncHint(panelInput('B'));
+    assert.equal(hint?.rejected, true, 'La guía bajo el deck anuncia el rechazo');
+    assert.equal(keyOf(hint!.message), `dj.bar_sync_reason_${status}`);
   });
 
   // =========================================================================
@@ -352,10 +383,6 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // 5. 'armed', 'already_aligned' y 'completed' no se presentan como equivalentes
   // =========================================================================
   it('5. armed, already_aligned y completed son estados contractualmente distintos y no equivalentes', () => {
-    const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
-      'utf-8'
-    );
     const esJson = JSON.parse(
       fs.readFileSync(path.resolve(process.cwd(), 'src/i18n/locales/es/translation.json'), 'utf-8')
     );
@@ -365,13 +392,16 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     assert.notEqual(esJson.dj.bar_sync_armed, esJson.dj.bar_sync_completed, 'armed y completed deben tener textos distintos');
     assert.notEqual(esJson.dj.bar_sync_already_aligned, esJson.dj.bar_sync_completed, 'already_aligned y completed deben tener textos distintos');
 
-    // 5.2 Clases CSS diferenciadas
-    assert.ok(deckSource.includes("isBarSyncArmed && 'barsync-armed'"), 'Clase barsync-armed');
-    assert.ok(deckSource.includes("isBarSyncAligned && 'barsync-aligned'"), 'Clase barsync-aligned');
-    assert.ok(deckSource.includes("barSyncStatus === 'completed' && 'barsync-completed'"), 'Clase barsync-completed');
-
-    // 5.3 Badges diferenciados
-    assert.ok(deckSource.includes("`barsync-badge-${barSync.status}`"), 'Badges con clases de estado específicas');
+    // 5.2 Cada estado tiene su propia luz: ARMADO ámbar, ALINEADO color del deck, LISTO verde
+    const lightFor = (status: 'armed' | 'already_aligned' | 'completed') => {
+      const input = panelInput('B');
+      const deck = { ...input.deck, track: input.deck.track, barSync: { ...input.deck.barSync, status } };
+      return getDeckSyncKeys({ ...input, deck }).barSync;
+    };
+    assert.equal(lightFor('armed').light, 'amber');
+    assert.equal(lightFor('already_aligned').light, 'tone');
+    assert.equal(lightFor('completed').light, 'green');
+    assert.equal(keyOf(lightFor('completed').label), 'dj.bar_sync_completed');
   });
 
   // =========================================================================
@@ -458,11 +488,11 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // =========================================================================
   it('8. Los errores no quedan ocultos ni muestran falsas confirmaciones de downbeat', async () => {
     const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
+      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'),
       'utf-8'
     );
 
-    // 8.1 Verificar que el badge de DOWNBEAT requiere validación estricta de hash y confirmación manual
+    // 8.1 Verificar que el estado de DOWNBEAT requiere validación estricta de hash y confirmación manual
     assert.ok(
       deckSource.includes('isDownbeatConfirmed(track?.downbeat, track?.fileMeta?.contentHash)'),
       'Deck.tsx debe validar el downbeat con isDownbeatConfirmed antes de mostrar el badge'
@@ -508,9 +538,11 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     assert.equal(snap.deckB.barSync.status, 'rejected_unconfirmed');
     assert.equal(snap.deckB.barSync.reason, plan.reason);
 
-    // 8.4 En Deck.tsx, la razón no queda oculta y se muestra en el badge y en el tooltip
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_rejected')"));
-    assert.ok(deckSource.includes('t(barSyncReasonKey)'));
+    // 8.4 La razón no queda oculta: aviso RECHAZADO con el motivo y guía bajo el deck
+    const notice = getDeckNotices(panelInput('B')).find((n) => n.id === 'barsync');
+    assert.ok(notice, 'El aviso de BAR SYNC se muestra tras el rechazo');
+    assert.equal(keyOf(notice.tooltip), 'dj.bar_sync_reason_rejected_unconfirmed');
+    assert.equal(keyOf(getDeckBarSyncHint(panelInput('B'))!.message), 'dj.bar_sync_reason_rejected_unconfirmed');
   });
 
   // =========================================================================
@@ -518,7 +550,7 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // =========================================================================
   it('9. El feedback visual incluye desplazamiento (Δ), tooltips multilingües y tiempo de alta precisión', async () => {
     const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
+      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'),
       'utf-8'
     );
     const esJson = JSON.parse(
@@ -528,21 +560,27 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
       fs.readFileSync(path.resolve(process.cwd(), 'src/i18n/locales/en/translation.json'), 'utf-8')
     );
 
-    // 9.1 Verificar que el badge formatea el desplazamiento con el símbolo Δ
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_armed', { prepared:"), 'Badge ARMED localiza posición y desplazamiento');
-    assert.ok(deckSource.includes("t('dj.bar_sync_badge_aligned', { prepared:"), 'Badge ALIGNED localiza posición y desplazamiento');
+    // 9.1 El aviso dice BAR SYNC y su estado; posición y desplazamiento Δ van en su tooltip
+    assert.ok(esJson.dj.bar_sync_notice.includes('{{state}}'));
+    assert.ok(enJson.dj.bar_sync_notice.includes('{{state}}'));
+    assert.ok(esJson.dj.bar_sync_already_aligned_badge_tooltip.includes('Δ {{disp}}'));
+    assert.ok(enJson.dj.bar_sync_already_aligned_badge_tooltip.includes('Δ {{disp}}'));
 
-    // 9.2 Verificar que el item de tiempo dispone de data-testid y tooltip con precisión de milisegundos
-    assert.ok(
-      deckSource.includes('data-testid={`deck-${deckName.toLowerCase()}-time`}'),
-      'Item de tiempo debe tener data-testid para comprobación en UI'
+    // 9.2 El tiempo vive en la pantalla digital: data-testid y tooltip con precisión de milisegundos
+    const techSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/molecules/ScreenTechInfo.tsx'),
+      'utf-8'
     );
     assert.ok(
-      deckSource.includes("t('dj.bar_sync_time_tooltip'"),
+      techSource.includes('data-testid={`screen-tech-${id}-${column}`}'),
+      'Cada valor técnico (incluido el tiempo) debe tener data-testid para comprobación en UI'
+    );
+    assert.ok(
+      techSource.includes("t('dj.bar_sync_time_tooltip'"),
       'Item de tiempo debe invocar la traducción de precisión de tiempo'
     );
     assert.ok(
-      deckSource.includes('currentTime.toFixed(3)'),
+      techSource.includes('deck.currentTime.toFixed(3)'),
       'El tooltip de tiempo debe incluir currentTime con 3 decimales (milisegundos)'
     );
 
@@ -553,12 +591,7 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
       'bar_sync_armed_btn_tooltip',
       'bar_sync_aligned_btn_tooltip',
       'bar_sync_time_tooltip',
-      'bar_sync_badge_preparing',
-      'bar_sync_badge_armed',
-      'bar_sync_badge_aligned',
-      'bar_sync_badge_completed',
-      'bar_sync_badge_cancelled',
-      'bar_sync_badge_rejected',
+      'bar_sync_notice',
       'bar_sync_reason_rejected_state',
       'bar_sync_reason_rejected_unconfirmed',
       'bar_sync_reason_rejected_no_downbeat',
@@ -583,8 +616,6 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
     assert.equal(esJson.dj.bar_sync_already_aligned, 'ALINEADO');
     assert.equal(esJson.dj.bar_sync_completed, 'LISTO');
     assert.equal(esJson.dj.bar_sync_rejected, 'RECHAZADO');
-    assert.ok(esJson.dj.bar_sync_badge_armed.includes('{{prepared}}'));
-    assert.ok(enJson.dj.bar_sync_badge_armed.includes('{{prepared}}'));
 
     // 9.4 Cancelación interactiva: pulsar BAR SYNC cuando está armed o aligned cancela el estado
     const masterTrack = createConfiguredTrack('master.mp3', 120, HASH_MASTER, 1.0, 4, 300);
@@ -616,35 +647,32 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // =========================================================================
   it('10. Tooltips visuales CSS en BAR SYNC badge e indicador de tiempo', async () => {
     const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
-      'utf-8'
-    );
-    const cssSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.css'),
+      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'),
       'utf-8'
     );
 
-    // 10.1 BAR SYNC Badge: preserva title y añade data-tooltip, deck-tooltip-trigger y accesibilidad
-    assert.ok(deckSource.includes("title={barSyncBadgeTooltip}"), 'Badge conserva atributo title nativo');
-    assert.ok(deckSource.includes("data-tooltip={barSyncBadgeTooltip}"), 'Badge dispone de data-tooltip para renderizado CSS');
-    assert.ok(deckSource.includes("'deck-tooltip-trigger'"), 'Badge incluye clase deck-tooltip-trigger');
-    assert.ok(deckSource.includes('role="note"'), 'Elementos con tooltip definen role="note"');
-    assert.ok(deckSource.includes('tabIndex={0}'), 'Elementos con tooltip son accesibles vía teclado (tabIndex=0)');
+    // 10.1 Avisos del deck (BAR SYNC incluido): tooltip propio, nota accesible y enfocable por teclado
+    assert.ok(deckSource.includes('<DeckNoticeStrip'), 'El deck monta la franja de avisos');
+    const badgeSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/atoms/ConsoleBadge.tsx'), 'utf-8');
+    assert.ok(badgeSource.includes('data-tooltip={tooltip}'), 'El aviso dispone de data-tooltip para renderizado CSS');
+    assert.ok(badgeSource.includes('aria-description={tooltip}'), 'El tooltip forma parte de la descripción accesible');
+    assert.ok(badgeSource.includes('role="note"'), 'Elementos con tooltip definen role="note"');
+    assert.ok(badgeSource.includes('tabIndex={0}'), 'Elementos con tooltip son accesibles vía teclado (tabIndex=0)');
 
-    // 10.2 Indicador de tiempo: preserva title y añade data-tooltip, deck-stat-time y deck-tooltip-trigger
-    assert.ok(deckSource.includes("title={timeStatTooltip}"), 'Tiempo conserva atributo title nativo');
-    assert.ok(deckSource.includes("data-tooltip={timeStatTooltip}"), 'Tiempo dispone de data-tooltip para renderizado CSS');
-    assert.ok(deckSource.includes('className="deck-stat-item deck-stat-time deck-tooltip-trigger"'), 'Tiempo incluye deck-stat-time y deck-tooltip-trigger');
+    // 10.2 Indicador de tiempo: ahora en la pantalla digital, con el tooltip de precisión como title
+    const techSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/molecules/ScreenTechInfo.tsx'),
+      'utf-8'
+    );
+    assert.ok(techSource.includes("title={column === 'time' ? timeTooltip : undefined}"), 'Tiempo conserva atributo title nativo');
 
     // 10.3 Reglas CSS para tooltips: pseudo-elementos ::after, hover, focus-visible y z-index
-    assert.ok(cssSource.includes('.deck-tooltip-trigger {'), 'Deck.css define .deck-tooltip-trigger');
-    assert.ok(cssSource.includes('.deck-tooltip-trigger[data-tooltip]:not([data-tooltip=""])::after'), 'Deck.css define pseudo-elemento ::after con data-tooltip');
-    assert.ok(cssSource.includes('content: attr(data-tooltip);'), 'Deck.css extrae contenido mediante attr(data-tooltip)');
-    assert.ok(cssSource.includes('.deck-tooltip-trigger[data-tooltip]:not([data-tooltip=""]):hover::after'), 'Deck.css activa tooltip al hover');
-    assert.ok(cssSource.includes('.deck-tooltip-trigger[data-tooltip]:not([data-tooltip=""]):focus-visible::after'), 'Deck.css activa tooltip en foco de teclado focus-visible');
-    assert.ok(cssSource.includes('.deck-stat-time[data-tooltip]::after'), 'Deck.css alinea el tooltip de tiempo a la derecha');
-    assert.ok(cssSource.includes('position: relative;'), 'Deck.css establece position: relative en contenedor');
-    assert.ok(cssSource.includes('z-index: 1000;'), 'Deck.css asigna z-index elevado a los tooltips');
-    assert.ok(cssSource.includes('z-index: 25;'), 'Deck.css asigna contexto de apilamiento a deck-header');
+    const badgeCss = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/atoms/ConsoleBadge.css'), 'utf-8');
+    assert.ok(badgeCss.includes('.console-badge[data-tooltip]:not([data-tooltip=""])::after'), 'Pseudo-elemento ::after con data-tooltip');
+    assert.ok(badgeCss.includes('content: attr(data-tooltip);'), 'Contenido mediante attr(data-tooltip)');
+    assert.ok(badgeCss.includes('.console-badge[data-tooltip]:not([data-tooltip=""]):hover::after'), 'Tooltip al hover');
+    assert.ok(badgeCss.includes('.console-badge[data-tooltip]:not([data-tooltip=""]):focus-visible::after'), 'Tooltip en foco de teclado focus-visible');
+    assert.ok(badgeCss.includes('position: relative;'), 'El aviso es el contenedor del tooltip');
+    assert.ok(badgeCss.includes('z-index: 1000;'), 'Tooltip por encima del resto de la consola');
   });
 });

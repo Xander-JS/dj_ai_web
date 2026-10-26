@@ -525,7 +525,27 @@
     "mute_off_title": "Mute the Master output",
     "crossfader_title": "Crossfader",
     "crossfader_label": "Crossfader between Deck A and Deck B",
-    "crossfader_value": "Deck A {{a}}%, Deck B {{b}}%"
+    "crossfader_value": "Deck A {{a}}%, Deck B {{b}}%",
+    "picker_label": "Deck {{deck}}",
+    "picker_placeholder": "Load track…",
+    "picker_aria": "Load a library track into Deck {{deck}}",
+    "picker_search": "Search the library",
+    "picker_no_results": "No matching tracks",
+    "picker_empty": "The library is empty",
+    "picker_library_error": "The library could not be read.",
+    "rec_panel": "Session recording",
+    "rec_label": "REC",
+    "rec_start": "Start recording the session",
+    "rec_stop": "Stop and save the recording",
+    "rec_status": "Recording status",
+    "rec_on": "ON",
+    "rec_off": "OFF",
+    "rec_elapsed": "Session time",
+    "rec_saved": "Session saved",
+    "rec_empty": "The recording ended with no events: there is no session to save.",
+    "rec_blocked_no_audio": "Play a deck to start recording the session.",
+    "rec_blocked_export_busy": "Wait for the current export to finish before recording.",
+    "rec_error": "The recording state could not be changed."
   },
   "notifications": {
     "unread": "{{count}} unread notification(s)",
@@ -649,14 +669,20 @@
     "shortcuts": {
       "play_a": "Play / Pause Deck A",
       "play_b": "Play / Pause Deck B",
+      "volume_a": "Raise / lower Deck A volume",
+      "volume_b": "Raise / lower Deck B volume",
+      "pitch_bend_a": "Deck A Pitch Bend (while held)",
+      "pitch_bend_b": "Deck B Pitch Bend (while held)",
       "cue_a": "CUE Deck A",
       "sync_a": "SYNC Deck A",
       "cue_b": "CUE Deck B",
       "sync_b": "SYNC Deck B",
-      "crossfader_a": "Move crossfader toward A",
-      "crossfader_b": "Move crossfader toward B",
-      "hotcues_a": "Hot Cues 1–4 on Deck A",
-      "hotcues_b": "Hot Cues 1–4 on Deck B"
+      "crossfader_a_mix": "Move the crossfader toward A",
+      "crossfader_b_mix": "Move the crossfader toward B",
+      "crossfader_curve_mix": "Previous / next crossfader curve (CP, LIN, CUT)",
+      "hotcues_a": "Deck A Hot Cues 1–4",
+      "hotcues_b": "Deck B Hot Cues 1–4",
+      "master_mix": "Raise / lower Master volume"
     },
     "shortcuts_mix_title": "Mixing shortcuts",
     "shortcuts_mix_desc": "Hold the selector key and use ← / → to adjust the parameter. Without a selector, the arrows move the crossfader. Click a key to reassign it (Esc cancels).",
@@ -665,7 +691,7 @@
     "shortcuts_press_key": "Press a key…",
     "shortcuts_binding_aria": "{{action}} Deck {{deck}}: key {{key}}. Click to reassign.",
     "shortcuts_binding_saved": "Key {{key}} assigned.",
-    "shortcuts_binding_invalid": "Use a letter or a number as the selector key.",
+    "shortcuts_binding_invalid": "Use a letter (including Ñ) or a number as the key.",
     "shortcuts_binding_reserved": "Key {{key}} is already used by a fixed shortcut.",
     "shortcuts_binding_duplicate": "Key {{key}} is already assigned to another command.",
     "shortcuts_mix": {
@@ -796,7 +822,19 @@
       "a": "Silver and iridescent",
       "b": "Grooves with teal highlights",
       "c": "Yellow studio label"
-    }
+    },
+    "shortcuts_mixer_group": "Crossfader",
+    "shortcuts_mixer_short": "XF",
+    "shortcuts_console_title": "Console shortcuts",
+    "shortcuts_console_desc": "Press a key to reassign it (Esc cancels).",
+    "shortcuts_console_binding_aria": "{{action}}: key {{key}}. Press to reassign.",
+    "shortcuts_console": {
+      "mute": "Mute / unmute Master",
+      "record": "Start / stop recording",
+      "libraryA": "Show / hide the Deck A track list",
+      "libraryB": "Show / hide the Deck B track list"
+    },
+    "shortcuts_nav_binding_reserved": "Shift + {{key}} is already used by a deck's Pitch Bend."
   },
   "profile": {
     "title": "My Profile",

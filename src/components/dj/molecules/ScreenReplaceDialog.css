@@ -1,0 +1,81 @@
+/* Ventana sobre el área del menú (que se atenúa detrás); la barra de teclas queda fuera */
+.screen-replace-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: var(--screen-pad);
+}
+
+.screen-replace-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, 90%);
+  padding: 10px 12px;
+  border: 1px solid var(--screen-ink-dim);
+  border-radius: 4px;
+  background-color: var(--screen-bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.6);
+}
+
+.screen-replace-dialog__title {
+  margin: 0;
+  font-size: var(--screen-text-md);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--screen-ink);
+}
+
+.screen-replace-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-size: var(--screen-text-sm);
+  line-height: 1.4;
+  color: var(--screen-ink-dim);
+}
+
+.screen-replace-dialog__body span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-replace-dialog__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.screen-replace-dialog__btn {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--screen-line);
+  border-radius: 3px;
+  background-color: transparent;
+  color: var(--screen-ink);
+  font: inherit;
+  font-size: var(--screen-text-sm);
+  font-weight: var(--font-weight-semibold, 600);
+  cursor: pointer;
+}
+
+.screen-replace-dialog__btn:hover {
+  border-color: var(--screen-ink-dim);
+}
+
+.screen-replace-dialog__btn.is-primary {
+  border: 1.5px solid var(--console-tone);
+  background-color: color-mix(in srgb, var(--console-tone) 28%, transparent);
+}
+
+.screen-replace-dialog__btn.is-primary:hover {
+  background-color: color-mix(in srgb, var(--console-tone) 40%, transparent);
+}
+
+.screen-replace-dialog__btn:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}

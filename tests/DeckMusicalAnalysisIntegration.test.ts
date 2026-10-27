@@ -506,10 +506,16 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
     assert.ok(screenWaveformCode.includes('<Waveform'), 'La pantalla debe renderizar el componente Waveform');
     assert.ok(waveformCode.includes('dj-waveform'), 'Waveform.tsx debe renderizar SVG de forma de onda');
     assert.ok(waveformCode.includes('dj-waveform__bar'), 'Waveform.tsx debe renderizar rects de forma de onda');
-    assert.ok(deckCode.includes('data-testid={`deck-eject-${id}`}'), 'Deck.tsx debe incluir botón de expulsión');
+    // Expulsar y Referencia viven en la esquina exterior de cada deck
+    const utilityCode = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/molecules/DeckUtilityButtons.tsx'),
+      'utf-8'
+    );
+    assert.ok(deckCode.includes('<DeckUtilityButtons'), 'El deck incluye Expulsar y Referencia');
+    assert.ok(utilityCode.includes('data-testid={`deck-${id}-eject`}'), 'El deck incluye el botón Expulsar');
 
     assert.ok(waveformCss.includes('.dj-waveform {'));
     assert.ok(waveformCss.includes('.dj-waveform__bar'));
-    assert.ok(cssCode.includes('.deck-panel__aux-key'));
+    assert.equal(cssCode.includes('.deck-panel__aux'), false, 'La celda auxiliar del deck desaparece');
   });
 });

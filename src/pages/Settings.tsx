@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   Check,
+  Dot,
   Globe,
   Keyboard,
   Library,
@@ -367,13 +368,13 @@ export const Settings: React.FC = () => {
                   control={(
                     <ChoiceTiles<JogDisc>
                       className="sd-disc-tiles"
+                      hideLabels
                       label={t('settings.disc_title')}
                       value={settings.jogDisc}
                       onChange={(jogDisc) => updateSettings({ jogDisc })}
                       options={JOG_DISCS.map((disc) => ({
                         value: disc,
-                        label: t(`settings.disc.${disc}`),
-                        hint: t(`settings.disc_hint.${disc}`),
+                        label: t('settings.disc_option', { n: JOG_DISCS.indexOf(disc) + 1 }),
                         preview: <DiscPreview disc={disc} />,
                       }))}
                     />
@@ -409,14 +410,15 @@ export const Settings: React.FC = () => {
                   )}
                   preview={(
                     <div className="sd-settings__motion">
-                      <p className="sd-settings__motion-scope">
-                        <span className="sd-settings__motion-label">{t('settings.animations_scope')}</span>
+                      <p id={`${baseId}-motion-scope`} className="sd-settings__motion-label">{t('settings.animations_scope')}</p>
+                      <ul className="sd-settings__motion-list" aria-labelledby={`${baseId}-motion-scope`}>
                         {ANIMATED_SURFACES.map((surface) => (
-                          <Tag key={surface} tone={settings.animations && !systemReducedMotion ? 'ink' : 'surface'}>
+                          <li key={surface} className="sd-settings__motion-item">
+                            <Icon icon={Dot} size="sm" />
                             {t(`settings.animations_list.${surface}`)}
-                          </Tag>
+                          </li>
                         ))}
-                      </p>
+                      </ul>
                       {systemReducedMotion && (
                         <Notice tone="info">{t('settings.animations_reduced')}</Notice>
                       )}
@@ -603,7 +605,7 @@ function buildReadouts(
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
-        { label: t('settings.readout.disc'), value: t(`settings.disc.${settings.jogDisc}`) },
+        { label: t('settings.readout.disc'), value: t('settings.disc_option', { n: JOG_DISCS.indexOf(settings.jogDisc) + 1 }) },
         { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },
       ];
     case 'language':

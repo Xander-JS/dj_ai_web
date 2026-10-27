@@ -371,7 +371,6 @@
     "reanalyze_deck": "Reanalizar pista en este deck",
     "no_track": "Sin pista",
     "unknown_artist": "Desconocido",
-    "seek_title": "Haz clic para buscar posición (Seek)",
     "hot_cues": "HOT CUES",
     "hotcue_set": "Fijar Hot Cue {{slot}}",
     "hotcue_jump": "Saltar a Hot Cue {{slot}}",
@@ -595,7 +594,9 @@
       "replace_out": "Sale: {{title}}",
       "replace_in": "Entra: {{title}}",
       "replace_cancel": "Cancelar",
-      "replace_confirm": "Reemplazar"
+      "replace_confirm": "Reemplazar",
+      "waveform_label": "Forma de onda del Deck {{deck}}",
+      "waveform_value": "{{time}} de {{duration}}"
     },
     "immersive": {
       "tap_title": "Toca para empezar",
@@ -705,6 +706,13 @@
     "pitch_range_desc": "Recorrido del fader de pitch manual. SYNC usa su propia tolerancia; ALIGN y BAR SYNC siguen limitados a ±8%.",
     "sync_range_title": "Tolerancia máxima de SYNC",
     "sync_range_desc": "Ajuste máximo de velocidad que SYNC puede aplicar para igualar el BPM (±4% a ±20%).",
+    "waveform_zoom_title": "Zoom de la forma de onda",
+    "waveform_zoom_desc": "Segundos que muestran las formas de onda de la pantalla alrededor del cabezal.",
+    "waveform_zoom": {
+      "4": "Cercano (4 s)",
+      "8": "Normal (8 s)",
+      "16": "Amplio (16 s)"
+    },
     "buffer_title": "Tamaño de búfer / latencia",
     "buffer_desc": "Latencia baja para mezclar rápido; 1024 reduce el uso de CPU. Se aplica la próxima vez que se inicie el motor de audio (recarga la app).",
     "buffer_option": "{{size}} muestras (~{{ms}} ms)",

@@ -371,7 +371,6 @@
     "reanalyze_deck": "Re-analyze track in this deck",
     "no_track": "No Track Loaded",
     "unknown_artist": "Unknown",
-    "seek_title": "Click to seek position",
     "hot_cues": "HOT CUES",
     "hotcue_set": "Set Hot Cue {{slot}}",
     "hotcue_jump": "Jump to Hot Cue {{slot}}",
@@ -595,7 +594,9 @@
       "replace_out": "Out: {{title}}",
       "replace_in": "In: {{title}}",
       "replace_cancel": "Cancel",
-      "replace_confirm": "Replace"
+      "replace_confirm": "Replace",
+      "waveform_label": "Deck {{deck}} waveform",
+      "waveform_value": "{{time}} of {{duration}}"
     },
     "immersive": {
       "tap_title": "Tap to start",
@@ -705,6 +706,13 @@
     "pitch_range_desc": "Travel of the manual pitch fader. SYNC uses its own tolerance; ALIGN and BAR SYNC stay limited to ±8%.",
     "sync_range_title": "Maximum SYNC tolerance",
     "sync_range_desc": "Largest speed change SYNC may apply to match BPM (±4% to ±20%).",
+    "waveform_zoom_title": "Waveform zoom",
+    "waveform_zoom_desc": "Seconds the screen waveforms show around the playhead.",
+    "waveform_zoom": {
+      "4": "Close (4 s)",
+      "8": "Normal (8 s)",
+      "16": "Wide (16 s)"
+    },
     "buffer_title": "Buffer size / latency",
     "buffer_desc": "Low latency for fast mixing; 1024 reduces CPU usage. Takes effect the next time the audio engine starts (reload the app).",
     "buffer_option": "{{size}} samples (~{{ms}} ms)",

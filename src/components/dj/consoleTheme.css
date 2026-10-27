@@ -52,6 +52,16 @@
   --console-slot: hsl(225 12% 4%);
   --console-tick: hsl(220 6% 46%);
   --console-meter-bg: hsl(225 14% 4%);
+
+  /* Forma de onda ampliada de la pantalla digital (canvas): lo ya reproducido se atenúa */
+  --screen-wave-played-opacity: 0.38;
+  --screen-wave-bar-line: hsl(0 0% 100% / 0.14);
+  --screen-wave-playhead-width: 2px;
+  --screen-wave-marker-width: 1px;
+  --screen-wave-cue-width: 2px;
+  --screen-wave-tag-size: 12px;
+  --screen-wave-tag-ink: hsl(0 0% 100%);
+  --screen-wave-cue-tag-ink: hsl(0 0% 7%);
 }
 
 [data-theme='dark'] .mixer-page-container {

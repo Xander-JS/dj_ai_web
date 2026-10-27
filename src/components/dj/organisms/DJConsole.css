@@ -1,0 +1,82 @@
+/* ==========================================================================
+   Carcasa de la consola: plástico negro mate en ambos temas. La pantalla digital
+   sobresale por encima del borde superior (--console-screen-rise).
+   ========================================================================== */
+
+/* Hueco de la consola: todo el alto y el ancho que deja la sección. La consola se reduce entera
+   hasta caber en él (DJConsole.tsx) y el sobrante del dibujo sin reducir se recorta. */
+.dj-console-frame {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dj-console {
+  --console-screen-rise: clamp(28px, 4vh, 48px);
+  --console-screen-height: clamp(250px, 34vh, 340px);
+
+  padding-top: var(--console-screen-rise);
+  min-width: 0;
+  transform-origin: 0 0;
+  /* La pantalla mide su ancho contra la consola entera (su columna es `auto`) */
+  container-type: inline-size;
+}
+
+.dj-console__housing {
+  display: grid;
+  /* ≈ 35 / 30 / 35 del ancho, como el boceto */
+  grid-template-columns: minmax(0, 35fr) minmax(352px, 30fr) minmax(0, 35fr);
+  grid-template-areas:
+    "top top top"
+    "deck-a mixer deck-b";
+  gap: var(--layout-gutter);
+  padding: 0 var(--layout-gutter) var(--layout-gutter);
+  border-radius: 18px;
+  background: var(--console-plastic);
+  border: 1px solid hsl(0 0% 100% / 0.06);
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.07),
+    inset 0 -3px 6px rgb(0 0 0 / 0.45),
+    var(--console-housing-shadow);
+}
+
+/* Fila superior: DOWNBEAT & COMPÁS A · pantalla · DOWNBEAT & COMPÁS B */
+.dj-console__top {
+  grid-area: top;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "downbeat-a screen downbeat-b";
+  gap: var(--layout-gutter);
+  min-width: 0;
+}
+
+/* Cada módulo baja hasta el borde inferior de la pantalla, justo sobre su deck */
+.dj-console__downbeat {
+  align-self: end;
+}
+
+.dj-console__downbeat--a { grid-area: downbeat-a; }
+.dj-console__downbeat--b { grid-area: downbeat-b; }
+
+/* La pantalla queda centrada sobre el mixer; los dos módulos DOWNBEAT & COMPÁS ocupan, a partes
+   iguales, todo el ancho que queda a sus lados. */
+.dj-console__screen {
+  grid-area: screen;
+  position: relative;
+  justify-self: center;
+  /* ≈ 31 % del ancho, con un mínimo que deja leer la información técnica de ambos decks */
+  width: clamp(27rem, 31.25cqi, 42rem);
+  height: var(--console-screen-height);
+  margin-top: calc(-1 * var(--console-screen-rise));
+}
+
+.dj-console__deck,
+.dj-console__mixer {
+  min-width: 0;
+}
+
+.dj-console__deck--a { grid-area: deck-a; }
+.dj-console__deck--b { grid-area: deck-b; }
+.dj-console__mixer { grid-area: mixer; }

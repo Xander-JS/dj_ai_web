@@ -16,9 +16,6 @@ import { toggleSessionCaptureWithFeedback } from '../../../services/session/sess
 import type { DeckId } from '../../../types/deck';
 import './DigitalScreen.css';
 
-/** Análisis en curso de un deck, también mientras se lanza desde su insignia. */
-const isDeckAnalyzing = (deck: DeckStoreState) => deck.track?.analysis?.status === 'analyzing';
-
 /**
  * Pantalla digital de la consola: módulo elevado con su botonera (MENU, GRID, LOAD A, LOAD B,
  * REC y el indicador EN VIVO / EN ESPERA) y un área de visualización con dos vistas. La normal muestra, para cada deck, su
@@ -71,9 +68,9 @@ export const DigitalScreen: React.FC = () => {
         ) : (
           <div className="digital-screen__normal">
             {renderIdent(deckA)}
-            <ScreenWaveform deck={deckA} isAnalyzing={isDeckAnalyzing(deckA)} onSeek={(position) => seekDeck('A', position)} />
+            <ScreenWaveform deck={deckA} onSeek={(position) => seekDeck('A', position)} />
             {renderIdent(deckB)}
-            <ScreenWaveform deck={deckB} isAnalyzing={isDeckAnalyzing(deckB)} onSeek={(position) => seekDeck('B', position)} />
+            <ScreenWaveform deck={deckB} onSeek={(position) => seekDeck('B', position)} />
             <div className="digital-screen__tech">
               <ScreenTechInfo deck={deckA} />
               <ScreenTechInfo deck={deckB} />

@@ -47,6 +47,7 @@ import {
   SYNC_RANGE_MAX,
   SYNC_RANGE_MIN,
   SYNC_RANGE_STEP,
+  WAVEFORM_ZOOMS,
   settingsStore,
   useSettingsStore,
   type AppLanguage,
@@ -523,6 +524,18 @@ export const Settings: React.FC = () => {
                         />
                         <output className="sd-settings__fader-value sd-num" aria-hidden="true">{percent(settings.syncRange)}</output>
                       </div>
+                    )}
+                  />
+                  <SettingRow
+                    title={t('settings.waveform_zoom_title')}
+                    description={t('settings.waveform_zoom_desc')}
+                    control={(
+                      <SegmentedControl
+                        label={t('settings.waveform_zoom_title')}
+                        value={String(settings.waveformZoom)}
+                        onChange={(value) => updateSettings({ waveformZoom: Number(value) as AppSettings['waveformZoom'] })}
+                        options={WAVEFORM_ZOOMS.map((zoom) => ({ value: String(zoom), label: t(`settings.waveform_zoom.${zoom}`) }))}
+                      />
                     )}
                   />
                 </Panel>

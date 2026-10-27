@@ -1,10 +1,9 @@
 /**
  * SYSTEM DJ — Digital screen display model
- * Valores que la vista normal de la pantalla muestra para cada deck: información técnica y el
- * mensaje que sustituye a título y artista (rechazo de SYNC o error de reproducción).
+ * Valores que la vista normal de la pantalla muestra para cada deck: su información técnica.
  */
 
-import type { DeckStoreState, SyncFeedback } from '../../store/useDJStore.ts';
+import type { DeckStoreState } from '../../store/useDJStore.ts';
 import { formatDuration } from '../../utils/formatters.ts';
 
 const EMPTY = '—';
@@ -28,15 +27,4 @@ export function deckTechValues(deck: DeckStoreState): DeckTechValues {
     camelot: isAnalyzed && analysis?.camelot ? analysis.camelot : EMPTY,
     energy: isAnalyzed && typeof analysis?.energy === 'number' ? `${analysis.energy.toFixed(1)}/10` : EMPTY,
   };
-}
-
-export type DeckAlert =
-  | { kind: 'sync'; feedback: SyncFeedback }
-  | { kind: 'playback'; message: string };
-
-/** Rechazo de SYNC de este deck, o si no, error de reproducción; null si no hay ninguno. */
-export function deckAlert(deck: DeckStoreState): DeckAlert | null {
-  if (deck.errorCode === 'sync_failed' && deck.syncFeedback) return { kind: 'sync', feedback: deck.syncFeedback };
-  if (deck.playbackState === 'error' && deck.errorMessage) return { kind: 'playback', message: deck.errorMessage };
-  return null;
 }

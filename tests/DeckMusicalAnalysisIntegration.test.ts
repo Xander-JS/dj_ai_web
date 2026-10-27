@@ -467,11 +467,9 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
 
     // El aviso PROVISIONAL de la franja del deck explica la retícula en su tooltip
     assert.ok(readDeckSource().includes("tooltip: msg('dj.phase_align_grid_tooltip')"));
-    // El rechazo de SYNC sustituye a la identificación del deck en la pantalla digital
-    const screenSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/organisms/DigitalScreen.tsx'), 'utf-8');
+    // El rechazo de SYNC ya no sustituye a la identificación del deck: va al display LED del deck
     const identSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/molecules/ScreenDeckIdent.tsx'), 'utf-8');
-    assert.ok(screenSource.includes('t(alert.feedback.key, alert.feedback.values)'));
-    assert.ok(identSource.includes('role="alert"'));
+    assert.equal(identSource.includes('alert'), false);
   });
 
   it('5.12 Inspección de renderizado: Deck.tsx y Deck.css implementan SVG y diseño sin mocks', () => {

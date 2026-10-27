@@ -52,9 +52,15 @@
   min-width: 0;
 }
 
-/* Cada módulo baja hasta el borde inferior de la pantalla, justo sobre su deck */
+/* Cada módulo baja hasta el borde inferior de la pantalla, justo sobre su deck; el display LED
+   del deck ocupa el hueco libre encima, a su mismo ancho */
 .dj-console__downbeat {
   align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: var(--layout-gutter);
+  /* Separación del borde superior de la carcasa: el mismo margen interior que en sus otros lados */
+  padding-top: var(--layout-gutter);
 }
 
 .dj-console__downbeat--a { grid-area: downbeat-a; }

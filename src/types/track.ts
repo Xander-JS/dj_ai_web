@@ -124,7 +124,15 @@ export interface ManualDownbeatConfirmation {
   readonly confirmedAt: number;
   /** Procedencia explícita de la confirmación manual. */
   readonly source: 'manual';
+  /**
+   * Fuente elegida en el módulo DOWNBEAT & COMPÁS al confirmar: el cabezal o la posición sugerida.
+   * Ausente en confirmaciones anteriores a ese módulo (se deduce de la posición).
+   */
+  readonly origin?: DownbeatOrigin;
 }
+
+/** Fuente de la posición confirmada: el cabezal en ese instante o la sugerencia del análisis. */
+export type DownbeatOrigin = 'playhead' | 'suggested';
 
 /**
  * Representación de downbeat y métrica de compás para una pista.

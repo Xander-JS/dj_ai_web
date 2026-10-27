@@ -6,7 +6,7 @@ import { METER_DETENTS, formatDetent } from '../../../services/console/downbeatP
 import './DownbeatMeterZone.css';
 
 export interface DownbeatMeterZoneProps {
-  /** Cabezal en `mm:ss.mmm`. */
+  /** Posición en `mm:ss.mmm`, o `--:--.---` sin fuente. */
   clock: string;
   positionTooltip: string;
   meterIndex: number;

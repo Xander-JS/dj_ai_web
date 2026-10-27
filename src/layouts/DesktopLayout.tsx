@@ -43,20 +43,26 @@ function useConsoleNavigator(): void {
  * izquierdo la muestra encima de la consola, sin moverla. Cambiar de sección o Esc la cierra.
  */
 function useSidebarPeek(isMixer: boolean, pathname: string) {
-  // Abierta solo en la ruta donde se abrió: al navegar se cierra sola
-  const [peekPath, setPeekPath] = useState<string | null>(null);
-  const isOpen = isMixer && peekPath === pathname;
+  // Abierta solo en la ruta donde se abrió: al navegar se cierra sola. `open: false` marca que la
+  // cerró el usuario, para que se retire rápido y no con los tiempos de la entrada del Mixer
+  const [peek, setPeek] = useState<{ path: string; open: boolean } | null>(null);
+  if (peek && peek.path !== pathname) setPeek(null);
+  const isOpen = isMixer && peek?.open === true;
 
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPeekPath(null);
+      if (event.key === 'Escape') setPeek({ path: pathname, open: false });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen]);
+  }, [isOpen, pathname]);
 
-  return { isOpen, toggle: () => setPeekPath(isOpen ? null : pathname) };
+  return {
+    isOpen,
+    wasClosed: isMixer && peek?.open === false,
+    toggle: () => setPeek({ path: pathname, open: !isOpen }),
+  };
 }
 
 export const DesktopLayout: React.FC<DesktopLayoutProps> = ({ children }) => {
@@ -80,6 +86,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({ children }) => {
         isPlayerHidden && 'desktop-layout--player-hidden',
         isMixer && 'desktop-layout--mixer',
         sidebarPeek.isOpen && 'desktop-layout--sidebar-open',
+        sidebarPeek.wasClosed && 'desktop-layout--sidebar-closed',
       )}
     >
       <Header />

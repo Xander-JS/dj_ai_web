@@ -500,7 +500,14 @@
     "bar_sync_tooltip_blocked": "{{base}} — {{reason}}",
     "eject_button": "Eject",
     "reference_button": "Reference",
-    "reference_short": "REF"
+    "reference_short": "REF",
+    "display_mode": "Mode",
+    "display_mode_guide": "Guide",
+    "display_mode_map": "Map",
+    "display_mode_button": "Switch display mode",
+    "display_mode_state": "Display mode: {{mode}}",
+    "display_load_track": "Load a track",
+    "display_bar_sync": "BAR SYNC: {{message}}"
   },
   "mixer": {
     "channel": "CH {{num}}",

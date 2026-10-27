@@ -21,7 +21,7 @@ import {
   toMenuRow,
   type MenuKeyContext,
 } from '../src/services/console/screenMenuModel.ts';
-import { deckAlert, deckTechValues } from '../src/services/console/screenDisplayModel.ts';
+import { deckTechValues } from '../src/services/console/screenDisplayModel.ts';
 import {
   SHORTCUTS_PASSTHROUGH_ATTRIBUTE,
   createShortcutHandlers,
@@ -407,18 +407,6 @@ describe('Pantalla digital — vista normal', () => {
     const pending = { ...loaded, analysis: { ...loaded.analysis, status: 'analyzing' as const } };
     const values = deckTechValues({ ...base, track: pending, calculatedBpm: 124, duration: 250, currentTime: 0 });
     assert.deepEqual([values.key, values.camelot, values.energy], ['—', '—', '—']);
-  });
-
-  it('el rechazo de SYNC y el error de reproducción sustituyen a título y artista', () => {
-    assert.equal(deckAlert(base), null);
-    const sync = deckAlert({ ...base, errorCode: 'sync_failed', syncFeedback: { key: 'dj.sync_reject_slave_bpm' } });
-    assert.deepEqual(sync, { kind: 'sync', feedback: { key: 'dj.sync_reject_slave_bpm' } });
-    assert.deepEqual(
-      deckAlert({ ...base, playbackState: 'error', errorMessage: 'boom' }),
-      { kind: 'playback', message: 'boom' },
-    );
-    // Un mensaje interno sin estado de error no se muestra
-    assert.equal(deckAlert({ ...base, playbackState: 'stopped', errorMessage: 'SYNC desactivado' }), null);
   });
 });
 

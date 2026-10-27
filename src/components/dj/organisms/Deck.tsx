@@ -295,17 +295,20 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
         </div>
       </div>
 
-      {/* Feedback rítmico visible: por qué BAR SYNC no puede prepararse o por qué se rechazó */}
-      {barSyncHint && (
-        <p
-          id={barSyncHintId}
-          className={clsx('deck-sync-hint', barSyncHint.rejected && 'deck-sync-hint-rejected')}
-          role={barSyncHint.rejected ? 'alert' : 'note'}
-          data-testid={barSyncHintId}
-        >
-          <strong>{t('dj.bar_sync')}:</strong> {translatePanelMessage(t, barSyncHint.message)}
-        </p>
-      )}
+      {/* Feedback rítmico visible: por qué BAR SYNC no puede prepararse o por qué se rechazó.
+          Siempre montado (oculto si no hay aviso) para que cargar una pista no cambie el alto */}
+      <p
+        id={barSyncHintId}
+        className={clsx('deck-sync-hint', !barSyncHint && 'is-empty', barSyncHint?.rejected && 'deck-sync-hint-rejected')}
+        role={barSyncHint ? (barSyncHint.rejected ? 'alert' : 'note') : undefined}
+        data-testid={barSyncHint ? barSyncHintId : undefined}
+      >
+        {barSyncHint && (
+          <>
+            <strong>{t('dj.bar_sync')}:</strong> {translatePanelMessage(t, barSyncHint.message)}
+          </>
+        )}
+      </p>
     </div>
   );
 };

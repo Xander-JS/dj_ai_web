@@ -127,7 +127,14 @@
 /* ==========================================================================
    Guía de BAR SYNC bajo el deck
    ========================================================================== */
+/* Hueco fijo de tres líneas (el aviso más largo a ancho de diseño), haya aviso o no */
 .deck-sync-hint {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  flex: none;
+  height: calc(3 * 11px * 1.45 + 12px);
+  overflow: hidden;
   margin: 0;
   padding: 6px 10px;
   border-left: 2px solid var(--console-led-amber);
@@ -141,6 +148,10 @@
 .deck-sync-hint strong {
   color: var(--console-silkscreen);
   letter-spacing: 0.06em;
+}
+
+.deck-sync-hint.is-empty {
+  visibility: hidden;
 }
 
 .deck-sync-hint-rejected {

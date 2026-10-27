@@ -17,6 +17,7 @@ import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '
 import { audioEngine } from '../audio/index.ts';
 import { PHASE_LOCK_LEAD_SECONDS } from '../audio/AudioEngineService.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
+import { ensureWaveformDetail } from '../services/console/waveformDetail.ts';
 import { analysisSyncManager } from '../services/analysis/index.ts';
 import {
   sessionRecorder,
@@ -124,7 +125,7 @@ export interface DJStoreState {
 }
 
 /** Margen para que un Seek al 100 % no reinicie la pista desde 0:00. */
-const SEEK_END_MARGIN_SECONDS = 0.05;
+export const SEEK_END_MARGIN_SECONDS = 0.05;
 /** Frecuencia de refresco de la posición en la interfaz. */
 const TIME_UPDATE_INTERVAL_MS = 100;
 const DEFAULT_PITCH_RANGE = 0.08;
@@ -265,7 +266,7 @@ const INITIAL_STATE: DJStoreState = {
 
 
 /** BPM analizado real, o null si la pista no tiene BPM analizado/almacenado válido. */
-function getAnalyzedBpm(track: Track | null): number | null {
+export function getAnalyzedBpm(track: Track | null): number | null {
   if (!track || !track.analysis) return null;
   // Nunca transformar estados fallidos o no soportados en resultados musicales válidos
   if (track.analysis.status === 'failed' || track.analysis.status === 'unsupported') {
@@ -777,6 +778,7 @@ class DJStore {
 
       // 4. Replace the audio and synchronize the current pitch and volume.
       audioEngine.loadBufferToDeck(deckId, audioBuffer);
+      void ensureWaveformDetail(effectiveTrack.id, effectiveTrack.fileMeta?.contentHash, audioBuffer);
       audioEngine.setDeckPitchBend(deckId, 0);
       audioEngine.setDeckPlaybackRate(deckId, this.getDeckState(deckId).playbackRate);
       audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : this.state.masterVolume);

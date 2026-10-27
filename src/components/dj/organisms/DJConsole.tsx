@@ -9,9 +9,9 @@ import './DJConsole.css';
 
 /**
  * Mide el hueco y la consola y devuelve cómo dibujarla: la consola se reduce entera, sin
- * reorganizarse, hasta caber en el ancho y el alto del hueco (sin barras de desplazamiento). Se
- * recalcula al cambiar el tamaño de la ventana. `transform` no cambia `offsetHeight`, así que el
- * alto natural se lee siempre sin reducir.
+ * reorganizarse, hasta caber en el ancho y el alto del hueco (sin barras de desplazamiento). Solo
+ * se recalcula cuando cambia el hueco (la ventana), nunca por el contenido: cargar una pista no
+ * debe hacer zoom. `transform` no cambia `offsetHeight`, así que el alto natural se lee sin reducir.
  */
 function useConsoleScale(
   frameRef: React.RefObject<HTMLDivElement | null>,
@@ -24,8 +24,11 @@ function useConsoleScale(
     const consoleEl = consoleRef.current;
     if (!frame || !consoleEl) return;
     const measure = () => {
+      const frameWidth = frame.clientWidth;
+      // El alto natural depende del ancho de dibujo: se fija ese ancho antes de leerlo
+      consoleEl.style.width = `${computeConsoleScale({ frameWidth, naturalHeight: 0 }).width}px`;
       const next = computeConsoleScale({
-        frameWidth: frame.clientWidth,
+        frameWidth,
         frameHeight: frame.clientHeight,
         naturalHeight: consoleEl.offsetHeight,
       });
@@ -36,7 +39,6 @@ function useConsoleScale(
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(frame);
-    observer.observe(consoleEl);
     return () => observer.disconnect();
   }, [frameRef, consoleRef]);
 

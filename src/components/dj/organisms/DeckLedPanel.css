@@ -1,0 +1,8 @@
+/* Fila de MODO y display LED, al ancho de DOWNBEAT & COMPÁS */
+.deck-led-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boceto · Consola DJ por secciones</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --line: #9aa0aa;
+    --line-strong: #4a4f57;
+    --num: #1e2228;
+    --a-fill: #ecebfd;
+    --a-line: #5b52c4;
+    --b-fill: #e2f4ee;
+    --b-line: #13755c;
+    --m-fill: #eceae4;
+    --m-line: #6b6a64;
+    --n-fill: #fbeed9;
+    --n-line: #a36412;
+
+    --gap: 1.6%;
+    --radius-housing: 18px;
+    --radius-block: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #17191d;
+      --line: #5c626c;
+      --line-strong: #b4bac4;
+      --num: #f1f3f6;
+      --a-fill: #2b2760;
+      --a-line: #aea8f0;
+      --b-fill: #0d3b30;
+      --b-line: #6fd2ae;
+      --m-fill: #34332f;
+      --m-line: #bab8b0;
+      --n-fill: #4e3209;
+      --n-line: #f2b45a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--bg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  /* Contenedor general: conserva la proporción al redimensionar */
+  .dj-console {
+    position: relative;
+    width: min(1100px, 100%);
+    aspect-ratio: 640 / 380;
+    container-type: inline-size;
+  }
+
+  .num {
+    font-size: clamp(14px, 2.6cqw, 28px);
+    font-weight: 600;
+    color: var(--num);
+    line-height: 1;
+  }
+
+  /* Carcasa principal */
+  .housing {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    top: 23.7%;
+    border: 2px solid var(--line-strong);
+    border-radius: var(--radius-housing);
+    padding: 1.6%;
+    display: grid;
+    grid-template-rows: 50fr 210fr;
+    gap: 3.4%;
+  }
+
+  .block {
+    border: 1.5px solid;
+    border-radius: var(--radius-block);
+    position: relative;
+  }
+  .tone-a { background: var(--a-fill); border-color: var(--a-line); }
+  .tone-b { background: var(--b-fill); border-color: var(--b-line); }
+  .tone-m { background: var(--m-fill); border-color: var(--m-line); }
+  .tone-n { background: var(--n-fill); border-color: var(--n-line); }
+
+  /* Fila superior: 5 | hueco de la pantalla | 6 */
+  .top-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--gap);
+  }
+  .top-row .block { display: grid; place-items: center; }
+
+  /* Fila inferior: Deck A | Mixer | Deck B (≈35 / 30 / 35) */
+  .main-row {
+    display: grid;
+    grid-template-columns: 210fr 180fr 210fr;
+    gap: var(--gap);
+  }
+  .main-row .num {
+    position: absolute;
+    top: 6%;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Pantalla digital (1), sobresale por encima de la carcasa */
+  .screen {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 31.25%;
+    height: 36.8%;
+    display: grid;
+    place-items: center;
+    z-index: 2;
+  }
+
+  /* Panel de navegación (7), montado sobre el borde derecho de la pantalla */
+  .nav-panel {
+    position: absolute;
+    right: -15%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30%;
+    height: 50%;
+    display: grid;
+    place-items: center;
+    border-width: 2px;
+    z-index: 3;
+  }
+
+  /* Detalles internos de los decks */
+  .deck .jog {
+    position: absolute;
+    left: 50%; top: 18%;
+    transform: translateX(-50%);
+    width: 46%;
+    aspect-ratio: 1;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+  }
+  .deck .pads {
+    position: absolute;
+    left: 19%; right: 23%;
+    bottom: 6%;
+    height: 22%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 8%;
+  }
+  .deck .pads span { border: 1.5px solid currentColor; border-radius: 3px; }
+  .deck .transport {
+    position: absolute;
+    left: 4%;
+    bottom: 6%;
+    width: 10.5%;
+    height: 24%;
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 14%;
+  }
+  .deck .transport span { border: 1.5px solid currentColor; border-radius: 50%; aspect-ratio: 1; }
+  .deck .tempo {
+    position: absolute;
+    right: 3%;
+    top: 24%;
+    bottom: 10%;
+    width: 5.5%;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+  }
+  .tone-a.deck { color: var(--a-line); }
+  .tone-b.deck { color: var(--b-line); }
+
+  /* Detalles internos del mixer */
+  .mixer { color: var(--m-line); }
+  .mixer .knobs {
+    position: absolute;
+    top: 17%;
+    width: 11%;
+    display: grid;
+    gap: 22%;
+  }
+  .mixer .knobs.left { left: 17%; }
+  .mixer .knobs.right { right: 17%; }
+  .mixer .knobs span { border: 1.5px solid currentColor; border-radius: 50%; aspect-ratio: 1; }
+  .mixer .meter {
+    position: absolute;
+    left: 50%; top: 19%;
+    transform: translateX(-50%);
+    width: 6.5%;
+    height: 48%;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+  }
+  .mixer .fader {
+    position: absolute;
+    top: 69%;
+    width: 4.5%;
+    height: 16%;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+  }
+  .mixer .fader.left { left: 20%; }
+  .mixer .fader.right { right: 20%; }
+  .mixer .crossfader {
+    position: absolute;
+    left: 22%; right: 22%;
+    bottom: 5%;
+    height: 4%;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="dj-console" role="img" aria-label="Boceto de la consola DJ dividido en 7 secciones numeradas">
+
+  <div class="housing">
+    <div class="top-row">
+      <div class="block tone-a"><span class="num">5</span></div>
+      <div aria-hidden="true"></div>
+      <div class="block tone-b"><span class="num">6</span></div>
+    </div>
+
+    <div class="main-row">
+      <div class="block tone-a deck">
+        <span class="num">2</span>
+        <div class="jog"></div>
+        <div class="tempo"></div>
+        <div class="transport"><span></span><span></span></div>
+        <div class="pads"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+
+      <div class="block tone-m mixer">
+        <span class="num">4</span>
+        <div class="knobs left"><span></span><span></span><span></span><span></span></div>
+        <div class="meter"></div>
+        <div class="knobs right"><span></span><span></span><span></span><span></span></div>
+        <div class="fader left"></div>
+        <div class="fader right"></div>
+        <div class="crossfader"></div>
+      </div>
+
+      <div class="block tone-b deck">
+        <span class="num">3</span>
+        <div class="jog"></div>
+        <div class="tempo"></div>
+        <div class="transport"><span></span><span></span></div>
+        <div class="pads"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="block tone-m screen">
+    <span class="num">1</span>
+    <div class="block tone-n nav-panel"><span class="num">7</span></div>
+  </div>
+
+</div>
+
+</body>
+</html>

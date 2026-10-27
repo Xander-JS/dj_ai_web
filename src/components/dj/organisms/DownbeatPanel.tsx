@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { clsx } from 'clsx';
 import { useDJStore } from '../../../store/useDJStore';
+import { audioEngine } from '../../../audio';
 import { toastStore } from '../../../services/notifications/toastService';
 import type { DeckId } from '../../../types/deck';
 import {
@@ -53,44 +54,62 @@ export const DownbeatPanel: React.FC<DownbeatPanelProps> = ({ deckName }) => {
 
   const [selection, setSelection] = useState(() => getInitialSelection(facts));
   const [isSaving, setIsSaving] = useState(false);
+  // CAB tras CONFIRMAR: el display se congela en lo confirmado hasta sacar el knob de CAB
+  const [frozen, setFrozen] = useState(false);
   const [synced, setSynced] = useState({ trackId, confirmedAt });
 
-  // Otra pista, o una confirmación nueva (también desde el otro deck con la misma pista): el
-  // módulo vuelve a lo confirmado. Al limpiar no se mueve nada: los LEDs pasan a seguir al knob.
+  // Otra pista: el knob vuelve a OFF. Confirmación nueva (también desde el otro deck con la misma
+  // pista): el fader sigue a la métrica confirmada. Al limpiar, el display vuelve a seguir al knob.
   if (synced.trackId !== trackId || synced.confirmedAt !== confirmedAt) {
-    const reload = synced.trackId !== trackId || confirmedAt !== null;
     setSynced({ trackId, confirmedAt });
-    if (reload) setSelection(getInitialSelection(facts));
-    if (synced.trackId !== trackId) setIsSaving(false);
+    if (synced.trackId !== trackId) {
+      setSelection(getInitialSelection(facts));
+      setFrozen(false);
+      setIsSaving(false);
+    } else if (confirmedAt === null) {
+      setFrozen(false);
+    } else {
+      setSelection((current) => ({ ...current, meterIndex: getInitialSelection(facts).meterIndex }));
+    }
   }
+
+  // En CAB la posición candidata es el cabezal en vivo, o la confirmada si está congelado
+  const current = selection.source !== 'playhead'
+    ? selection
+    : { ...selection, candidate: frozen && facts.confirmed ? facts.confirmed.position : Math.max(0, deck.currentTime) };
 
   const busy = {
     saving: isSaving,
     unavailable: deck.playbackState === 'loading' || deck.playbackState === 'error',
   };
   const locked = !facts.hasTrack || busy.saving || busy.unavailable;
-  const leds = getStatusLeds(facts, selection);
-  const pending = hasPendingChange(facts, selection);
-  const confirm = getConfirmButton(facts, selection, busy);
+  const leds = getStatusLeds(facts, current);
+  const pending = hasPendingChange(facts, current);
+  const confirm = getConfirmButton(facts, current, busy);
   const clear = getClearButton(facts, busy);
-  const positionTooltip = translatePanelMessage(t, getPositionTooltip(facts, selection));
+  const positionTooltip = translatePanelMessage(t, getPositionTooltip(facts, current));
 
   const turnTo = (source: DownbeatSource) => {
-    if (locked) return;
+    if (locked || source === selection.source) return;
     const next = selectSource(facts, selection, source, deck.currentTime);
-    if (next) setSelection(next);
+    if (!next) return;
+    setSelection(next);
+    setFrozen(false);
   };
 
   const handleConfirm = async () => {
     if (confirm.disabled || locked) return;
-    const params = buildConfirmParams(facts, selection);
+    // CAB: la posición exacta del motor ahora, no la del refresco del store (~100 ms)
+    const candidate = current.source === 'playhead' ? audioEngine.getDeckCurrentTime(deckName) : current.candidate;
+    const params = buildConfirmParams(facts, { ...current, candidate });
     if (!params) {
       toastStore.show('error', t('dj.downbeat_error_invalid_pos'));
       return;
     }
     setIsSaving(true);
     try {
-      if (!(await confirmDownbeat(deckName, params))) toastStore.show('error', t('dj.downbeat_error_persist'));
+      if (await confirmDownbeat(deckName, params)) setFrozen(true);
+      else toastStore.show('error', t('dj.downbeat_error_persist'));
     } catch {
       toastStore.show('error', t('dj.downbeat_error_persist'));
     } finally {
@@ -169,7 +188,7 @@ export const DownbeatPanel: React.FC<DownbeatPanelProps> = ({ deckName }) => {
 
         <div className="downbeat-panel__zone downbeat-panel__zone--meter">
           <DownbeatMeterZone
-            clock={formatDownbeatClock(facts.hasTrack ? deck.currentTime : 0)}
+            clock={current.candidate === null ? '--:--.---' : formatDownbeatClock(current.candidate)}
             positionTooltip={positionTooltip}
             meterIndex={selection.meterIndex}
             disabled={locked}
@@ -182,18 +201,14 @@ export const DownbeatPanel: React.FC<DownbeatPanelProps> = ({ deckName }) => {
           <ConsoleSelectorKnob
             positions={positions}
             value={selection.source}
-            caption={t('dj.downbeat_source_caption')}
             disabled={locked}
             aria-label={t('dj.downbeat_source_label')}
+            title={t('dj.downbeat_source_label')}
             aria-valuetext={sourceNames[selection.source]}
             data-testid={`${testIdPrefix}-source`}
             onPress={() => turnTo(nextSourceOnClick(facts, selection.source))}
             onSelect={turnTo}
-            onStep={(direction) => {
-              // En el tope no se gira: no debe volver a capturar el cabezal
-              const next = stepSource(facts, selection.source, direction);
-              if (next !== selection.source) turnTo(next);
-            }}
+            onStep={(direction) => turnTo(stepSource(facts, selection.source, direction))}
           />
         </div>
 

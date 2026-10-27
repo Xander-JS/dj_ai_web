@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eject, Target } from 'lucide-react';
+import { ArrowLeftRight, Eject, Target } from 'lucide-react';
 import type { DeckId } from '../../../types/deck';
 import { HardwareButton } from '../atoms/HardwareButton';
 import './DeckUtilityButtons.css';
@@ -15,12 +15,14 @@ export interface DeckUtilityButtonsProps {
   isReference: boolean;
   onEject: () => void;
   onToggleReference: () => void;
+  /** Alterna el display LED entre GUÍA y MAPA. */
+  onToggleMode: () => void;
 }
 
 /**
- * Expulsar y Referencia en la esquina exterior del deck, el mismo botón hundido: Expulsar se
- * enciende en blanco con pista; Referencia es enclavable, ámbar con la pista marcada. Deck B es
- * el espejo.
+ * Expulsar, Referencia y Modo en la esquina exterior del deck, el mismo botón hundido: Expulsar se
+ * enciende en blanco con pista; Referencia es enclavable, ámbar con la pista marcada; Modo está
+ * siempre encendido en blanco, también sin pista. Deck B es el espejo.
  */
 export const DeckUtilityButtons: React.FC<DeckUtilityButtonsProps> = ({
   deckId,
@@ -29,6 +31,7 @@ export const DeckUtilityButtons: React.FC<DeckUtilityButtonsProps> = ({
   isReference,
   onEject,
   onToggleReference,
+  onToggleMode,
 }) => {
   const { t } = useTranslation();
   const id = deckId.toLowerCase();
@@ -58,6 +61,16 @@ export const DeckUtilityButtons: React.FC<DeckUtilityButtonsProps> = ({
         title={t(referenceLit ? 'seed.unmark' : 'seed.mark')}
         data-testid={`deck-${id}-reference`}
         onClick={onToggleReference}
+      />
+      <HardwareButton
+        variant="momentary"
+        lit
+        icon={<ArrowLeftRight />}
+        caption={t('dj.display_mode')}
+        aria-label={t('dj.display_mode_button')}
+        title={t('dj.display_mode_button')}
+        data-testid={`deck-${id}-mode`}
+        onClick={onToggleMode}
       />
     </div>
   );

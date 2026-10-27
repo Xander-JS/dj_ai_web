@@ -331,12 +331,12 @@ describe('Mixer — disposición e i18n', () => {
     assert.match(xfader, /const CROSSFADER_TICKS = \[0, 0\.25, 0\.5, 0\.75, 1\]/);
   });
 
-  it('EN VIVO / LIVE sale del mixer y queda junto a la pantalla, con texto fijo', () => {
-    const consoleCode = read('src/components/dj/organisms/DJConsole.tsx');
+  it('EN VIVO / EN ESPERA sale del mixer y cierra la botonera de la pantalla', () => {
+    const screenCode = read('src/components/dj/organisms/DigitalScreen.tsx');
     const live = read('src/components/dj/molecules/ConsoleLiveIndicator.tsx');
-    assert.match(consoleCode, /<ConsoleLiveIndicator/);
+    assert.match(screenCode, /status=\{<ConsoleLiveIndicator \/>\}/);
     assert.doesNotMatch(organism, /ConsoleLiveIndicator|isLive/);
-    assert.match(live, /\{t\('mixer\.live'\)\}/);
+    assert.match(live, /t\(isLive \? 'mixer\.live' : 'mixer\.standby'\)/);
     assert.match(live, /<ConsoleLed on=\{isLive\} color="red" \/>/);
   });
 

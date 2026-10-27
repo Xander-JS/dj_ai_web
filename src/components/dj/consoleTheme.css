@@ -1,49 +1,61 @@
 /* ==========================================================================
    SYSTEM DJ — Console hardware tokens
-   Superficies, serigrafía y luces de la consola (Mixer y decks). Se derivan de los
-   tokens globales y del atributo data-theme de <html>: no es un sistema de temas aparte.
+   Superficies, serigrafía y luces de la consola (pantalla, decks y mixer). La consola es de
+   plástico negro mate en ambos temas: solo la sombra que la separa del fondo sigue a
+   data-theme de <html>. No es un sistema de temas aparte.
    ========================================================================== */
 
 .mixer-page-container {
-  /* Tono de cada canal: A sigue al acento elegido, B al secundario, Master al blanco frío */
+  /* Tono de cada canal: A sigue al acento elegido, B al secundario; Master es neutro */
   --console-tone-a: var(--color-primary-500);
   --console-tone-b: var(--color-secondary-500);
-  --console-tone-master: hsl(190, 85%, 50%);
+  --console-tone-master: hsl(220 14% 88%);
 
-  /* Panel de aluminio claro */
-  --console-panel: hsl(var(--hue-neutral), 8%, 86%);
-  --console-panel-edge: hsl(var(--hue-neutral), 10%, 72%);
-  --console-panel-tint: linear-gradient(180deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.25));
-  --console-recess: hsl(var(--hue-neutral), 10%, 78%);
-  --console-recess-shadow: inset 0 1px 3px rgb(0 0 0 / 0.25), inset 0 -1px 0 rgb(255 255 255 / 0.6);
-  --console-slot: hsl(var(--hue-neutral), 12%, 18%);
-  --console-ink: hsl(var(--hue-neutral), 20%, 14%);
-  --console-ink-soft: hsl(var(--hue-neutral), 10%, 36%);
-  --console-tick: hsl(var(--hue-neutral), 10%, 45%);
-  --console-led-off: hsl(var(--hue-neutral), 8%, 70%);
-  --console-glow: 0.45;
-  --console-screen: hsl(var(--hue-neutral), 18%, 12%);
-  --console-raised-shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 6px 18px -8px rgb(0 0 0 / 0.35);
-  --console-meter-green: hsl(142, 70%, 42%);
-  --console-meter-amber: hsl(38, 92%, 50%);
-  --console-meter-red: hsl(352, 85%, 52%);
+  /* Carcasa de plástico negro mate (no hay textura de plástico en los assets: el grano se
+     dibuja con CSS) */
+  --console-plastic:
+    radial-gradient(hsl(0 0% 100% / 0.022) 0.6px, transparent 0.8px) 0 0 / 3px 3px,
+    radial-gradient(rgb(0 0 0 / 0.18) 0.6px, transparent 0.8px) 1.5px 1.5px / 3px 3px,
+    linear-gradient(180deg, hsl(225 6% 12%), hsl(225 7% 8%));
+  --console-housing-shadow: 0 18px 36px -18px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.18);
+
+  /* Placa de cada módulo (decks y mixer) dentro de la carcasa */
+  --console-plate:
+    linear-gradient(180deg, hsl(0 0% 100% / 0.025), hsl(0 0% 100% / 0) 35%),
+    hsl(225 7% 9%);
+  --console-plate-edge: hsl(0 0% 100% / 0.06);
+  --console-plate-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.05),
+    inset 0 0 0 1px rgb(0 0 0 / 0.45),
+    0 1px 0 hsl(0 0% 100% / 0.03);
+  /* Línea divisoria serigrafiada entre secciones de una misma placa */
+  --console-divider: hsl(0 0% 100% / 0.07);
+
+  --console-silkscreen: hsl(220 10% 92%);
+  --console-silkscreen-dim: hsl(220 6% 66%);
+  --console-focus: hsl(195 90% 62%);
+  --console-key-body: hsl(225 6% 13%);
+  --console-key-edge: rgb(0 0 0 / 0.65);
+  --console-key-light: hsl(195 35% 92%);
+  --console-led-unlit: hsl(225 8% 17%);
+  --console-led-red: hsl(356 90% 56%);
+  --console-led-green: hsl(142 72% 48%);
+  --console-led-amber: hsl(38 95% 54%);
+  --console-led-neutral: hsl(220 8% 70%);
+
+  /* Mini displays LCD (módulo DOWNBEAT & COMPÁS) */
+  --console-lcd-bg: hsl(205 60% 6%);
+  --console-lcd-edge: hsl(200 40% 20%);
+  --console-lcd-ink: hsl(193 100% 75%);
+
+  /* Faders y potenciómetros */
+  --console-slot: hsl(225 12% 4%);
+  --console-tick: hsl(220 6% 46%);
+  --console-meter-bg: hsl(225 14% 4%);
 }
 
-/* Grafito con reflejos metálicos y luces de neón */
 [data-theme='dark'] .mixer-page-container {
-  --console-panel: hsl(var(--hue-neutral), 10%, 11%);
-  --console-panel-edge: hsl(var(--hue-neutral), 10%, 22%);
-  --console-panel-tint: linear-gradient(180deg, rgb(18 19 24 / 0.86), rgb(10 11 14 / 0.94));
-  --console-recess: hsl(var(--hue-neutral), 12%, 7%);
-  --console-recess-shadow: inset 0 2px 6px rgb(0 0 0 / 0.7), inset 0 -1px 0 rgb(255 255 255 / 0.05);
-  --console-slot: hsl(var(--hue-neutral), 14%, 4%);
-  --console-ink: hsl(0, 0%, 94%);
-  --console-ink-soft: hsl(var(--hue-neutral), 10%, 66%);
-  --console-tick: hsl(var(--hue-neutral), 10%, 52%);
-  --console-led-off: hsl(var(--hue-neutral), 10%, 20%);
-  --console-glow: 0.8;
-  --console-screen: hsl(var(--hue-neutral), 20%, 5%);
-  --console-raised-shadow: 0 1px 0 rgb(255 255 255 / 0.06) inset, 0 10px 24px -10px rgb(0 0 0 / 0.9);
+  --console-housing-shadow: 0 0 0 1px rgb(0 0 0 / 0.6), 0 22px 44px -16px rgb(0 0 0 / 0.85);
 }
 
 .console-tone-a {
@@ -56,15 +68,4 @@
 
 .console-tone-master {
   --console-tone: var(--console-tone-master);
-}
-
-/* Serigrafía: etiquetas pequeñas en mayúsculas, como las impresas en el panel */
-.console-legend {
-  font-size: 10px;
-  font-weight: var(--font-weight-bold, 700);
-  letter-spacing: 0.08em;
-  line-height: 1.1;
-  text-transform: uppercase;
-  color: var(--console-ink-soft);
-  white-space: nowrap;
 }

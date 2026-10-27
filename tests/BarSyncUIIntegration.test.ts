@@ -26,6 +26,7 @@ import { createTrackFromFile } from '../src/utils/audioValidation.ts';
 import { createManualDownbeatConfirmation, createSuggestedDownbeat, isDownbeatConfirmed } from '../src/utils/downbeat.ts';
 import type { Track } from '../src/types/track.ts';
 import type { DeckId } from '../src/types/deck.ts';
+import { getDownbeatTrackFacts } from '../src/services/console/downbeatPanelModel.ts';
 import { getDeckBarSyncHint, getDeckNotices, getDeckSyncKeys, type DeckPanelInput, type PanelMessage } from '../src/services/console/deckPanelModel.ts';
 
 /** Entrada del modelo del panel con el estado real del store, como la arma el deck. */
@@ -487,15 +488,14 @@ describe('Fase 23.4: Etapa C.5 — UI de BAR SYNC V1', () => {
   // 8. Los errores no quedan ocultos ni generan falsas confirmaciones
   // =========================================================================
   it('8. Los errores no quedan ocultos ni muestran falsas confirmaciones de downbeat', async () => {
-    const deckSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'),
-      'utf-8'
-    );
-
-    // 8.1 Verificar que el estado de DOWNBEAT requiere validación estricta de hash y confirmación manual
-    assert.ok(
-      deckSource.includes('isDownbeatConfirmed(track?.downbeat, track?.fileMeta?.contentHash)'),
-      'Deck.tsx debe validar el downbeat con isDownbeatConfirmed antes de mostrar el badge'
+    // 8.1 El LED CONFIRMADO del módulo DOWNBEAT & COMPÁS exige confirmación manual ligada a la huella actual
+    const trackDegraded = createConfiguredTrack('degraded.mp3', 120, HASH_MASTER, 1.0, 4, 300);
+    assert.ok(getDownbeatTrackFacts(trackDegraded).confirmed, 'Confirmación con huella coincidente: CONFIRMADO');
+    trackDegraded.fileMeta = { ...trackDegraded.fileMeta, contentHash: HASH_SLAVE };
+    assert.equal(
+      getDownbeatTrackFacts(trackDegraded).confirmed,
+      null,
+      'Si la huella del archivo cambia, la confirmación queda degradada y CONFIRMADO se apaga'
     );
 
     // 8.2 Pista con downbeat sugerido no confirmado: no debe validar

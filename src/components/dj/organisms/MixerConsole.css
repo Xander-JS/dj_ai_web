@@ -55,10 +55,3 @@
   white-space: nowrap;
 }
 
-/* Tablet vertical: el mixer va a todo el ancho entre los decks y no se estira de más */
-@media (max-width: 900px) {
-  .mixer-console {
-    width: min(100%, 30rem);
-    margin-inline: auto;
-  }
-}

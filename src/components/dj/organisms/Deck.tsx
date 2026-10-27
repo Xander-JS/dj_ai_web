@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { clsx } from 'clsx';
 import { useDJStore, djStore } from '../../../store/useDJStore';
 import { useSeedStore } from '../../../store/useSeedStore';
@@ -8,12 +7,11 @@ import { ejectDeckWithFeedback, toggleReferenceWithFeedback } from '../../../ser
 import type { DeckId } from '../../../types/deck';
 import {
   getDeckAnalysisStatus,
-  getDeckBarSyncHint,
   getDeckNotices,
   getDeckSyncKeys,
-  translatePanelMessage,
   type DeckPanelInput,
 } from '../../../services/console/deckPanelModel';
+import { toggleDeckDisplayMode } from '../../../hooks/useDeckDisplayMode';
 import { JogWheel } from '../atoms/JogWheel';
 import { DeckNoticeStrip } from '../molecules/DeckNoticeStrip';
 import { DeckUtilityButtons } from '../molecules/DeckUtilityButtons';
@@ -30,12 +28,11 @@ export interface DeckProps {
 }
 
 /**
- * Deck A / Deck B (secciones 2 y 3): Expulsar y Referencia junto a los avisos, disco, fila de sincronización, Hot Cues, CUE y
- * PLAY / PAUSE, y el fader de tempo. Deck B es el espejo horizontal de Deck A. Título, artista,
+ * Deck A / Deck B (secciones 2 y 3): Expulsar, Referencia y Modo (alterna el display LED, sobre
+ * DOWNBEAT & COMPÁS) junto a los avisos, disco, fila de sincronización, Hot Cues, CUE y PLAY / PAUSE, y el fader de tempo. Deck B es el espejo horizontal de Deck A. Título, artista,
  * forma de onda e información técnica están en la pantalla digital.
  */
 export const Deck: React.FC<DeckProps> = ({ deckName }) => {
-  const { t } = useTranslation();
   const { settings } = useSettingsStore();
   const pitchRangePercent = Math.round(settings.pitchRange * 100);
   const syncLimitPercent = Math.round(settings.syncRange * 100);
@@ -92,8 +89,6 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
   };
   const notices = getDeckNotices(panelInput);
   const syncKeys = getDeckSyncKeys(panelInput);
-  const barSyncHint = getDeckBarSyncHint(panelInput);
-  const barSyncHintId = `deck-${id}-barsync-hint`;
 
   const pitchPercentLabel = `${deck.playbackRate >= 1 ? '+' : ''}${((deck.playbackRate - 1) * 100).toFixed(2)}%`;
   const isPhaseActive = deck.phaseAlignment?.status === 'active';
@@ -235,6 +230,7 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
               onToggleReference={() => {
                 if (loadedTrackId) toggleReferenceWithFeedback(deckName, loadedTrackId);
               }}
+              onToggleMode={() => toggleDeckDisplayMode(deckName)}
             />
           </div>
           <div className="deck-panel__notices">
@@ -265,7 +261,6 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
             onAlign={handlePhaseAlign}
             onSync={handleSyncToggle}
             onKeyLock={() => toggleKeyLock(deckName)}
-            barSyncHintId={barSyncHint ? barSyncHintId : undefined}
           />
         </div>
 
@@ -294,21 +289,6 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
           />
         </div>
       </div>
-
-      {/* Feedback rítmico visible: por qué BAR SYNC no puede prepararse o por qué se rechazó.
-          Siempre montado (oculto si no hay aviso) para que cargar una pista no cambie el alto */}
-      <p
-        id={barSyncHintId}
-        className={clsx('deck-sync-hint', !barSyncHint && 'is-empty', barSyncHint?.rejected && 'deck-sync-hint-rejected')}
-        role={barSyncHint ? (barSyncHint.rejected ? 'alert' : 'note') : undefined}
-        data-testid={barSyncHint ? barSyncHintId : undefined}
-      >
-        {barSyncHint && (
-          <>
-            <strong>{t('dj.bar_sync')}:</strong> {translatePanelMessage(t, barSyncHint.message)}
-          </>
-        )}
-      </p>
     </div>
   );
 };

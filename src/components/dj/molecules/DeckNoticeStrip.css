@@ -8,3 +8,16 @@
   min-height: 18px;
   min-width: 0;
 }
+
+/* Hueco fijo del aviso de Referencia: el aviso y su marcador invisible comparten celda */
+.deck-notice-strip__reserved {
+  display: inline-grid;
+}
+
+.deck-notice-strip__reserved > * {
+  grid-area: 1 / 1;
+}
+
+.deck-notice-strip__placeholder {
+  visibility: hidden;
+}

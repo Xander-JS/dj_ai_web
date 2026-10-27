@@ -6,6 +6,8 @@ import { ScreenDeckIdent } from '../molecules/ScreenDeckIdent';
 import { ScreenWaveform } from '../molecules/ScreenWaveform';
 import { ScreenTechInfo } from '../molecules/ScreenTechInfo';
 import { ScreenRecCounter } from '../molecules/ScreenRecCounter';
+import { ConsoleLiveIndicator } from '../molecules/ConsoleLiveIndicator';
+import { ScreenPowerOn } from '../molecules/ScreenPowerOn';
 import { ScreenLoadMenu, type MenuDeckInfo } from './ScreenLoadMenu';
 import { useDJStore, type DeckStoreState } from '../../../store/useDJStore';
 import { useSessionCapture } from '../../../hooks/useSessionCapture';
@@ -20,7 +22,7 @@ const isDeckAnalyzing = (deck: DeckStoreState) => deck.track?.analysis?.status =
 
 /**
  * Pantalla digital de la consola: módulo elevado con su botonera (MENU, GRID, LOAD A, LOAD B,
- * REC) y un área de visualización con dos vistas. La normal muestra, para cada deck, su
+ * REC y el indicador EN VIVO / EN ESPERA) y un área de visualización con dos vistas. La normal muestra, para cada deck, su
  * identificación, su forma de onda y su información técnica; la de menú carga pistas de la
  * biblioteca. El contador de grabación ocupa la esquina superior derecha en ambas.
  */
@@ -61,6 +63,7 @@ export const DigitalScreen: React.FC = () => {
         onGrid={() => digitalScreenStore.toggleGrid()}
         onLoad={(deckId) => digitalScreenStore.pressLoad(deckId)}
         onRec={() => toggleSessionCaptureWithFeedback()}
+        status={<ConsoleLiveIndicator />}
       />
 
       <div
@@ -83,6 +86,7 @@ export const DigitalScreen: React.FC = () => {
           </div>
         )}
         {capture.active && <ScreenRecCounter elapsedMs={capture.elapsedMs} />}
+        <ScreenPowerOn />
       </div>
     </section>
   );

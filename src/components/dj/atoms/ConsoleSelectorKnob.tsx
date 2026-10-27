@@ -17,8 +17,6 @@ export interface ConsoleSelectorKnobProps<T extends string> {
   /** Posiciones en orden físico, de izquierda a derecha. */
   positions: ReadonlyArray<SelectorKnobPosition<T>>;
   value: T;
-  /** Serigrafía bajo el knob. */
-  caption?: string;
   disabled?: boolean;
   'aria-label': string;
   'aria-valuetext': string;
@@ -39,7 +37,6 @@ export interface ConsoleSelectorKnobProps<T extends string> {
 export function ConsoleSelectorKnob<T extends string>({
   positions,
   value,
-  caption,
   disabled = false,
   onPress,
   onSelect,
@@ -95,7 +92,6 @@ export function ConsoleSelectorKnob<T extends string>({
         </button>
         {label('end')}
       </div>
-      {caption && <span className="console-selector__caption" aria-hidden="true">{caption}</span>}
     </div>
   );
 }

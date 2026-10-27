@@ -163,7 +163,7 @@ describe('Fase 21 Etapa 4 — Integración Funcional de la Consola Mixer', () =>
       path.resolve(process.cwd(), 'src/components/dj/organisms/DJConsole.tsx'),
       'utf-8'
     );
-    assert.ok(mixerPageCode.includes('<DJConsole />'), 'Mixer.tsx debe renderizar la consola completa');
+    assert.ok(mixerPageCode.includes('<DJConsole />'), 'Mixer.tsx debe renderizar la consola completa (ajustada al alto y al ancho)');
     assert.ok(consoleCode.includes('<MixerConsole />'), 'La carcasa debe renderizar MixerConsole directamente');
     assert.equal(mixerPageCode.includes('mock'), false, 'Mixer.tsx no debe contener estados mock');
     assert.equal(consoleCode.includes('mock'), false, 'DJConsole.tsx no debe contener estados mock');

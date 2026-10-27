@@ -12,6 +12,7 @@
  */
 
 import type {
+  DownbeatOrigin,
   TrackDownbeat,
   ManualDownbeatConfirmation,
 } from '../types/track.ts';
@@ -54,8 +55,9 @@ export function createManualDownbeatConfirmation(params: {
   contentHash: string;
   confirmedAt?: number;
   suggestedPosition?: number | null;
+  origin?: DownbeatOrigin;
 }): TrackDownbeat {
-  const { position, beatsPerBar, contentHash, confirmedAt, suggestedPosition } = params;
+  const { position, beatsPerBar, contentHash, confirmedAt, suggestedPosition, origin } = params;
 
   if (typeof position !== 'number' || !Number.isFinite(position) || position < 0) {
     throw new TypeError(`Posición de downbeat inválida: ${position}. Debe ser un número finito >= 0.`);
@@ -86,6 +88,7 @@ export function createManualDownbeatConfirmation(params: {
     contentHash: contentHash.toLowerCase(),
     confirmedAt: confirmedAt ?? Date.now(),
     source: 'manual',
+    ...(origin === 'playhead' || origin === 'suggested' ? { origin } : {}),
   };
 
   return {

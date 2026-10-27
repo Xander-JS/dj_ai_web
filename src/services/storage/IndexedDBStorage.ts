@@ -41,14 +41,24 @@ export interface StoredTrackRecord {
   dateAdded: number;
 }
 
+/** Picos de alta resolución de la forma de onda ampliada, válidos solo para su contenido y formato. */
+export interface StoredWaveformPeaksRecord {
+  trackId: string;
+  contentHash: string;
+  formatVersion: number;
+  durationSec: number;
+  peaks: Uint8Array;
+}
+
 
 const DB_NAME = 'SystemDJ_Storage';
-// v1: tracks | v2: playlists | v3: recorded_sessions
+// v1: tracks | v2: playlists | v3: recorded_sessions | v4: waveform_peaks
 // (las migraciones solo crean almacenes ausentes, sin tocar datos)
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NAME = 'tracks';
 const PLAYLIST_STORE_NAME = 'playlists';
 const SESSION_STORE_NAME = 'recorded_sessions';
+const WAVEFORM_PEAKS_STORE_NAME = 'waveform_peaks';
 
 /**
  * Resultado explícito de un guardado. `persisted: false` significa que la pista
@@ -117,6 +127,9 @@ export class IndexedDBStorage {
           if (!db.objectStoreNames.contains(SESSION_STORE_NAME)) {
             const sessionStore = db.createObjectStore(SESSION_STORE_NAME, { keyPath: 'id' });
             sessionStore.createIndex('savedAt', 'savedAt', { unique: false });
+          }
+          if (!db.objectStoreNames.contains(WAVEFORM_PEAKS_STORE_NAME)) {
+            db.createObjectStore(WAVEFORM_PEAKS_STORE_NAME, { keyPath: 'trackId' });
           }
         };
 
@@ -518,8 +531,9 @@ export class IndexedDBStorage {
 
     return new Promise((resolve, reject) => {
       try {
-        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME], 'readwrite');
+        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME, WAVEFORM_PEAKS_STORE_NAME], 'readwrite');
         if (!wasMemoryOnly) tx.objectStore(STORE_NAME).delete(id);
+        tx.objectStore(WAVEFORM_PEAKS_STORE_NAME).delete(id);
 
         const playlistStore = tx.objectStore(PLAYLIST_STORE_NAME);
         const cursorRequest = playlistStore.openCursor();
@@ -557,8 +571,9 @@ export class IndexedDBStorage {
 
     return new Promise((resolve, reject) => {
       try {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const tx = db.transaction([STORE_NAME, WAVEFORM_PEAKS_STORE_NAME], 'readwrite');
         tx.objectStore(STORE_NAME).clear();
+        tx.objectStore(WAVEFORM_PEAKS_STORE_NAME).clear();
         tx.oncomplete = () => resolve();
         const onFailure = () => reject(new Error('No se pudieron eliminar las pistas', { cause: tx.error }));
         tx.onabort = onFailure;
@@ -583,10 +598,11 @@ export class IndexedDBStorage {
 
     return new Promise((resolve) => {
       try {
-        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME, SESSION_STORE_NAME], 'readwrite');
+        const tx = db.transaction([STORE_NAME, PLAYLIST_STORE_NAME, SESSION_STORE_NAME, WAVEFORM_PEAKS_STORE_NAME], 'readwrite');
         tx.objectStore(STORE_NAME).clear();
         tx.objectStore(PLAYLIST_STORE_NAME).clear();
         tx.objectStore(SESSION_STORE_NAME).clear();
+        tx.objectStore(WAVEFORM_PEAKS_STORE_NAME).clear();
         tx.oncomplete = () => resolve();
         tx.onabort = () => resolve();
         tx.onerror = () => resolve();
@@ -974,6 +990,43 @@ export class IndexedDBStorage {
         request.onerror = () => resolve(null);
       } catch {
         resolve(null);
+      }
+    });
+  }
+
+  /**
+   * Picos de alta resolución guardados de una pista; quien llama valida huella y formato.
+   * Sin IndexedDB no hay caché persistente (se recalculan en cada sesión).
+   */
+  public async getWaveformPeaks(trackId: string): Promise<StoredWaveformPeaksRecord | null> {
+    const db = await this.init();
+    if (!db) return null;
+
+    return new Promise((resolve) => {
+      try {
+        const request = db.transaction(WAVEFORM_PEAKS_STORE_NAME, 'readonly').objectStore(WAVEFORM_PEAKS_STORE_NAME).get(trackId);
+        request.onsuccess = () => resolve((request.result as StoredWaveformPeaksRecord | undefined) ?? null);
+        request.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  /** Guarda (o reemplaza) los picos de alta resolución de una pista. */
+  public async saveWaveformPeaks(record: StoredWaveformPeaksRecord): Promise<boolean> {
+    const db = await this.init();
+    if (!db) return false;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(WAVEFORM_PEAKS_STORE_NAME, 'readwrite');
+        tx.objectStore(WAVEFORM_PEAKS_STORE_NAME).put(record);
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = () => resolve(false);
+        tx.onerror = () => resolve(false);
+      } catch {
+        resolve(false);
       }
     });
   }

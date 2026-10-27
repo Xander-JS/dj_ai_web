@@ -418,7 +418,7 @@ describe('Fase 20 Etapa 4 — Integración Real de la Interfaz de Deck B', () =>
     );
 
     // Claves en dj
-    const djKeys = ['deck_a', 'deck_b', 'play', 'pause', 'cue_stop', 'seek_title'];
+    const djKeys = ['deck_a', 'deck_b', 'play', 'pause', 'cue_stop'];
     for (const k of djKeys) {
       assert.ok(esJson.dj[k], `Falta clave dj.${k} en es/translation.json`);
       assert.ok(enJson.dj[k], `Falta clave dj.${k} en en/translation.json`);

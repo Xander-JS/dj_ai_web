@@ -439,7 +439,6 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
       'reanalyze_deck',
       'no_track',
       'unknown_artist',
-      'seek_title',
       'phase_align_grid_tooltip',
       'phase_align_rejected_state',
       'sync_reject_slave_track',
@@ -487,23 +486,14 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
     assert.equal(deckCode.includes('mockPitchB'), false);
     assert.equal(deckCode.includes('deck-waveform-mock'), false, 'El mock de waveform debe haberse reemplazado');
 
-    // La forma de onda SVG real se dibuja en la pantalla digital; el deck conserva la expulsión
-    const waveformCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/atoms/Waveform.tsx'),
-      'utf-8'
-    );
-    const waveformCss = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/atoms/Waveform.css'),
-      'utf-8'
-    );
+    // La forma de onda ampliada se dibuja en un canvas de la pantalla digital; el deck conserva la expulsión
     const screenWaveformCode = fs.readFileSync(
       path.resolve(process.cwd(), 'src/components/dj/molecules/ScreenWaveform.tsx'),
       'utf-8'
     );
-    assert.equal(deckCode.includes('<Waveform'), false, 'La forma de onda ya no vive en el deck');
-    assert.ok(screenWaveformCode.includes('<Waveform'), 'La pantalla debe renderizar el componente Waveform');
-    assert.ok(waveformCode.includes('dj-waveform'), 'Waveform.tsx debe renderizar SVG de forma de onda');
-    assert.ok(waveformCode.includes('dj-waveform__bar'), 'Waveform.tsx debe renderizar rects de forma de onda');
+    assert.equal(deckCode.includes('Waveform'), false, 'La forma de onda ya no vive en el deck');
+    assert.ok(screenWaveformCode.includes('<canvas'), 'La pantalla dibuja la forma de onda en un canvas');
+    assert.equal(fs.existsSync(path.resolve(process.cwd(), 'src/components/dj/atoms/Waveform.tsx')), false, 'La vista general SVG fija se retiró');
     // Expulsar y Referencia viven en la esquina exterior de cada deck
     const utilityCode = fs.readFileSync(
       path.resolve(process.cwd(), 'src/components/dj/molecules/DeckUtilityButtons.tsx'),
@@ -512,8 +502,6 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
     assert.ok(deckCode.includes('<DeckUtilityButtons'), 'El deck incluye Expulsar y Referencia');
     assert.ok(utilityCode.includes('data-testid={`deck-${id}-eject`}'), 'El deck incluye el botón Expulsar');
 
-    assert.ok(waveformCss.includes('.dj-waveform {'));
-    assert.ok(waveformCss.includes('.dj-waveform__bar'));
     assert.equal(cssCode.includes('.deck-panel__aux'), false, 'La celda auxiliar del deck desaparece');
   });
 });

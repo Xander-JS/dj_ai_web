@@ -12,8 +12,6 @@ export interface DeckSyncRowProps {
   onAlign: () => void;
   onSync: () => void;
   onKeyLock: () => void;
-  /** Id de la línea de guía de BAR SYNC, si está visible. */
-  barSyncHintId?: string;
 }
 
 const KEY_TONES: Record<PanelLight, ConsoleKeyTone> = {
@@ -28,7 +26,7 @@ const KEY_TONES: Record<PanelLight, ConsoleKeyTone> = {
  * Fila BAR SYNC · ALIGN · SYNC · KEY LOCK. Mismo orden en ambos decks para que se lea igual;
  * cada estado solo cambia la luz (borde y serigrafía), nunca el tamaño ni la posición.
  */
-export const DeckSyncRow: React.FC<DeckSyncRowProps> = ({ deckId, keys, onBarSync, onAlign, onSync, onKeyLock, barSyncHintId }) => {
+export const DeckSyncRow: React.FC<DeckSyncRowProps> = ({ deckId, keys, onBarSync, onAlign, onSync, onKeyLock }) => {
   const { t } = useTranslation();
   const id = deckId.toLowerCase();
 
@@ -61,7 +59,6 @@ export const DeckSyncRow: React.FC<DeckSyncRowProps> = ({ deckId, keys, onBarSyn
     <div className="deck-sync-row" role="group" aria-label={t('dj.sync_row_label')}>
       {renderKey(keys.barSync, 'barsync', onBarSync, {
         'aria-label': barSyncLabel === barSyncName ? barSyncName : `${barSyncName}: ${barSyncLabel}`,
-        'aria-describedby': barSyncHintId,
       })}
       {renderKey(keys.align, 'align', onAlign)}
       {renderKey(keys.sync, 'sync', onSync)}

@@ -5,8 +5,8 @@ import { ConsoleLed } from '../atoms/ConsoleLed';
 import './ConsoleLiveIndicator.css';
 
 /**
- * Indicador `EN VIVO` / `LIVE`: texto fijo y un LED rojo que se enciende mientras al menos un
- * deck suena (apagado = en espera, sin texto aparte). Solo lectura.
+ * Indicador `EN VIVO` / `EN ESPERA`: LED rojo encendido y «en vivo» mientras al menos un deck
+ * suena; apagado y «en espera» si no. Solo lectura.
  */
 export const ConsoleLiveIndicator: React.FC<{ className?: string }> = ({ className }) => {
   const { t } = useTranslation();
@@ -22,7 +22,7 @@ export const ConsoleLiveIndicator: React.FC<{ className?: string }> = ({ classNa
       data-live={isLive}
     >
       <ConsoleLed on={isLive} color="red" />
-      <span aria-hidden="true">{t('mixer.live')}</span>
+      <span aria-hidden="true">{t(isLive ? 'mixer.live' : 'mixer.standby')}</span>
     </span>
   );
 };

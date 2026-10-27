@@ -1,0 +1,230 @@
+/* ==========================================================================
+   Menú de carga de la pantalla digital: contenedor MENU (subapartados, buscador y lista)
+   y la barra de teclas debajo, fuera del contenedor y nunca atenuada.
+   ========================================================================== */
+
+.screen-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  height: 100%;
+}
+
+.screen-menu__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.screen-menu__frame {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(64px, 22%) minmax(0, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 6px 6px 6px;
+  border: 1px solid var(--screen-line-strong);
+  border-radius: 3px;
+  transition: opacity 0.15s ease;
+}
+
+.screen-menu__frame.is-dimmed {
+  opacity: 0.3;
+}
+
+.screen-menu__legend {
+  margin-left: 4px;
+  padding: 0 5px;
+  font-size: var(--screen-text-xs);
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.14em;
+  color: var(--screen-ink);
+}
+
+/* Foco visible: anillo sobre la pantalla, también para listas con aria-activedescendant */
+.screen-menu__subsections:focus-visible,
+.screen-menu__list:focus-visible,
+.screen-menu__search:focus-visible {
+  outline: 1px solid var(--console-focus);
+  outline-offset: 1px;
+}
+
+/* -- 7. Subapartados -------------------------------------------------------- */
+.screen-menu__subsections {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px;
+  border-radius: 2px;
+}
+
+.screen-menu__subsection {
+  position: relative;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-size: var(--screen-text-sm);
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--console-tone) 55%, var(--screen-ink-dim));
+  cursor: pointer;
+}
+
+.screen-menu__subsection:hover {
+  color: color-mix(in srgb, var(--console-tone) 55%, var(--screen-ink));
+}
+
+/* Activo: fondo y borde del deck, más el marcador ▸ (el color nunca es la única pista) */
+.screen-menu__subsection.is-active {
+  border-color: var(--console-tone);
+  background-color: color-mix(in srgb, var(--console-tone) 26%, transparent);
+  color: var(--screen-ink);
+}
+
+.screen-menu__subsection.is-active::before {
+  content: '▸';
+  position: absolute;
+  left: 3px;
+}
+
+/* -- 8 y 9. Buscador y lista --------------------------------------------------- */
+.screen-menu__browser {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.screen-menu__search {
+  width: 100%;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--screen-line);
+  border-radius: 2px;
+  background-color: var(--screen-well);
+  color: var(--screen-ink);
+  font: inherit;
+  font-size: var(--screen-text-sm);
+}
+
+.screen-menu__search::placeholder {
+  color: var(--screen-ink-faint);
+}
+
+.screen-menu__table {
+  flex: 1;
+  min-height: 0;
+  /* La tabla entera desplaza: cabecera fija arriba y columnas alineadas con la barra */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--screen-line-strong) transparent;
+  border: 1px solid var(--screen-line);
+  border-radius: 2px;
+  background-color: var(--screen-well);
+}
+
+.screen-menu__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4ch 7.5ch 8ch;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-bottom-color: var(--screen-line);
+  font-size: var(--screen-text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  color: var(--screen-ink);
+  cursor: default;
+}
+
+.screen-menu__row > span:not(:first-child) {
+  text-align: right;
+  font-family: var(--font-family-mono);
+}
+
+.screen-menu__row--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom-color: var(--screen-line-strong);
+  background-color: var(--screen-well);
+  font-size: var(--screen-text-xs);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--screen-ink-dim);
+}
+
+.screen-menu__row--head > span:not(:first-child) {
+  font-family: inherit;
+}
+
+.screen-menu__row:not(.screen-menu__row--head):hover {
+  background-color: hsl(0 0% 100% / 0.04);
+}
+
+.screen-menu__title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.screen-menu__title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Fila seleccionada: color del deck destino, con borde (no solo color) */
+.screen-menu__row.is-selected {
+  border-color: var(--console-tone);
+  background-color: color-mix(in srgb, var(--console-tone) 28%, transparent);
+}
+
+/* Pista ya cargada en el deck destino: punto sutil, distinto de la selección */
+.screen-menu__loaded-mark {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: transparent;
+}
+
+.screen-menu__row.is-loaded .screen-menu__loaded-mark {
+  background-color: var(--console-tone);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--screen-ink) 40%, transparent);
+}
+
+.screen-menu__empty {
+  margin: 0;
+  padding: 10px;
+  font-size: var(--screen-text-sm);
+  color: var(--screen-ink-dim);
+  text-align: center;
+}
+
+/* -- 10. Barra de teclas ------------------------------------------------------ */
+.screen-menu__keybar {
+  flex: none;
+  margin: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--screen-line);
+  border-radius: 2px;
+  font-size: var(--screen-text-xs);
+  line-height: 1.3;
+  color: var(--screen-ink-dim);
+  text-wrap: balance;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-menu__frame { transition: none; }
+}

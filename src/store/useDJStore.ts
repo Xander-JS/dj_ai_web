@@ -11,7 +11,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import type { BeatUnit, Track, TrackAnalysis, HotCue, TrackDownbeat } from '../types/track.ts';
+import type { BeatUnit, DownbeatOrigin, Track, TrackAnalysis, HotCue, TrackDownbeat } from '../types/track.ts';
 import type { DeckId, PhaseAlignmentState, BarSyncState, BarSyncStatus } from '../types/deck.ts';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
 import { audioEngine } from '../audio/index.ts';
@@ -52,6 +52,8 @@ export interface ConfirmDownbeatParams {
   beatUnit?: BeatUnit;
   suggestedPosition?: number | null;
   confirmedAt?: number;
+  /** Source chosen on the DOWNBEAT & COMPÁS module (CAB / SUG); stored with the confirmation. */
+  origin?: DownbeatOrigin;
 }
 
 export type DeckPlaybackStatus = 'stopped' | 'playing' | 'paused' | 'loading' | 'error';
@@ -94,6 +96,8 @@ export interface DeckStoreState {
   hotCues: HotCue[];
   /** Desviación porcentual momentánea de pitch bend (+3.5, -3.5 o 0). */
   pitchBend: number;
+  /** KEY LOCK: el pitch fader cambia la velocidad sin cambiar la tonalidad. Se conserva al cambiar de pista. */
+  isKeyLocked: boolean;
   /** Indica si el deck se encuentra en reproducción provisional CUP (manteniendo CUE presionado). */
   isCupPlaying: boolean;
   /** Sincronización automática de BPM activada (Esclavo sincronizado). */
@@ -158,6 +162,7 @@ const INITIAL_DECK_A: DeckStoreState = {
   mainCue: null,
   hotCues: [],
   pitchBend: 0,
+  isKeyLocked: false,
   isCupPlaying: false,
   isSyncActive: false,
   isMaster: false,
@@ -192,6 +197,7 @@ const INITIAL_DECK_B: DeckStoreState = {
   mainCue: null,
   hotCues: [],
   pitchBend: 0,
+  isKeyLocked: false,
   isCupPlaying: false,
   isSyncActive: false,
   isMaster: false,
@@ -1574,6 +1580,13 @@ class DJStore {
     }
   }
 
+  /** Activa o desactiva KEY LOCK en el deck. No toca la velocidad ni SYNC. */
+  public toggleKeyLock(deckId: DeckId): void {
+    const isKeyLocked = !this.getDeckState(deckId).isKeyLocked;
+    audioEngine.setDeckKeyLock(deckId, isKeyLocked);
+    this.setState({ [deckId === 'A' ? 'deckA' : 'deckB']: { ...this.getDeckState(deckId), isKeyLocked } });
+  }
+
   public pitchBendDeckA(direction: 'up' | 'down' | 'release'): void {
     this.pitchBend('A', direction);
   }
@@ -2301,9 +2314,11 @@ class DJStore {
     let suggestedPositionOverride: number | null | undefined;
     let confirmedAtOverride: number | undefined;
     let beatUnit: BeatUnit | undefined;
+    let origin: DownbeatOrigin | undefined;
 
     if (typeof positionOrParams === 'object' && positionOrParams !== null) {
       position = positionOrParams.position;
+      origin = positionOrParams.origin;
       beatsPerBar = positionOrParams.beatsPerBar;
       beatUnit = positionOrParams.beatUnit;
       suggestedPositionOverride = positionOrParams.suggestedPosition;
@@ -2364,6 +2379,7 @@ class DJStore {
         contentHash: preContentHash,
         confirmedAt: confirmedAtOverride,
         suggestedPosition: effectiveSuggestedPosition,
+        origin,
       });
     } catch {
       return false;
@@ -2604,6 +2620,7 @@ class DJStore {
       ...initialDeck,
       pitch: currentDeck.pitch,
       playbackRate: currentDeck.playbackRate,
+      isKeyLocked: currentDeck.isKeyLocked,
       isSyncActive: false,
       isMaster: false,
       phaseAlignment: { status: 'idle', progressPercent: 0 },
@@ -3072,6 +3089,7 @@ export function useDJStore(): {
   seekDeck: (deckId: DeckId, positionSeconds: number) => void;
   setPitchDeck: (deckId: DeckId, pitchValue: number) => void;
   pitchBend: (deckId: DeckId, direction: 'up' | 'down' | 'release') => void;
+  toggleKeyLock: (deckId: DeckId) => void;
   unloadDeck: (deckId: DeckId) => void;
   setMasterVolume: (volume: number) => void;
   toggleMasterMute: () => void;
@@ -3185,6 +3203,7 @@ export function useDJStore(): {
     seekDeck: djStore.seekDeck.bind(djStore),
     setPitchDeck: djStore.setPitchDeck.bind(djStore),
     pitchBend: djStore.pitchBend.bind(djStore),
+    toggleKeyLock: djStore.toggleKeyLock.bind(djStore),
     syncDeck: djStore.syncDeck.bind(djStore),
     toggleSync: djStore.toggleSync.bind(djStore),
     alignPhase: djStore.alignPhase.bind(djStore),

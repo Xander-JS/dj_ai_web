@@ -1,0 +1,51 @@
+/* Fila compacta: letra del deck, título en su color y artista atenuado; errores en rojo */
+.screen-deck-ident {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--screen-text-md);
+  line-height: 1.25;
+}
+
+.screen-deck-ident__letter {
+  flex: none;
+  font-family: var(--font-family-mono);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--console-tone);
+}
+
+.screen-deck-ident__text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.screen-deck-ident__title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: var(--font-weight-semibold, 600);
+  color: color-mix(in srgb, var(--console-tone) 45%, var(--screen-ink));
+}
+
+.screen-deck-ident__artist {
+  flex: 0 10 auto;
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--screen-ink-dim);
+}
+
+.screen-deck-ident__alert {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--screen-alert);
+}

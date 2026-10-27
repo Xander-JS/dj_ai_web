@@ -1,0 +1,129 @@
+/* Conmutador rotativo: pomo de goma oscura con faldón moleteado y una línea blanca que gira */
+.console-selector {
+  --selector-size: 2.875rem;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.console-selector__top {
+  display: flex;
+  justify-content: center;
+}
+
+.console-selector__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.console-selector__label {
+  padding: 1px 2px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--console-silkscreen-dim);
+  opacity: 0.7;
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 0.12s ease, opacity 0.12s ease;
+}
+
+.console-selector__label--start,
+.console-selector__label--end {
+  padding-bottom: 2px;
+}
+
+.console-selector__label:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.console-selector__label.is-selected {
+  color: var(--console-silkscreen);
+  opacity: 1;
+}
+
+.console-selector__label:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.console-selector__knob {
+  position: relative;
+  flex: none;
+  width: var(--selector-size);
+  height: var(--selector-size);
+  padding: 0;
+  border: 2px solid hsl(225 5% 30%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 38%, hsl(0 0% 100% / 0.1), transparent 55%),
+    repeating-conic-gradient(from 0deg, hsl(225 6% 15%) 0deg 6deg, hsl(225 6% 11%) 6deg 12deg);
+  box-shadow:
+    inset 0 0 0 5px hsl(225 6% 14%),
+    inset 0 1px 0 5px hsl(0 0% 100% / 0.06),
+    0 3px 5px rgb(0 0 0 / 0.6),
+    0 0 0 1px rgb(0 0 0 / 0.6);
+  cursor: pointer;
+  transition: transform 0.06s ease;
+}
+
+.console-selector__knob:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.console-selector__knob:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 3px;
+}
+
+/* Línea indicadora: gira sobre el centro del pomo hasta la serigrafía elegida */
+.console-selector__indicator {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--selector-angle));
+  transition: transform 0.15s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.console-selector__indicator::before {
+  content: '';
+  position: absolute;
+  left: calc(50% - 1.5px);
+  top: 3px;
+  width: 3px;
+  height: 32%;
+  border-radius: 2px;
+  background-color: hsl(0 0% 94%);
+  box-shadow: 0 0 3px hsl(0 0% 100% / 0.35);
+}
+
+.console-selector__caption {
+  color: var(--console-silkscreen-dim);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.console-selector.is-disabled {
+  opacity: 0.45;
+}
+
+.console-selector__knob:disabled {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-selector__indicator { transition: none; }
+}
+
+:root[data-animations='off'] .console-selector__indicator {
+  transition: none;
+}

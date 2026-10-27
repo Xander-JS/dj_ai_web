@@ -170,13 +170,13 @@ describe('Apariencia — tokens en el elemento raíz', () => {
 });
 
 describe('Atajos de teclado — resolución de teclas', () => {
-  it('mapea las 10 entradas de la tabla de referencia', () => {
-    assert.equal(KEYBOARD_SHORTCUTS.length, 10);
-    assert.deepEqual(resolveShortcut(key('Space')), { type: 'play', deckId: 'A' });
-    assert.deepEqual(resolveShortcut(key('Space', { shiftKey: true })), { type: 'play', deckId: 'B' });
+  it('mapea las 16 entradas de la tabla de referencia', () => {
+    assert.equal(KEYBOARD_SHORTCUTS.length, 16);
+    assert.deepEqual(resolveShortcut(key('Space'), { kind: 'deck', deckId: 'A' }), { type: 'play', deckId: 'A' });
+    assert.deepEqual(resolveShortcut(key('Space'), { kind: 'deck', deckId: 'B' }), { type: 'play', deckId: 'B' });
     assert.deepEqual(resolveShortcut(key('KeyQ')), { type: 'cue', deckId: 'A' });
-    assert.deepEqual(resolveShortcut(key('KeyW')), { type: 'sync', deckId: 'A' });
-    assert.deepEqual(resolveShortcut(key('KeyO')), { type: 'cue', deckId: 'B' });
+    assert.deepEqual(resolveShortcut(key('KeyE')), { type: 'sync', deckId: 'A' });
+    assert.deepEqual(resolveShortcut(key('KeyI')), { type: 'cue', deckId: 'B' });
     assert.deepEqual(resolveShortcut(key('KeyP')), { type: 'sync', deckId: 'B' });
     assert.deepEqual(resolveShortcut(key('ArrowLeft')), { type: 'crossfader', direction: -1 });
     assert.deepEqual(resolveShortcut(key('ArrowRight')), { type: 'crossfader', direction: 1 });
@@ -187,8 +187,10 @@ describe('Atajos de teclado — resolución de teclas', () => {
   });
 
   it('ignora teclas no mapeadas y combinaciones del sistema', () => {
-    assert.equal(resolveShortcut(key('Digit5')), null);
-    assert.equal(resolveShortcut(key('KeyA')), null);
+    // Espacio solo actúa junto a la tecla de un deck (F / J)
+    assert.equal(resolveShortcut(key('Space')), null);
+    assert.equal(resolveShortcut(key('Space', { shiftKey: true })), null);
+    assert.equal(resolveShortcut(key('KeyZ')), null);
     assert.equal(resolveShortcut(key('KeyQ', { ctrlKey: true })), null);
     assert.equal(resolveShortcut(key('Space', { metaKey: true })), null);
     assert.equal(resolveShortcut(key('KeyQ', { shiftKey: true })), null);
@@ -217,7 +219,9 @@ describe('Atajos de teclado — manejadores', () => {
     const { target, calls } = recordingTarget();
     const { onKeyDown, onKeyUp } = createShortcutHandlers(target);
     const space = key('Space');
+    onKeyDown(key('KeyF'));
     onKeyDown(space);
+    onKeyUp(key('KeyF'));
     onKeyDown(key('KeyQ'));
     onKeyUp(key('KeyQ'));
     onKeyDown(key('KeyP'));
@@ -228,8 +232,9 @@ describe('Atajos de teclado — manejadores', () => {
   it('suelta el CUE al perder el foco y no repite acciones al mantener la tecla', () => {
     const { target, calls } = recordingTarget();
     const { onKeyDown, onBlur } = createShortcutHandlers(target);
-    onKeyDown(key('KeyO'));
-    onKeyDown(key('KeyO', { repeat: true }));
+    onKeyDown(key('KeyI'));
+    onKeyDown(key('KeyI', { repeat: true }));
+    onKeyDown(key('KeyJ'));
     onKeyDown(key('Space', { repeat: true }));
     onBlur();
     assert.deepEqual(calls, ['cueDown:B', 'cueUp:B']);
@@ -254,6 +259,7 @@ describe('Atajos de teclado — manejadores', () => {
   it('no actúa al escribir en campos ni cuando un control ya gestionó la tecla', () => {
     const { target, calls } = recordingTarget();
     const { onKeyDown } = createShortcutHandlers(target);
+    onKeyDown(key('KeyF'));
     onKeyDown(key('Space', { target: { tagName: 'INPUT' } }));
     onKeyDown(key('KeyQ', { target: { tagName: 'DIV', isContentEditable: true } }));
     onKeyDown(key('Space', { defaultPrevented: true }));

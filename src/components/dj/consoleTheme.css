@@ -1,0 +1,71 @@
+/* ==========================================================================
+   SYSTEM DJ — Console hardware tokens
+   Superficies, serigrafía y luces de la consola (pantalla, decks y mixer). La consola es de
+   plástico negro mate en ambos temas: solo la sombra que la separa del fondo sigue a
+   data-theme de <html>. No es un sistema de temas aparte.
+   ========================================================================== */
+
+.mixer-page-container {
+  /* Tono de cada canal: A sigue al acento elegido, B al secundario; Master es neutro */
+  --console-tone-a: var(--color-primary-500);
+  --console-tone-b: var(--color-secondary-500);
+  --console-tone-master: hsl(220 14% 88%);
+
+  /* Carcasa de plástico negro mate (no hay textura de plástico en los assets: el grano se
+     dibuja con CSS) */
+  --console-plastic:
+    radial-gradient(hsl(0 0% 100% / 0.022) 0.6px, transparent 0.8px) 0 0 / 3px 3px,
+    radial-gradient(rgb(0 0 0 / 0.18) 0.6px, transparent 0.8px) 1.5px 1.5px / 3px 3px,
+    linear-gradient(180deg, hsl(225 6% 12%), hsl(225 7% 8%));
+  --console-housing-shadow: 0 18px 36px -18px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.18);
+
+  /* Placa de cada módulo (decks y mixer) dentro de la carcasa */
+  --console-plate:
+    linear-gradient(180deg, hsl(0 0% 100% / 0.025), hsl(0 0% 100% / 0) 35%),
+    hsl(225 7% 9%);
+  --console-plate-edge: hsl(0 0% 100% / 0.06);
+  --console-plate-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.05),
+    inset 0 0 0 1px rgb(0 0 0 / 0.45),
+    0 1px 0 hsl(0 0% 100% / 0.03);
+  /* Línea divisoria serigrafiada entre secciones de una misma placa */
+  --console-divider: hsl(0 0% 100% / 0.07);
+
+  --console-silkscreen: hsl(220 10% 92%);
+  --console-silkscreen-dim: hsl(220 6% 66%);
+  --console-focus: hsl(195 90% 62%);
+  --console-key-body: hsl(225 6% 13%);
+  --console-key-edge: rgb(0 0 0 / 0.65);
+  --console-key-light: hsl(195 35% 92%);
+  --console-led-unlit: hsl(225 8% 17%);
+  --console-led-red: hsl(356 90% 56%);
+  --console-led-green: hsl(142 72% 48%);
+  --console-led-amber: hsl(38 95% 54%);
+  --console-led-neutral: hsl(220 8% 70%);
+
+  /* Mini displays LCD (módulo DOWNBEAT & COMPÁS) */
+  --console-lcd-bg: hsl(205 60% 6%);
+  --console-lcd-edge: hsl(200 40% 20%);
+  --console-lcd-ink: hsl(193 100% 75%);
+
+  /* Faders y potenciómetros */
+  --console-slot: hsl(225 12% 4%);
+  --console-tick: hsl(220 6% 46%);
+  --console-meter-bg: hsl(225 14% 4%);
+}
+
+[data-theme='dark'] .mixer-page-container {
+  --console-housing-shadow: 0 0 0 1px rgb(0 0 0 / 0.6), 0 22px 44px -16px rgb(0 0 0 / 0.85);
+}
+
+.console-tone-a {
+  --console-tone: var(--console-tone-a);
+}
+
+.console-tone-b {
+  --console-tone: var(--console-tone-b);
+}
+
+.console-tone-master {
+  --console-tone: var(--console-tone-master);
+}

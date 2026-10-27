@@ -1,0 +1,56 @@
+/* Crossfader a todo el ancho, bajo una línea fina; las curvas centradas debajo */
+.mixer-xfader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: var(--mixer-gap, 8px);
+  border-top: 1px solid var(--console-divider);
+}
+
+.mixer-xfader__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 2.5cqi, 12px);
+  width: 100%;
+}
+
+.mixer-xfader__fader {
+  flex: 0 1 62%;
+  min-width: 0;
+}
+
+.mixer-xfader__fader.console-fader--horizontal {
+  --cap-short: 1.6rem;
+}
+
+/* `← A` y `B →`: texto liso cuyo brillo sigue la ganancia real de su lado */
+.mixer-xfader__side {
+  flex: none;
+  color: var(--console-silkscreen);
+  font-size: clamp(13px, 4.6cqi, 17px);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: calc(0.3 + var(--side-gain) * 0.7);
+  text-shadow: 0 0 calc(var(--side-gain) * 8px) hsl(0 0% 100% / 0.35);
+  transition: opacity 80ms linear, text-shadow 80ms linear;
+}
+
+.mixer-xfader__curves {
+  display: flex;
+  gap: 4px;
+}
+
+.mixer-xfader__curve {
+  height: 20px;
+  min-height: 20px;
+  min-width: 2.5rem;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mixer-xfader__side { transition: none; }
+}

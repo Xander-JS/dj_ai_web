@@ -175,6 +175,7 @@ export function SelectMenu<T extends string>({
   };
 
   const handleMenuKeyDown = (event: React.KeyboardEvent) => {
+    const inSearch = event.target === searchRef.current;
     const last = visible.length - 1;
     switch (event.key) {
       case 'ArrowDown':
@@ -221,6 +222,11 @@ export function SelectMenu<T extends string>({
         closeMenu(true);
         break;
       default:
+        // Con el foco en las opciones, escribir empieza la búsqueda (la tecla llega al buscador)
+        if (searchable && !inSearch && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          searchRef.current?.focus({ preventScroll: true });
+          break;
+        }
         if (!searchable && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
           const buffer = typeaheadRef.current;
           window.clearTimeout(buffer.timer);
@@ -300,8 +306,8 @@ export function SelectMenu<T extends string>({
             id={listId}
             role="listbox"
             aria-label={label}
-            tabIndex={searchable ? undefined : -1}
-            aria-activedescendant={searchable ? undefined : activeDescendant}
+            tabIndex={-1}
+            aria-activedescendant={activeDescendant}
             className="sd-select-menu__list"
           >
             {visible.map((option, index) => {

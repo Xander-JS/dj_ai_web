@@ -26,6 +26,78 @@
   grid-template-rows: var(--layout-header-height) minmax(0, 1fr) 0;
 }
 
+/* Mixer: la barra lateral se retira hacia la izquierda y la consola ocupa todo el ancho. La
+   pestaña del borde la muestra encima de la consola, sin moverla. Tiempos de la entrada: el aviso
+   del botón Mixer y la retirada (el resto de la secuencia está en MixerEntrance.css). */
+.desktop-layout--mixer {
+  --mixer-nav-cue-duration: 400ms;
+  --mixer-sidebar-delay: 250ms;
+  --mixer-sidebar-duration: 500ms;
+
+  position: relative;
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.desktop-layout--mixer .layout-sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  width: var(--layout-sidebar-width);
+  box-shadow: 16px 0 32px -18px rgb(0 0 0 / 0.55);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--mixer-sidebar-duration) var(--sd-ease-out) var(--mixer-sidebar-delay),
+    visibility 0s linear calc(var(--mixer-sidebar-delay) + var(--mixer-sidebar-duration));
+}
+
+.desktop-layout--sidebar-open .layout-sidebar {
+  transform: none;
+  visibility: visible;
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out),
+    visibility 0s linear 0s;
+}
+
+/* Al pulsar Mixer, su botón destella en el color de Deck A antes de que la barra se retire */
+.desktop-layout--mixer .sidebar-nav-item--mixer {
+  animation: mixerNavCue var(--mixer-nav-cue-duration) var(--sd-ease-out);
+}
+
+@keyframes mixerNavCue {
+  0%, 45% {
+    background-color: var(--color-primary-500);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-500) 35%, transparent);
+    color: #fff;
+  }
+}
+
+/* La pestaña queda siempre por encima de la barra. Se desplaza con `left` (no con transform:
+   el :active de IconButton lo reemplaza y la devolvería bajo la barra a mitad del clic). */
+.layout-sidebar-tab {
+  position: absolute;
+  top: calc(var(--layout-header-height) + var(--sd-gap-2));
+  left: 0;
+  z-index: 31;
+  border-radius: 0 var(--sd-radius-pill) var(--sd-radius-pill) 0;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  transition:
+    background-color var(--sd-duration-fast) var(--sd-ease-out),
+    color var(--sd-duration-fast) var(--sd-ease-out),
+    left var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--sd-duration-base) var(--sd-ease-out);
+}
+
+/* Abierta: separada 12 px del filo de la barra, ya como pastilla completa */
+.desktop-layout--sidebar-open .layout-sidebar-tab {
+  left: calc(var(--layout-sidebar-width) + 12px);
+  border-radius: var(--sd-radius-pill);
+}
+
 /* Barra superior y lateral: papel del Design System v2, sin filetes; separan por espacio */
 .layout-header {
   grid-area: header;
@@ -258,16 +330,28 @@
 }
 
 :root[data-animations='off'] .desktop-layout,
-:root[data-animations='off'] .layout-player {
+:root[data-animations='off'] .layout-player,
+:root[data-animations='off'] .desktop-layout--mixer .layout-sidebar,
+:root[data-animations='off'] .layout-sidebar-tab {
   transition-duration: 0s;
   transition-delay: 0s;
+}
+
+:root[data-animations='off'] .desktop-layout--mixer .sidebar-nav-item--mixer {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
 
   .desktop-layout,
-  .layout-player {
+  .layout-player,
+  .desktop-layout--mixer .layout-sidebar,
+  .layout-sidebar-tab {
     transition-duration: 0s;
     transition-delay: 0s;
+  }
+
+  .desktop-layout--mixer .sidebar-nav-item--mixer {
+    animation: none;
   }
 }

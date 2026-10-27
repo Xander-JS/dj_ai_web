@@ -260,10 +260,10 @@ describe('Fase 22 — Etapa 6.5: Regresión Funcional Integral', () => {
 
     // Verificar claves críticas de análisis musical
     const requiredKeys = [
-      'dj.tempo',
-      'dj.key_lock',
-      'dj.camelot',
-      'dj.energy',
+      'mixer.screen.tech_bpm',
+      'mixer.screen.tech_key',
+      'mixer.screen.tech_camelot',
+      'mixer.screen.tech_energy',
       'dj.eject',
       'library.col_bpm',
       'library.col_key',

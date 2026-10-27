@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   Check,
+  Dot,
   Globe,
   Keyboard,
   Library,
@@ -30,6 +31,7 @@ import { LibrarySettings } from '../components/settings/LibrarySettings';
 import { readStorageUsage, toMb, type StorageUsage } from '../components/settings/storageUsage';
 import { ShortcutSettings } from '../components/settings/ShortcutSettings';
 import { BeatLengthPreview, CrossfaderCurvePreview } from '../components/settings/SettingsPreviews';
+import { DISC_ASSETS, discImageStyle } from '../components/dj/mixerAssets';
 import { DURATION, EASE_OUT } from '../design-system/motion';
 import { useSystemReducedMotion } from '../design-system/motionPreference';
 import { useSmoothScroll } from '../design-system/smoothScroll';
@@ -40,6 +42,7 @@ import {
   DEFAULT_SETTINGS,
   BUFFER_SIZES,
   CROSSFADER_CURVES,
+  JOG_DISCS,
   PITCH_RANGES,
   SYNC_RANGE_MAX,
   SYNC_RANGE_MIN,
@@ -48,6 +51,7 @@ import {
   useSettingsStore,
   type AppLanguage,
   type AppSettings,
+  type JogDisc,
   type ThemeMode,
 } from '../store/useSettingsStore';
 import './Settings.css';
@@ -148,7 +152,16 @@ const ThemePreview: React.FC<{ theme: ThemeMode }> = ({ theme }) => (
 );
 
 /** Animaciones gobernadas por la preferencia global; cada nueva se añade aquí y en su CSS */
-const ANIMATED_SURFACES = ['sidebar', 'selection_bar'] as const;
+const ANIMATED_SURFACES = ['sidebar', 'selection_bar', 'mixer'] as const;
+
+/** Muestra real del disco (rotating-disc-*.png); el elegido gira despacio como en los decks */
+const DiscPreview: React.FC<{ disc: JogDisc }> = ({ disc }) => (
+  <span className="sd-disc-preview">
+    <span className="sd-disc-preview__platter">
+      <img src={DISC_ASSETS[disc].src} alt="" loading="lazy" decoding="async" draggable={false} style={discImageStyle(DISC_ASSETS[disc])} />
+    </span>
+  </span>
+);
 
 const LanguagePreview: React.FC<{ code: string }> = ({ code }) => (
   <span className="sd-language-preview">
@@ -349,6 +362,25 @@ export const Settings: React.FC = () => {
                   )}
                 />
                 <SettingRow
+                  layout="stacked"
+                  title={t('settings.disc_title')}
+                  description={t('settings.disc_desc')}
+                  control={(
+                    <ChoiceTiles<JogDisc>
+                      className="sd-disc-tiles"
+                      hideLabels
+                      label={t('settings.disc_title')}
+                      value={settings.jogDisc}
+                      onChange={(jogDisc) => updateSettings({ jogDisc })}
+                      options={JOG_DISCS.map((disc) => ({
+                        value: disc,
+                        label: t('settings.disc_option', { n: JOG_DISCS.indexOf(disc) + 1 }),
+                        preview: <DiscPreview disc={disc} />,
+                      }))}
+                    />
+                  )}
+                />
+                <SettingRow
                   title={t('settings.density_title')}
                   description={t('settings.density_desc')}
                   control={(
@@ -378,14 +410,15 @@ export const Settings: React.FC = () => {
                   )}
                   preview={(
                     <div className="sd-settings__motion">
-                      <p className="sd-settings__motion-scope">
-                        <span className="sd-settings__motion-label">{t('settings.animations_scope')}</span>
+                      <p id={`${baseId}-motion-scope`} className="sd-settings__motion-label">{t('settings.animations_scope')}</p>
+                      <ul className="sd-settings__motion-list" aria-labelledby={`${baseId}-motion-scope`}>
                         {ANIMATED_SURFACES.map((surface) => (
-                          <Tag key={surface} tone={settings.animations && !systemReducedMotion ? 'ink' : 'surface'}>
+                          <li key={surface} className="sd-settings__motion-item">
+                            <Icon icon={Dot} size="sm" />
                             {t(`settings.animations_list.${surface}`)}
-                          </Tag>
+                          </li>
                         ))}
-                      </p>
+                      </ul>
                       {systemReducedMotion && (
                         <Notice tone="info">{t('settings.animations_reduced')}</Notice>
                       )}
@@ -572,6 +605,7 @@ function buildReadouts(
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
+        { label: t('settings.readout.disc'), value: t('settings.disc_option', { n: JOG_DISCS.indexOf(settings.jogDisc) + 1 }) },
         { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },
       ];
     case 'language':

@@ -1,0 +1,246 @@
+/* Pomo con la proporción del cuerpo de fader-cap.png (279×470) */
+.console-fader {
+  --cap-short: 1.625rem;
+  --cap-long: calc(var(--cap-short) * 470 / 279);
+  --slot-thickness: 6px;
+
+  position: relative;
+  flex-shrink: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+
+.console-fader--vertical {
+  --cap-w: var(--cap-short);
+  --cap-h: var(--cap-long);
+
+  width: calc(var(--cap-short) + 1.5rem);
+  height: 100%;
+  min-height: 8rem;
+}
+
+.console-fader--horizontal {
+  --cap-w: var(--cap-long);
+  --cap-h: var(--cap-short);
+
+  width: 100%;
+  height: calc(var(--cap-short) + 1.25rem);
+}
+
+/* Ranura: recorre exactamente el camino del centro del pomo */
+.console-fader__slot {
+  position: absolute;
+  border-radius: var(--slot-thickness);
+  background-color: var(--console-slot);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.8), 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.console-fader--vertical .console-fader__slot {
+  top: calc(var(--cap-h) / 2);
+  bottom: calc(var(--cap-h) / 2);
+  left: calc(50% - var(--slot-thickness) / 2);
+  width: var(--slot-thickness);
+}
+
+.console-fader--horizontal .console-fader__slot {
+  left: calc(var(--cap-w) / 2);
+  right: calc(var(--cap-w) / 2);
+  top: calc(50% - var(--slot-thickness) / 2);
+  height: var(--slot-thickness);
+}
+
+/* Línea de neón entre el origen del relleno y el valor */
+.console-fader__fill {
+  position: absolute;
+  border-radius: inherit;
+  background-color: var(--console-tone);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--console-tone) 80%, transparent);
+  transition: inset 70ms linear;
+}
+
+.console-fader--vertical .console-fader__fill {
+  left: 1px;
+  right: 1px;
+  bottom: calc(var(--fader-fill-start) * 100%);
+  top: calc((1 - var(--fader-fill-end)) * 100%);
+}
+
+.console-fader--vertical.console-fader--inverted .console-fader__fill {
+  top: calc(var(--fader-fill-start) * 100%);
+  bottom: calc((1 - var(--fader-fill-end)) * 100%);
+}
+
+.console-fader--horizontal .console-fader__fill {
+  top: 1px;
+  bottom: 1px;
+  left: calc(var(--fader-fill-start) * 100%);
+  right: calc((1 - var(--fader-fill-end)) * 100%);
+}
+
+/* Serigrafía de escala a ambos lados de la ranura */
+.console-fader__ticks {
+  position: absolute;
+  pointer-events: none;
+}
+
+.console-fader--vertical .console-fader__ticks {
+  top: calc(var(--cap-h) / 2);
+  bottom: calc(var(--cap-h) / 2);
+  left: 0;
+  right: 0;
+}
+
+.console-fader--horizontal .console-fader__ticks {
+  left: calc(var(--cap-w) / 2);
+  right: calc(var(--cap-w) / 2);
+  top: 0;
+  bottom: 0;
+}
+
+.console-fader__tick {
+  position: absolute;
+  background-color: var(--console-tick);
+  opacity: 0.7;
+}
+
+.console-fader--vertical .console-fader__tick {
+  left: 2px;
+  right: 2px;
+  height: 1px;
+  bottom: calc(var(--tick) * 100%);
+  /* Marca partida: no cruza la ranura */
+  background: linear-gradient(90deg,
+    var(--console-tick) 0 calc(50% - var(--slot-thickness)),
+    transparent calc(50% - var(--slot-thickness)) calc(50% + var(--slot-thickness)),
+    var(--console-tick) calc(50% + var(--slot-thickness)) 100%);
+}
+
+.console-fader--vertical.console-fader--inverted .console-fader__tick {
+  bottom: auto;
+  top: calc(var(--tick) * 100%);
+}
+
+.console-fader--horizontal .console-fader__tick {
+  top: calc(50% - var(--cap-h) / 2 + 2px);
+  bottom: calc(50% - var(--cap-h) / 2 + 2px);
+  width: 1px;
+  left: calc(var(--tick) * 100%);
+  background: linear-gradient(180deg,
+    var(--console-tick) 0 calc(50% - var(--slot-thickness)),
+    transparent calc(50% - var(--slot-thickness)) calc(50% + var(--slot-thickness)),
+    var(--console-tick) calc(50% + var(--slot-thickness)) 100%);
+}
+
+.console-fader__tick.is-major {
+  opacity: 1;
+}
+
+.console-fader--vertical .console-fader__tick.is-major {
+  left: 0;
+  right: 0;
+}
+
+.console-fader--horizontal .console-fader__tick.is-major {
+  top: calc(50% - var(--cap-h) / 2 - 2px);
+  bottom: calc(50% - var(--cap-h) / 2 - 2px);
+}
+
+/* Pomo: su posición se deriva siempre del valor real */
+.console-fader__cap {
+  position: absolute;
+  width: var(--cap-w);
+  height: var(--cap-h);
+  pointer-events: none;
+  filter: drop-shadow(0 4px 4px rgb(0 0 0 / 0.45));
+  transition: top 70ms linear, left 70ms linear;
+}
+
+.console-fader--vertical .console-fader__cap {
+  left: calc(50% - var(--cap-w) / 2);
+  top: calc((1 - var(--fader-ratio)) * (100% - var(--cap-h)));
+}
+
+.console-fader--vertical.console-fader--inverted .console-fader__cap {
+  top: calc(var(--fader-ratio) * (100% - var(--cap-h)));
+}
+
+.console-fader--horizontal .console-fader__cap {
+  top: calc(50% - var(--cap-h) / 2);
+  left: calc(var(--fader-ratio) * (100% - var(--cap-w)));
+}
+
+.console-fader__cap-body {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--cap-short);
+  height: var(--cap-long);
+  overflow: hidden;
+  border-radius: 3px;
+  transform: translate(-50%, -50%);
+}
+
+/* En el crossfader el pomo gira 90°: la línea indicadora queda perpendicular al recorrido */
+.console-fader--horizontal .console-fader__cap-body {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.console-fader__cap-body img {
+  position: absolute;
+  max-width: none;
+}
+
+/* Línea indicadora encendida con el tono del canal, sobre la línea blanca de la imagen */
+.console-fader__cap-body::after {
+  content: '';
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  /* La línea blanca de la imagen está al 46,6 % del alto del cuerpo */
+  top: calc(46.6% - 1px);
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--console-tone);
+  box-shadow: 0 0 4px var(--console-tone);
+  opacity: 0.9;
+}
+
+.console-fader__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.console-fader:has(.console-fader__input:focus-visible) .console-fader__cap-body {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.console-fader.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (pointer: coarse) {
+  .console-fader {
+    --cap-short: 1.875rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-fader__cap,
+  .console-fader__fill {
+    transition: none;
+  }
+}
+
+:root[data-animations='off'] .console-fader__cap,
+:root[data-animations='off'] .console-fader__fill {
+  transition: none;
+}

@@ -1,0 +1,22 @@
+.downbeat-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+}
+
+.downbeat-actions .console-key {
+  width: 100%;
+  height: auto;
+  font-size: var(--downbeat-text-sm);
+  letter-spacing: 0.08em;
+}
+
+.downbeat-actions__confirm {
+  min-height: 34px;
+  color: var(--console-silkscreen);
+}
+
+.downbeat-actions__clear {
+  min-height: 28px;
+}

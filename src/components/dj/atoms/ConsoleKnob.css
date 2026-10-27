@@ -1,0 +1,191 @@
+/* Potenciómetro: escala fija de knob-main.png, pomo que gira y arco luminoso. El contenedor
+   fija el tamaño con --knob-width (el Master es un poco mayor que los de canal). */
+.console-knob {
+  --knob-width: 2.5rem;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+}
+
+.console-knob--master {
+  --knob-width: var(--knob-width-master, 3.1rem);
+}
+
+.console-knob--channel {
+  --knob-width: var(--knob-width-channel, 2.5rem);
+}
+
+/* El pomo queda centrado: LPF / HPF cuelgan a sus lados sin desplazarlo */
+.console-knob__row {
+  position: relative;
+  display: flex;
+}
+
+.console-knob__side {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--console-silkscreen-dim);
+  font-size: 8px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.06em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.console-knob__side--start {
+  right: calc(100% + 3px);
+}
+
+.console-knob__side--end {
+  left: calc(100% + 3px);
+}
+
+/* Proporción nativa de knob-main.png (1855×1623): la imagen nunca se deforma */
+.console-knob__dial {
+  position: relative;
+  width: var(--knob-width);
+  aspect-ratio: 1855 / 1623;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  border-radius: 50%;
+}
+
+/* Marcas grises de la escala, aclaradas sobre el plástico negro */
+.console-knob__scale {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: brightness(1.15) contrast(1.1);
+  opacity: 0.85;
+}
+
+.console-knob__arc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.console-knob__arc-track {
+  stroke: hsl(220 8% 30% / 0.55);
+  stroke-width: 70;
+}
+
+.console-knob__arc-value {
+  stroke: var(--console-tone);
+  stroke-width: 82;
+  transition: opacity 0.2s ease;
+}
+
+/* El halo va en el <svg> (elemento HTML): los filtros CSS sobre nodos SVG internos no son fiables */
+.console-knob__arc--value {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--console-tone) 80%, transparent));
+}
+
+/* Pomo recortado: gira sobre su centro con el valor; la escala queda fija */
+.console-knob__cap {
+  position: absolute;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: rotate(var(--knob-angle));
+  transition: transform 70ms linear;
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.5);
+}
+
+.console-knob__cap img {
+  position: absolute;
+  max-width: none;
+}
+
+/* Canales: aluminio anodizado en el color del deck (el reflejo cepillado se conserva) */
+.console-tone-a .console-knob__cap::after,
+.console-tone-b .console-knob__cap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--console-tone);
+  mix-blend-mode: color;
+  opacity: 0.6;
+}
+
+/* Indicador blanco de posición: sustituye a la ranura oscura de la imagen */
+.console-knob__pointer {
+  position: absolute;
+  aspect-ratio: 1;
+  pointer-events: none;
+  transform: rotate(var(--knob-pointer));
+  transition: transform 70ms linear;
+}
+
+.console-knob__pointer::before {
+  content: '';
+  position: absolute;
+  top: 4%;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 30%;
+  border-radius: 1px;
+  background: hsl(0 0% 100%);
+  box-shadow: 0 0 2px rgb(0 0 0 / 0.7);
+}
+
+/* El input nativo conserva teclado y accesibilidad; el puntero lo gestiona el dial */
+.console-knob__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.console-knob__dial:has(.console-knob__input:focus-visible) {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.console-knob__label {
+  color: var(--console-silkscreen-dim);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.console-knob.is-disabled {
+  opacity: 0.45;
+}
+
+.console-knob.is-disabled .console-knob__dial {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-knob__cap,
+  .console-knob__pointer {
+    transition: none;
+  }
+}
+
+:root[data-animations='off'] .console-knob__cap,
+:root[data-animations='off'] .console-knob__pointer {
+  transition: none;
+}

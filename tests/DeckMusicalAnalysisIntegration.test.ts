@@ -8,6 +8,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readDeckSource } from './helpers/deckSource.ts';
 
 import { djStore } from '../src/store/useDJStore.ts';
 import { audioEngine } from '../src/audio/index.ts';
@@ -431,11 +432,6 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
     const requiredDeckKeys = [
       'deck_a',
       'deck_b',
-      'tempo',
-      'key_lock',
-      'camelot',
-      'energy',
-      'time',
       'eject',
       'eject_title',
       'status',
@@ -456,6 +452,12 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
       'sync_reject_pitch_limit',
     ];
 
+    // BPM, tiempo, tonalidad, Camelot y energía se muestran en la pantalla digital
+    for (const key of ['tech_bpm', 'tech_time', 'tech_key', 'tech_camelot', 'tech_energy']) {
+      assert.ok(esJson.mixer.screen[key], `Falta la clave mixer.screen.${key} en es/translation.json`);
+      assert.ok(enJson.mixer.screen[key], `Falta la clave mixer.screen.${key} en en/translation.json`);
+    }
+
     for (const key of requiredDeckKeys) {
       assert.ok(esJson.dj[key], `Falta la clave dj.${key} en es/translation.json`);
       assert.ok(enJson.dj[key], `Falta la clave dj.${key} en en/translation.json`);
@@ -463,19 +465,22 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
       assert.notEqual(enJson.dj[key].trim(), '', `La clave dj.${key} en en está vacía`);
     }
 
-    const deckSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'), 'utf-8');
-    assert.ok(deckSource.includes("title={t('dj.phase_align_grid_tooltip')}"));
-    assert.ok(deckSource.includes('t(deck.syncFeedback.key, deck.syncFeedback.values)'));
-    assert.ok(deckSource.includes('role="alert"'));
+    // El aviso PROVISIONAL de la franja del deck explica la retícula en su tooltip
+    assert.ok(readDeckSource().includes("tooltip: msg('dj.phase_align_grid_tooltip')"));
+    // El rechazo de SYNC sustituye a la identificación del deck en la pantalla digital
+    const screenSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/organisms/DigitalScreen.tsx'), 'utf-8');
+    const identSource = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dj/molecules/ScreenDeckIdent.tsx'), 'utf-8');
+    assert.ok(screenSource.includes('t(alert.feedback.key, alert.feedback.values)'));
+    assert.ok(identSource.includes('role="alert"'));
   });
 
   it('5.12 Inspección de renderizado: Deck.tsx y Deck.css implementan SVG y diseño sin mocks', () => {
     const deckCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
+      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'),
       'utf-8'
     );
     const cssCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.css'),
+      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.css'),
       'utf-8'
     );
 
@@ -484,20 +489,33 @@ describe('Fase 22 — Etapa 5: Integración del Análisis Musical en los Decks y
     assert.equal(deckCode.includes('mockPitchB'), false);
     assert.equal(deckCode.includes('deck-waveform-mock'), false, 'El mock de waveform debe haberse reemplazado');
 
-    // Debe contener renderizado SVG real (componente Waveform) y botón de expulsión
+    // La forma de onda SVG real se dibuja en la pantalla digital; el deck conserva la expulsión
     const waveformCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Waveform.tsx'),
+      path.resolve(process.cwd(), 'src/components/dj/atoms/Waveform.tsx'),
       'utf-8'
     );
-    assert.ok(deckCode.includes('<Waveform'), 'Deck.tsx debe renderizar el componente Waveform');
-    assert.ok(waveformCode.includes('deck-waveform-svg'), 'Waveform.tsx debe renderizar SVG de forma de onda');
-    assert.ok(waveformCode.includes('deck-waveform-bar'), 'Waveform.tsx debe renderizar rects de forma de onda');
-    assert.ok(deckCode.includes('deck-eject-btn'), 'Deck.tsx debe incluir botón de expulsión');
+    const waveformCss = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/atoms/Waveform.css'),
+      'utf-8'
+    );
+    const screenWaveformCode = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/molecules/ScreenWaveform.tsx'),
+      'utf-8'
+    );
+    assert.equal(deckCode.includes('<Waveform'), false, 'La forma de onda ya no vive en el deck');
+    assert.ok(screenWaveformCode.includes('<Waveform'), 'La pantalla debe renderizar el componente Waveform');
+    assert.ok(waveformCode.includes('dj-waveform'), 'Waveform.tsx debe renderizar SVG de forma de onda');
+    assert.ok(waveformCode.includes('dj-waveform__bar'), 'Waveform.tsx debe renderizar rects de forma de onda');
+    // Expulsar y Referencia viven en la esquina exterior de cada deck
+    const utilityCode = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/molecules/DeckUtilityButtons.tsx'),
+      'utf-8'
+    );
+    assert.ok(deckCode.includes('<DeckUtilityButtons'), 'El deck incluye Expulsar y Referencia');
+    assert.ok(utilityCode.includes('data-testid={`deck-${id}-eject`}'), 'El deck incluye el botón Expulsar');
 
-    // Deck.css debe definir los tokens y estilos correspondientes
-    assert.ok(cssCode.includes('.deck-waveform-svg'));
-    assert.ok(cssCode.includes('.deck-waveform-bar'));
-    assert.ok(cssCode.includes('.track-camelot-badge'));
-    assert.ok(cssCode.includes('.deck-eject-btn'));
+    assert.ok(waveformCss.includes('.dj-waveform {'));
+    assert.ok(waveformCss.includes('.dj-waveform__bar'));
+    assert.equal(cssCode.includes('.deck-panel__aux'), false, 'La celda auxiliar del deck desaparece');
   });
 });

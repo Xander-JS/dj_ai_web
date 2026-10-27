@@ -1,0 +1,156 @@
+.deck-hotcues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--deck-row-gap-sm);
+  min-width: 0;
+}
+
+.deck-hotcues__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.deck-hotcues__title {
+  color: var(--console-silkscreen);
+  font-size: clamp(10px, 2.4cqi, 13px);
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.12em;
+}
+
+/* BORRAR: interruptor pequeño, rojo mientras el modo está activo */
+.deck-hotcues__clear {
+  height: 20px;
+  padding: 0 9px;
+  border: 1px solid hsl(0 0% 100% / 0.16);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--console-silkscreen-dim);
+  font-size: 9px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.deck-hotcues__clear:hover:not(:disabled) {
+  color: var(--console-silkscreen);
+  border-color: hsl(0 0% 100% / 0.32);
+}
+
+.deck-hotcues__clear.is-active {
+  color: color-mix(in srgb, var(--console-led-red) 45%, #fff);
+  border-color: var(--console-led-red);
+  background: color-mix(in srgb, var(--console-led-red) 16%, transparent);
+  box-shadow: 0 0 8px -2px color-mix(in srgb, var(--console-led-red) 70%, transparent);
+}
+
+.deck-hotcues__clear:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.deck-hotcues__clear:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.deck-hotcues__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--deck-pad-gap);
+}
+
+/* Pad de goma: base oscura; el color de su ranura lo identifica */
+.deck-hotcue-pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15em;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid hsl(0 0% 100% / 0.1);
+  border-radius: 6px;
+  background: linear-gradient(180deg, hsl(0 0% 100% / 0.05), hsl(0 0% 100% / 0) 50%), hsl(225 6% 14%);
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 2px 3px rgb(0 0 0 / 0.55);
+  color: var(--console-silkscreen-dim);
+  font-family: var(--font-family-sans);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.06s ease, border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.deck-hotcue-pad__num {
+  font-size: clamp(13px, 4cqi, 20px);
+  font-weight: 600;
+}
+
+.deck-hotcue-pad__time {
+  font-size: clamp(8px, 2cqi, 11px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Vacío: solo un filo de color arriba */
+.deck-hotcue-pad.is-empty {
+  border-top: 3px solid var(--pad-color);
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+}
+
+/* Guardado: el pad se ilumina de su color */
+.deck-hotcue-pad.is-defined {
+  border: 2px solid var(--pad-color);
+  background:
+    linear-gradient(180deg, hsl(0 0% 100% / 0.1), hsl(0 0% 100% / 0) 55%),
+    color-mix(in srgb, var(--pad-color) 22%, hsl(225 6% 12%));
+  box-shadow:
+    inset 0 0 12px -3px color-mix(in srgb, var(--pad-color) 70%, transparent),
+    0 0 10px -4px color-mix(in srgb, var(--pad-color) 80%, transparent),
+    0 2px 3px rgb(0 0 0 / 0.55);
+  color: #fff;
+}
+
+.deck-hotcue-pad:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pad-color) 70%, #fff);
+}
+
+.deck-hotcue-pad.is-empty:hover:not(:disabled) {
+  border-color: hsl(0 0% 100% / 0.22);
+  border-top-color: var(--pad-color);
+}
+
+.deck-hotcue-pad:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.45), 0 1px 1px rgb(0 0 0 / 0.6);
+}
+
+/* Modo borrar: los pads guardados pasan a rojo */
+.deck-hotcue-pad.is-delete {
+  border-color: var(--console-led-red);
+  background: color-mix(in srgb, var(--console-led-red) 16%, hsl(225 6% 12%));
+  box-shadow: inset 0 0 10px -3px color-mix(in srgb, var(--console-led-red) 70%, transparent), 0 2px 3px rgb(0 0 0 / 0.55);
+  color: color-mix(in srgb, var(--console-led-red) 40%, #fff);
+}
+
+.deck-hotcue-pad:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.deck-hotcue-pad:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-hotcue-pad { transition: none; }
+  .deck-hotcue-pad:active:not(:disabled) { transform: none; }
+}

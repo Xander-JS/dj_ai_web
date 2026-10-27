@@ -1,0 +1,284 @@
+/* ==========================================================================
+   Entrada del Mixer: la consola se enciende como un equipo real.
+   useMixerEntrance pone .mixer-entrance--full (primera entrada de la sesión) o
+   .mixer-entrance--short (las siguientes) en .mixer-page-container y la retira al acabar
+   --mixer-entrance-total o ante cualquier clic o tecla. Todos los tiempos están aquí, en ms
+   desde que se monta la sección. Los fotogramas omiten el final siempre que pueden: cada pieza
+   acaba en su estilo real, así que retirar la clase no cambia nada en pantalla.
+   La retirada de la barra lateral y el aviso del botón Mixer viven en DesktopLayout.css.
+   ========================================================================== */
+
+.mixer-entrance--full {
+  --mixer-entrance-total: 4000ms;
+
+  --entrance-housing-delay: 350ms;
+  --entrance-housing-duration: 600ms;
+  --entrance-mixer-delay: 800ms;
+  --entrance-mixer-duration: 400ms;
+  --entrance-screen-delay: 850ms;
+  --entrance-screen-duration: 450ms;
+  --entrance-decks-delay: 950ms;
+  --entrance-decks-duration: 550ms;
+  --entrance-downbeat-delay: 1150ms;
+  --entrance-downbeat-duration: 450ms;
+  --entrance-selftest-delay: 1400ms;
+  --entrance-selftest-duration: 700ms;
+  --entrance-cues-delay: 1800ms;
+  --entrance-cue-step: 60ms;
+  --entrance-cue-duration: 320ms;
+
+  /* Pantalla: línea de encendido, logo, contenido y formas de onda */
+  --entrance-line-delay: 1300ms;
+  --entrance-line-duration: 400ms;
+  --entrance-logo-delay: 1700ms;
+  --entrance-logo-duration: 1400ms;
+  --entrance-sweep-delay: 1950ms;
+  --entrance-sweep-duration: 800ms;
+  --entrance-content-delay: 3100ms;
+  --entrance-content-duration: 400ms;
+  --entrance-waves-delay: 3500ms;
+  --entrance-waves-duration: 500ms;
+}
+
+/* Versión breve: la carcasa y la pantalla aparecen enseguida, con un destello del logo */
+.mixer-entrance--short {
+  --mixer-entrance-total: 800ms;
+
+  --entrance-housing-delay: 0ms;
+  --entrance-housing-duration: 300ms;
+  --entrance-mixer-delay: 80ms;
+  --entrance-mixer-duration: 250ms;
+  --entrance-screen-delay: 80ms;
+  --entrance-screen-duration: 250ms;
+  --entrance-decks-delay: 120ms;
+  --entrance-decks-duration: 300ms;
+  --entrance-downbeat-delay: 180ms;
+  --entrance-downbeat-duration: 280ms;
+  --entrance-selftest-delay: 0ms;
+  --entrance-selftest-duration: 0ms;
+  --entrance-cues-delay: 0ms;
+  --entrance-cue-step: 0ms;
+  --entrance-cue-duration: 0ms;
+
+  --entrance-line-delay: 0ms;
+  --entrance-line-duration: 0ms;
+  --entrance-logo-delay: 60ms;
+  --entrance-logo-duration: 340ms;
+  --entrance-sweep-delay: 0ms;
+  --entrance-sweep-duration: 0ms;
+  --entrance-content-delay: 400ms;
+  --entrance-content-duration: 200ms;
+  --entrance-waves-delay: 520ms;
+  --entrance-waves-duration: 280ms;
+}
+
+/* Con movimiento reducido no hay entrada (useMixerEntrance tampoco pone la clase) */
+@media (prefers-reduced-motion: no-preference) {
+
+  /* --- Carcasa: se despliega desde el borde izquierdo, donde estaba la barra lateral --- */
+  .mixer-entrance .dj-console__housing {
+    transform-origin: left center;
+    animation: mixerEntranceHousing var(--entrance-housing-duration) var(--entrance-housing-delay) cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+
+  /* --- El mixer primero; los decks salen de detrás de él como alas --- */
+  .mixer-entrance .dj-console__mixer {
+    position: relative;
+    z-index: 2;
+    animation: mixerEntranceMixer var(--entrance-mixer-duration) var(--entrance-mixer-delay) ease-out both;
+  }
+
+  .mixer-entrance .dj-console__deck {
+    animation: mixerEntranceWing var(--entrance-decks-duration) var(--entrance-decks-delay) cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .mixer-entrance .dj-console__deck--a { --entrance-from-x: 45%; }
+  .mixer-entrance .dj-console__deck--b { --entrance-from-x: -45%; }
+
+  /* --- La pantalla sube desde el cuerpo; los DOWNBEAT & COMPÁS salen de detrás de ella --- */
+  .mixer-entrance .dj-console__screen {
+    z-index: 2;
+    animation: mixerEntranceScreen var(--entrance-screen-duration) var(--entrance-screen-delay) cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .mixer-entrance .dj-console__downbeat {
+    animation: mixerEntranceWing var(--entrance-downbeat-duration) var(--entrance-downbeat-delay) cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .mixer-entrance .dj-console__downbeat--a { --entrance-from-x: 35%; }
+  .mixer-entrance .dj-console__downbeat--b { --entrance-from-x: -35%; }
+
+  /* --- Autotest de encendido: vúmetros, knobs y anillos del jog --- */
+  .mixer-entrance .level-meter__fill {
+    animation: mixerEntranceVu var(--entrance-selftest-duration) var(--entrance-selftest-delay) ease-out both;
+  }
+
+  .mixer-entrance .console-knob__pointer {
+    animation: mixerEntranceKnob var(--entrance-selftest-duration) var(--entrance-selftest-delay) ease-in-out both;
+  }
+
+  .mixer-entrance .jog-wheel::after {
+    content: '';
+    position: absolute;
+    inset: 30%;
+    border: 2px solid var(--console-tone);
+    border-radius: 50%;
+    box-shadow: 0 0 14px var(--console-tone), inset 0 0 10px var(--console-tone);
+    opacity: 0;
+    pointer-events: none;
+    animation: mixerEntranceJogPulse calc(var(--entrance-selftest-duration) / 2) var(--entrance-selftest-delay) ease-out 2;
+  }
+
+  /* --- Hot Cues: se encienden en cascada del 1 al 8 --- */
+  .mixer-entrance .deck-hotcue-pad {
+    animation: mixerEntranceCue var(--entrance-cue-duration) calc(var(--entrance-cues-delay) + var(--entrance-cue-step) * var(--entrance-cue-index, 0)) ease-out;
+  }
+
+  .mixer-entrance .deck-hotcue-pad:nth-child(2) { --entrance-cue-index: 1; }
+  .mixer-entrance .deck-hotcue-pad:nth-child(3) { --entrance-cue-index: 2; }
+  .mixer-entrance .deck-hotcue-pad:nth-child(4) { --entrance-cue-index: 3; }
+  .mixer-entrance .deck-hotcue-pad:nth-child(5) { --entrance-cue-index: 4; }
+  .mixer-entrance .deck-hotcue-pad:nth-child(6) { --entrance-cue-index: 5; }
+  .mixer-entrance .deck-hotcue-pad:nth-child(7) { --entrance-cue-index: 6; }
+  .mixer-entrance .deck-hotcue-pad:nth-child(8) { --entrance-cue-index: 7; }
+
+  /* --- Pantalla: negro, línea de encendido, logo SYSTEM DJ y, al final, su contenido --- */
+  .mixer-entrance .screen-power-on {
+    display: grid;
+    animation: mixerEntranceFadeOut var(--entrance-content-duration) var(--entrance-content-delay) ease-out both;
+  }
+
+  .mixer-entrance .screen-power-on__line {
+    animation: mixerEntranceLine var(--entrance-line-duration) var(--entrance-line-delay) cubic-bezier(0.5, 0, 0.2, 1) both;
+  }
+
+  .mixer-entrance .screen-power-on__logo {
+    animation: mixerEntranceLogo var(--entrance-logo-duration) var(--entrance-logo-delay) linear both;
+  }
+
+  .mixer-entrance .screen-power-on__logo .sd-wordmark__name {
+    animation: mixerEntranceSweep var(--entrance-sweep-duration) var(--entrance-sweep-delay) ease-in-out both;
+  }
+
+  .mixer-entrance .digital-screen__normal {
+    animation: mixerEntranceFadeIn var(--entrance-content-duration) var(--entrance-content-delay) ease-out both;
+  }
+
+  .mixer-entrance .screen-waveform {
+    animation: mixerEntranceWaves var(--entrance-waves-duration) var(--entrance-waves-delay) ease-out backwards;
+  }
+}
+
+@keyframes mixerEntranceHousing {
+  from {
+    clip-path: inset(-120px 100% -80px 0);
+    transform: scaleX(0.96);
+  }
+  to {
+    clip-path: inset(-120px -80px -80px 0);
+    transform: none;
+  }
+}
+
+@keyframes mixerEntranceMixer {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes mixerEntranceWing {
+  from {
+    opacity: 0;
+    transform: translateX(var(--entrance-from-x, 0));
+  }
+}
+
+@keyframes mixerEntranceScreen {
+  from {
+    opacity: 0;
+    transform: translateY(45%);
+  }
+}
+
+/* Los vúmetros saltan arriba y caen hasta su nivel real */
+@keyframes mixerEntranceVu {
+  0% { clip-path: inset(100% 0 0 0); }
+  30%, 45% { clip-path: inset(0 0 0 0); }
+}
+
+/* Los indicadores recorren todo el giro (±135°) y se asientan en su valor real */
+@keyframes mixerEntranceKnob {
+  0% { transform: rotate(-135deg); }
+  50% { transform: rotate(135deg); }
+}
+
+@keyframes mixerEntranceJogPulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  20% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+@keyframes mixerEntranceCue {
+  0%, 45% {
+    border-color: var(--pad-color);
+    box-shadow:
+      inset 0 0 12px -3px var(--pad-color),
+      0 0 12px -2px var(--pad-color),
+      0 2px 3px rgb(0 0 0 / 0.55);
+    color: #fff;
+  }
+}
+
+/* Un hilo que se estira de lado a lado y se abre en vertical, como una pantalla al encenderse */
+@keyframes mixerEntranceLine {
+  0% {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+  55% {
+    opacity: 1;
+    transform: scaleX(1) scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1) scaleY(80);
+  }
+}
+
+/* Parpadeo breve al encenderse y después fijo */
+@keyframes mixerEntranceLogo {
+  0% { opacity: 0; }
+  4% { opacity: 0.9; }
+  7% { opacity: 0.15; }
+  11% { opacity: 1; }
+  14% { opacity: 0.4; }
+  18%, 100% { opacity: 1; }
+}
+
+/* La franja de color atraviesa las letras de derecha a izquierda del degradado */
+@keyframes mixerEntranceSweep {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+@keyframes mixerEntranceFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes mixerEntranceFadeIn {
+  from { opacity: 0; }
+}
+
+/* Las formas de onda se dibujan de izquierda a derecha */
+@keyframes mixerEntranceWaves {
+  from { clip-path: inset(-20px 100% -20px -20px); }
+  to { clip-path: inset(-20px -20px -20px -20px); }
+}

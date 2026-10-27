@@ -1,0 +1,99 @@
+/* Aviso de estado: borde fino de color sobre el plástico, sin relleno */
+.console-badge {
+  --badge-light: var(--console-silkscreen-dim);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--badge-light) 55%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--badge-light) 7%, transparent);
+  color: color-mix(in srgb, var(--badge-light) 70%, #fff);
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: help;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-badge--tone { --badge-light: var(--console-tone); }
+.console-badge--amber { --badge-light: var(--console-led-amber); }
+.console-badge--green { --badge-light: var(--console-led-green); }
+.console-badge--red { --badge-light: var(--console-led-red); }
+
+.console-badge.is-interactive {
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.console-badge.is-interactive:hover {
+  border-color: var(--badge-light);
+  background: color-mix(in srgb, var(--badge-light) 16%, transparent);
+}
+
+.console-badge.is-interactive:active {
+  transform: translateY(1px);
+}
+
+.console-badge:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.console-badge.is-busy {
+  animation: consoleBadgeBusy 1.2s ease-in-out infinite;
+}
+
+@keyframes consoleBadgeBusy {
+  50% { border-color: color-mix(in srgb, var(--badge-light) 20%, transparent); }
+}
+
+/* Tooltip propio: aparece con el puntero y con el foco de teclado */
+.console-badge[data-tooltip]:not([data-tooltip=""])::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 1000;
+  width: max-content;
+  max-width: 280px;
+  padding: 6px 9px;
+  border: 1px solid hsl(0 0% 100% / 0.12);
+  border-radius: 4px;
+  background: hsl(225 8% 13%);
+  box-shadow: 0 10px 24px -8px rgb(0 0 0 / 0.8);
+  color: var(--console-silkscreen);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -2px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
+}
+
+.console-badge[data-tooltip]:not([data-tooltip=""]):hover::after,
+.console-badge[data-tooltip]:not([data-tooltip=""]):focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-badge.is-busy { animation: none; }
+  .console-badge::after { transition: none; }
+}
+
+:root[data-animations='off'] .console-badge.is-busy {
+  animation: none;
+}

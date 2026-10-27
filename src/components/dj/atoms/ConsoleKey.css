@@ -1,0 +1,104 @@
+/* Tecla retroiluminada: goma oscura en relieve; la luz tiñe el borde, el texto y un halo interior */
+.console-key {
+  --key-light: var(--console-key-light);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--console-key-edge);
+  border-radius: 4px;
+  background: linear-gradient(180deg, hsl(0 0% 100% / 0.07), hsl(0 0% 100% / 0) 45%), var(--console-key-body);
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.08),
+    inset 0 -2px 0 rgb(0 0 0 / 0.45),
+    0 2px 3px rgb(0 0 0 / 0.55);
+  color: var(--console-silkscreen-dim);
+  font-family: var(--font-family-sans);
+  font-size: 10px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.06s ease;
+}
+
+.console-key--deck {
+  --key-light: var(--console-tone);
+}
+
+.console-key--amber { --key-light: var(--console-led-amber); }
+.console-key--green { --key-light: var(--console-led-green); }
+.console-key--red { --key-light: var(--console-led-red); }
+
+.console-key:hover:not(:disabled, [aria-disabled='true']) {
+  color: var(--console-silkscreen);
+  border-color: hsl(0 0% 100% / 0.18);
+}
+
+.console-key:active:not(:disabled, [aria-disabled='true']) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.05),
+    inset 0 -1px 0 rgb(0 0 0 / 0.45),
+    0 1px 1px rgb(0 0 0 / 0.6);
+}
+
+.console-key:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+.console-key.is-lit {
+  color: color-mix(in srgb, var(--key-light) 35%, #fff);
+  border-color: color-mix(in srgb, var(--key-light) 80%, transparent);
+  box-shadow:
+    inset 0 0 10px -2px color-mix(in srgb, var(--key-light) 65%, transparent),
+    inset 0 -2px 0 rgb(0 0 0 / 0.45),
+    0 0 10px -3px color-mix(in srgb, var(--key-light) 80%, transparent),
+    0 2px 3px rgb(0 0 0 / 0.55);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--key-light) 70%, transparent);
+}
+
+/* Rellena: la luz atraviesa todo el cuerpo de la tecla */
+.console-key.is-filled {
+  color: hsl(0 0% 100%);
+  background:
+    linear-gradient(180deg, hsl(0 0% 100% / 0.22), hsl(0 0% 100% / 0) 55%),
+    color-mix(in srgb, var(--key-light) 78%, var(--console-key-body));
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.45);
+}
+
+.console-key.is-pulsing {
+  animation: consoleKeyPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes consoleKeyPulse {
+  50% { border-color: color-mix(in srgb, var(--key-light) 35%, transparent); }
+}
+
+/* Atenuada: visible como pieza física, pero sin respuesta. Con aria-disabled sigue enfocable y
+   su tooltip explica la causa. */
+.console-key:disabled,
+.console-key[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-key { transition: none; }
+  .console-key:active:not(:disabled) { transform: none; }
+  .console-key.is-pulsing { animation: none; }
+}
+
+:root[data-animations='off'] .console-key.is-pulsing {
+  animation: none;
+}

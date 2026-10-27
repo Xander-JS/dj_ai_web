@@ -1,0 +1,49 @@
+/* LED de la consola: cúpula oscura apagada, luz con halo encendida */
+.console-led {
+  --led-color: var(--console-led-red);
+  flex: none;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, hsl(0 0% 100% / 0.12), transparent 60%), var(--console-led-unlit);
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.35);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.console-led--green { --led-color: var(--console-led-green); }
+.console-led--amber { --led-color: var(--console-led-amber); }
+.console-led--neutral { --led-color: var(--console-led-neutral); }
+.console-led--tone { --led-color: var(--console-tone, var(--console-led-red)); }
+
+.console-led.is-on {
+  background: radial-gradient(circle at 35% 30%, hsl(0 0% 100% / 0.7), transparent 55%), var(--led-color);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.35),
+    0 0 6px 1px color-mix(in srgb, var(--led-color) 70%, transparent);
+}
+
+/* Media luz: el color se mezcla con la cúpula apagada y no hay halo */
+.console-led.is-dim {
+  background: radial-gradient(circle at 35% 30%, hsl(0 0% 100% / 0.2), transparent 55%),
+    color-mix(in srgb, var(--led-color) 50%, var(--console-led-unlit));
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+/* ~1 Hz, en fase con el resto de luces que parpadean al mismo ritmo */
+.console-led.is-blinking {
+  animation: consoleLedBlink 1s steps(1, end) infinite;
+}
+
+@keyframes consoleLedBlink {
+  0% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-led.is-blinking { animation: none; }
+}
+
+:root[data-animations='off'] .console-led.is-blinking {
+  animation: none;
+}

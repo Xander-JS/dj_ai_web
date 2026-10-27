@@ -1,62 +1,110 @@
+/* Ocupa exactamente el área de trabajo: la consola se ajusta dentro, sin desplazamiento */
 .mixer-page-container {
-  display: grid;
-  grid-template-areas: "deck-a mixer deck-b";
-  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr) minmax(0, 2fr);
-  grid-template-rows: minmax(0, 1fr);
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--layout-gutter);
-  gap: var(--layout-gutter);
   background-color: var(--bg-base);
 }
 
-.deck-container {
-  min-width: 0;
+/* ==========================================================================
+   Modo móvil (teléfono): solo la consola, a pantalla completa y en horizontal
+   ========================================================================== */
+
+:root.mixer-immersive .desktop-layout {
+  grid-template-areas: "main";
+  grid-template-rows: 100dvh;
+  grid-template-columns: 100%;
+  width: 100vw;
+  height: 100dvh;
 }
 
-.deck-container-a {
-  grid-area: deck-a;
+:root.mixer-immersive .layout-header,
+:root.mixer-immersive .layout-sidebar,
+:root.mixer-immersive .layout-sidebar-tab,
+:root.mixer-immersive .layout-player {
+  display: none;
 }
 
-.deck-container-b {
-  grid-area: deck-b;
+:root.mixer-immersive .layout-main {
+  overflow: hidden;
 }
 
-.mixer-console-placeholder {
-  flex: 1;
-  min-width: 250px;
-  background-color: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
+.mixer-page-container--immersive {
+  height: 100dvh;
+  min-height: 0;
+  padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right))
+    max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+}
+
+:root.mixer-immersive .layout-view {
+  height: 100%;
+}
+
+/* Capas de respaldo: «toca para empezar» y «gira el dispositivo» */
+.mixer-immersive-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
+  gap: 10px;
+  width: 100%;
+  padding: 24px;
+  border: 0;
+  background: rgb(8 9 12 / 0.88);
+  backdrop-filter: blur(6px);
+  color: hsl(220 10% 92%);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.mixer-console-container {
-  grid-area: mixer;
-  min-width: 0;
+div.mixer-immersive-overlay {
+  cursor: default;
 }
 
-/* Landscape tablet (1024x768): keep Deck A | Mixer | Deck B, sized to content.
-   The page grows past the viewport height instead of clipping the decks, and
-   .layout-main provides the contained vertical scroll. */
-@media (max-width: 1024px) {
-  .mixer-page-container {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    grid-template-rows: auto;
-    height: auto;
-    min-height: 100%;
+.mixer-immersive-overlay__title {
+  font-size: 1.125rem;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mixer-immersive-overlay__hint {
+  max-width: 22rem;
+  color: hsl(220 6% 70%);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Un teléfono dibujado con CSS que gira a horizontal */
+.mixer-immersive-overlay__icon {
+  width: 34px;
+  height: 56px;
+  margin-bottom: 8px;
+  border: 3px solid currentColor;
+  border-radius: 7px;
+  animation: mixerRotateHint 2s ease-in-out infinite;
+}
+
+@keyframes mixerRotateHint {
+  0%, 25% { transform: rotate(0deg); }
+  55%, 100% { transform: rotate(-90deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mixer-immersive-overlay__icon {
+    animation: none;
+    transform: rotate(-90deg);
   }
 }
 
-/* Portrait tablet (768x1024): vertical cascade Deck A / Mixer / Deck B */
-@media (max-width: 900px) {
-  .mixer-page-container {
-    grid-template-areas:
-      "deck-a"
-      "mixer"
-      "deck-b";
-    grid-template-columns: minmax(0, 1fr);
-  }
+:root[data-animations='off'] .mixer-immersive-overlay__icon {
+  animation: none;
+  transform: rotate(-90deg);
 }

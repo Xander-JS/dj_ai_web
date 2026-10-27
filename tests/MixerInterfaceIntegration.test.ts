@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { djStore } from '../src/store/useDJStore.ts';
 import { audioEngine } from '../src/audio/index.ts';
+import { readMixerSource } from './helpers/mixerSource.ts';
 
 // Web Audio API mock para Node.js
 class MockAudioParam {
@@ -128,11 +129,8 @@ describe('Fase 21 Etapa 4 — Integración Funcional de la Consola Mixer', () =>
     (globalThis as unknown as { window: unknown }).window = originalWindow;
   });
 
-  test('1. MixerConsole.tsx elimina estados locales simulados y se vincula a useDJStore', () => {
-    const consoleCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/MixerConsole.tsx'),
-      'utf-8'
-    );
+  test('1. El mixer elimina estados locales simulados y se vincula a useDJStore', () => {
+    const consoleCode = readMixerSource();
 
     // No debe contener useState simulados para controles de audio
     assert.equal(consoleCode.includes('const [gain, setGain] = useState'), false, 'No debe existir useState para gain');
@@ -144,7 +142,7 @@ describe('Fase 21 Etapa 4 — Integración Funcional de la Consola Mixer', () =>
     assert.equal(consoleCode.includes('const [crossfader, setCrossfader] = useState'), false, 'No debe existir useState para crossfader');
 
     // Debe invocar useDJStore y desestructurar las acciones del mixer
-    assert.ok(consoleCode.includes('useDJStore()'), 'MixerConsole debe llamar a useDJStore');
+    assert.ok(consoleCode.includes('useDJStore()'), 'El mixer debe llamar a useDJStore');
     assert.ok(consoleCode.includes('setChannelGain'), 'Debe usar setChannelGain');
     assert.ok(consoleCode.includes('setChannelEq'), 'Debe usar setChannelEq');
     assert.ok(consoleCode.includes('setChannelFilter'), 'Debe usar setChannelFilter');
@@ -161,8 +159,14 @@ describe('Fase 21 Etapa 4 — Integración Funcional de la Consola Mixer', () =>
       path.resolve(process.cwd(), 'src/pages/Mixer.tsx'),
       'utf-8'
     );
-    assert.ok(mixerPageCode.includes('<MixerConsole />'), 'Mixer.tsx debe renderizar MixerConsole directamente');
+    const consoleCode = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/components/dj/organisms/DJConsole.tsx'),
+      'utf-8'
+    );
+    assert.ok(mixerPageCode.includes('<DJConsole />'), 'Mixer.tsx debe renderizar la consola completa (ajustada al alto y al ancho)');
+    assert.ok(consoleCode.includes('<MixerConsole />'), 'La carcasa debe renderizar MixerConsole directamente');
     assert.equal(mixerPageCode.includes('mock'), false, 'Mixer.tsx no debe contener estados mock');
+    assert.equal(consoleCode.includes('mock'), false, 'DJConsole.tsx no debe contener estados mock');
   });
 
   test('3. Los controles muestran y actualizan los valores del store centralizado', () => {
@@ -312,7 +316,8 @@ describe('Fase 21 Etapa 4 — Integración Funcional de la Consola Mixer', () =>
 
     const requiredKeys = [
       'channel',
-      'crossfader',
+      'crossfader_label',
+      'crossfader_value',
       'gain',
       'high',
       'mid',

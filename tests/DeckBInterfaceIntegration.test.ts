@@ -395,7 +395,7 @@ describe('Fase 20 Etapa 4 — Integración Real de la Interfaz de Deck B', () =>
 
   test('Verificar que Deck.tsx y Mixer.tsx no contienen variables mock de transporte', () => {
     const deckCode = fs.readFileSync(
-      path.resolve(process.cwd(), 'src/components/dj/Deck.tsx'),
+      path.resolve(process.cwd(), 'src/components/dj/organisms/Deck.tsx'),
       'utf-8'
     );
     assert.equal(deckCode.includes('mockPlayingB'), false, 'No debe existir mockPlayingB en Deck.tsx');

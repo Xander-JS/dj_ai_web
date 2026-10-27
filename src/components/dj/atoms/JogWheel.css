@@ -1,0 +1,70 @@
+/* Disco: el tamaño lo fija el contenedor (ancho); siempre circular */
+.jog-wheel {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Aro metálico torneado con marcas radiales finas */
+.jog-wheel__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, rgb(0 0 0 / 0.55) 0deg 0.8deg, transparent 0.8deg 6deg),
+    conic-gradient(from 210deg, hsl(0 0% 100% / 0.28), hsl(0 0% 100% / 0) 22%, hsl(0 0% 100% / 0.22) 50%, hsl(0 0% 100% / 0) 72%, hsl(0 0% 100% / 0.28)),
+    var(--jog-metal) center / cover,
+    hsl(220 5% 52%);
+  background-blend-mode: normal, overlay, normal, normal;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.75),
+    0 10px 22px -6px rgb(0 0 0 / 0.85),
+    inset 0 1px 0 hsl(0 0% 100% / 0.35),
+    inset 0 -2px 3px rgb(0 0 0 / 0.5);
+}
+
+/* Plato: lo que gira (el disco de Ajustes) */
+.jog-wheel__platter {
+  position: absolute;
+  inset: 6.5%;
+  border-radius: 50%;
+  background: hsl(225 7% 9%);
+  box-shadow: 0 0 0 2px hsl(225 8% 6%), inset 0 0 18px rgb(0 0 0 / 0.8);
+  will-change: transform;
+  /* Siempre lleva la animación y solo avanza mientras el deck reproduce: al pausar se detiene
+     donde está en lugar de volver a 0° */
+  animation: jogWheelSpin var(--jog-spin-duration, 1.8s) linear infinite;
+  animation-play-state: paused;
+}
+
+.jog-wheel.is-spinning .jog-wheel__platter {
+  animation-play-state: running;
+}
+
+.jog-wheel__disc {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.jog-wheel__disc img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+
+@keyframes jogWheelSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jog-wheel__platter { animation: none; }
+}
+
+:root[data-animations='off'] .jog-wheel__platter {
+  animation: none;
+}

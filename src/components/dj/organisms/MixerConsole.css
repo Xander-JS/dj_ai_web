@@ -1,0 +1,57 @@
+/* ==========================================================================
+   Mixer central (sección 4): placa de plástico negro mate, como los decks.
+   CH 1 | MASTER | CH 2 separados solo por líneas finas, y el crossfader a todo el
+   ancho bajo una línea horizontal. Las medidas siguen al ancho del mixer.
+   ========================================================================== */
+
+.mixer-console {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  padding: clamp(10px, 1.1vw, 16px) clamp(6px, 0.8vw, 12px);
+  border: 1px solid var(--console-plate-edge);
+  border-radius: 14px;
+  background: var(--console-plate);
+  box-shadow: var(--console-plate-shadow);
+  color: var(--console-silkscreen);
+}
+
+.mixer-console__columns {
+  --mixer-knob: clamp(1.9rem, 10.5cqi, 3.1rem);
+  --mixer-gap: clamp(6px, 2cqi, 10px);
+
+  display: grid;
+  /* MASTER más estrecho y centrado; CH 1 y CH 2 idénticos */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  padding-bottom: var(--mixer-gap);
+}
+
+/* Líneas divisorias finas, sin cajas: el MASTER las dibuja a ambos lados */
+.mixer-console__columns > .mixer-master {
+  border-inline: 1px solid var(--console-divider);
+}
+
+/* Cabeceras CH 1 · MASTER · CH 2: texto liso, grande y en negrita */
+.mixer-console .mixer-channel__head,
+.mixer-console .mixer-master__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.mixer-console .mixer-channel__name,
+.mixer-console .mixer-master__name {
+  color: var(--console-silkscreen);
+  font-size: clamp(12px, 4.4cqi, 16px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+

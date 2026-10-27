@@ -14,6 +14,7 @@ import {
   evaluateSlewRateAt,
   integrateSlewTrajectory,
 } from './analysis/phaseAlignment.ts';
+import { KEY_LOCK_PROCESSOR_NAME } from './keyLock/granularPitchShifter.ts';
 
 /**
  * Representa la automatización activa de micro-slew sobre un deck.
@@ -39,7 +40,17 @@ interface DeckTransportInternal {
   bendAmount: number;       // Desviación momentánea de pitch bend (-0.08 a +0.08)
   slewEpoch: number;        // Contador monotónico para invalidación de automatizaciones obsoletas
   activeSlew: ActiveSlewInternal | null; // Perfil de micro-slew activo en ejecución
+  keyLocked: boolean;       // KEY LOCK: la fuente pasa por el desplazador de tono
 }
+
+/** Registra el AudioWorklet de KEY LOCK en el contexto. */
+export type KeyLockModuleLoader = (ctx: BaseAudioContext) => Promise<void>;
+
+/** Cargador real: import dinámico para que Node (pruebas) nunca resuelva `?worker&url`. */
+const loadKeyLockModule: KeyLockModuleLoader = async (ctx) => {
+  const { addKeyLockModule } = await import('./keyLock/keyLockModule.ts');
+  await addKeyLockModule(ctx);
+};
 
 /**
  * Obtiene el constructor de AudioContext soportado por el navegador o entorno.
@@ -63,12 +74,22 @@ export const SUPPORTED_PITCH_RANGES: readonly number[] = [0.06, 0.08, 0.16];
 export const MIN_SYNC_RATE_LIMIT = 0.04;
 export const MAX_SYNC_RATE_LIMIT = 0.2;
 
+/** Derivación estéreo del Master (L / R) para el vúmetro de dos barras. */
+interface MasterStereoTap {
+  upmix: GainNode;
+  splitter: ChannelSplitterNode;
+  left: AnalyserNode;
+  right: AnalyserNode;
+}
+
 export class AudioEngineService implements IAudioEngineService {
   private static instance: AudioEngineService | null = null;
 
   private audioContext: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
   private masterAnalyserNode: AnalyserNode | null = null;
+  /** null si el contexto no ofrece ChannelSplitter: el vúmetro Master repite el nivel mono. */
+  private masterStereoTap: MasterStereoTap | null = null;
   private limiterNode: DynamicsCompressorNode | null = null;
   private masterVolumeLevel: number = 0.8; // 80% volumen maestro inicial
 
@@ -90,6 +111,9 @@ export class AudioEngineService implements IAudioEngineService {
     ['B', new Set()],
   ]);
   private stateChangeListeners: Set<(status: AudioEngineStatus) => void> = new Set();
+  private keyLockLoader: KeyLockModuleLoader = loadKeyLockModule;
+  /** Registro del AudioWorklet en el contexto actual: true si quedó disponible. */
+  private keyLockModule: Promise<boolean> | null = null;
 
   public constructor() {
     this.initTransport('A');
@@ -137,6 +161,11 @@ export class AudioEngineService implements IAudioEngineService {
     // Inicializar grafos de audio para Deck A y Deck B
     this.deckGraphs.set('A', this.buildDeckAudioGraph('A'));
     this.deckGraphs.set('B', this.buildDeckAudioGraph('B'));
+
+    // KEY LOCK activado antes de que existiera el contexto
+    for (const deckId of ['A', 'B'] as const) {
+      if (this.getDeckTransport(deckId).keyLocked) this.setDeckKeyLock(deckId, true);
+    }
 
     // Configurar oyente de cambios de estado del hardware
     this.audioContext.onstatechange = () => {
@@ -271,7 +300,12 @@ export class AudioEngineService implements IAudioEngineService {
     sourceNode.buffer = graph.buffer;
     const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
     sourceNode.playbackRate.setValueAtTime(effectiveRate, ctx.currentTime);
-    sourceNode.connect(graph.gainNode);
+    if (graph.keyLockNode) {
+      graph.keyLockNode.parameters.get('rate')?.setValueAtTime(effectiveRate, ctx.currentTime);
+      // Sin restos de la posición anterior en la línea de retardo
+      if (transport.keyLocked) graph.keyLockNode.port.postMessage('reset');
+    }
+    this.connectDeckSource(deckId, sourceNode);
 
     // Manejar finalización natural de la reproducción
     sourceNode.onended = () => {
@@ -424,7 +458,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     if (graph.sourceNode && this.audioContext) {
       const now = this.audioContext.currentTime;
-      const param = graph.sourceNode.playbackRate;
+      const param = this.getRateParam(graph, graph.sourceNode);
       const paramWithHold = param as AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
       try {
         if (typeof paramWithHold.cancelAndHoldAtTime === 'function') {
@@ -519,7 +553,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     if (graph.sourceNode && this.audioContext) {
       const now = this.audioContext.currentTime;
-      const param = graph.sourceNode.playbackRate;
+      const param = this.getRateParam(graph, graph.sourceNode);
       const paramWithHold = param as AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
       try {
         if (typeof paramWithHold.cancelAndHoldAtTime === 'function') {
@@ -549,6 +583,41 @@ export class AudioEngineService implements IAudioEngineService {
   public getDeckPitchBend(deckId: DeckId): number {
     const transport = this.deckTransports.get(deckId);
     return transport?.bendAmount ?? 0;
+  }
+
+  /**
+   * KEY LOCK (Master Tempo): con `enabled` la fuente del deck pasa por un desplazador de tono que
+   * anula el cambio de tono de playbackRate, así que el pitch fader cambia la velocidad pero no la
+   * tonalidad. Sin KEY LOCK la fuente va directa al canal, exactamente como antes.
+   * Requiere AudioWorklet; sin soporte el estado se guarda pero el audio no cambia.
+   */
+  public setDeckKeyLock(deckId: DeckId, enabled: boolean): void {
+    const transport = this.getDeckTransport(deckId);
+    transport.keyLocked = enabled;
+    if (!this.audioContext) return; // Se aplica al inicializar el contexto
+    const graph = this.getDeckGraph(deckId);
+    if (enabled && !graph.keyLockNode) {
+      void this.createKeyLockNode(deckId).then(() => this.routeDeckSource(deckId));
+      return;
+    }
+    this.routeDeckSource(deckId);
+  }
+
+  /** KEY LOCK solicitado en el deck (aunque el navegador no pueda aplicarlo). */
+  public isDeckKeyLocked(deckId: DeckId): boolean {
+    return this.deckTransports.get(deckId)?.keyLocked ?? false;
+  }
+
+  /** La fuente del deck suena ahora mismo a través del desplazador de tono. */
+  public isDeckKeyLockEngaged(deckId: DeckId): boolean {
+    const graph = this.deckGraphs.get(deckId);
+    return this.isDeckKeyLocked(deckId) && Boolean(graph?.keyLockNode);
+  }
+
+  /** Sustituye el registro del AudioWorklet (pruebas en Node, sin Vite). */
+  public setKeyLockModuleLoader(loader: KeyLockModuleLoader): void {
+    this.keyLockLoader = loader;
+    this.keyLockModule = null;
   }
 
   /**
@@ -770,6 +839,25 @@ export class AudioEngineService implements IAudioEngineService {
     return this.rmsToVUMeterLevel(this.getMasterRMS());
   }
 
+  /**
+   * Niveles (0 a 100) de los canales izquierdo y derecho de la mezcla Master, tras el volumen
+   * maestro. Sin derivación estéreo (contexto sin ChannelSplitter) ambos repiten el nivel mono.
+   */
+  public getMasterStereoVUMeter(): { left: number; right: number } {
+    const tap = this.masterStereoTap;
+    if (!tap) {
+      const level = this.getMasterVUMeter();
+      return { left: level, right: level };
+    }
+    if (!this.isDeckPlaying('A') && !this.isDeckPlaying('B')) {
+      return { left: 0, right: 0 };
+    }
+    return {
+      left: this.rmsToVUMeterLevel(this.calculateRMSFromAnalyser(tap.left)),
+      right: this.rmsToVUMeterLevel(this.calculateRMSFromAnalyser(tap.right)),
+    };
+  }
+
   /** Número de bandas de frecuencia que entrega `readMasterSpectrum` (0 si el motor no arrancó). */
   public getMasterSpectrumSize(): number {
     return this.masterAnalyserNode?.frequencyBinCount ?? 0;
@@ -876,7 +964,7 @@ export class AudioEngineService implements IAudioEngineService {
     const effectiveBase = this.calculateEffectiveRate(plan.baseRate, transport.bendAmount);
     const effectivePeak = this.calculateEffectiveRate(plan.peakRate, transport.bendAmount);
 
-    const playbackRateParam = graph.sourceNode.playbackRate;
+    const playbackRateParam = this.getRateParam(graph, graph.sourceNode);
 
     // Programar la trayectoria en AudioParam
     try {
@@ -984,7 +1072,7 @@ export class AudioEngineService implements IAudioEngineService {
       const effectiveBase = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
 
       if (graph?.sourceNode) {
-        const param = graph.sourceNode.playbackRate;
+        const param = this.getRateParam(graph, graph.sourceNode);
         try {
           const RESTORE_RAMP_SEC = 0.030; // Micro-rampa de 30 ms para atenuar discontinuidades en AudioParam
           const paramWithHold = param as AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
@@ -1115,6 +1203,17 @@ export class AudioEngineService implements IAudioEngineService {
       this.masterAnalyserNode = null;
     }
 
+    if (this.masterStereoTap) {
+      for (const node of Object.values(this.masterStereoTap)) {
+        try {
+          node.disconnect();
+        } catch {
+          // Ignorar
+        }
+      }
+      this.masterStereoTap = null;
+    }
+
     if (this.limiterNode) {
       try {
         this.limiterNode.disconnect();
@@ -1127,6 +1226,7 @@ export class AudioEngineService implements IAudioEngineService {
     // Desconectar y limpiar nodos de cada deck
     for (const graph of this.deckGraphs.values()) {
       try {
+        graph.keyLockNode?.disconnect();
         graph.gainNode.disconnect();
         graph.filterNode.disconnect();
         graph.eqHighNode.disconnect();
@@ -1141,6 +1241,7 @@ export class AudioEngineService implements IAudioEngineService {
     }
 
     this.deckGraphs.clear();
+    this.keyLockModule = null;
 
     if (this.audioContext && this.audioContext.state !== 'closed') {
       try {
@@ -1163,7 +1264,33 @@ export class AudioEngineService implements IAudioEngineService {
       bendAmount: 0,
       slewEpoch: 0,
       activeSlew: null,
+      keyLocked: false,
     });
+  }
+
+  /**
+   * Derivación de medición L / R tras el volumen maestro: una ganancia unidad fija la mezcla a
+   * dos canales con mezcla "speakers" (una pista mono llega igual a ambos lados) y el divisor
+   * reparte cada canal a su analizador. No alimenta la salida.
+   */
+  private createMasterStereoTap(ctx: AudioContext, source: GainNode): MasterStereoTap | null {
+    if (typeof ctx.createChannelSplitter !== 'function') return null;
+    const upmix = ctx.createGain();
+    upmix.channelCount = 2;
+    upmix.channelCountMode = 'explicit';
+    upmix.channelInterpretation = 'speakers';
+    const splitter = ctx.createChannelSplitter(2);
+    const left = ctx.createAnalyser();
+    const right = ctx.createAnalyser();
+    for (const analyser of [left, right]) {
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+    }
+    source.connect(upmix);
+    upmix.connect(splitter);
+    splitter.connect(left, 0);
+    splitter.connect(right, 1);
+    return { upmix, splitter, left, right };
   }
 
   private setupMasterStage(ctx: AudioContext): void {
@@ -1180,6 +1307,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     // Conectar masterGainNode al masterAnalyserNode en derivación (tap de medición)
     this.masterGainNode.connect(this.masterAnalyserNode);
+    this.masterStereoTap = this.createMasterStereoTap(ctx, this.masterGainNode);
 
     // 3. Etapa de limitación de seguridad / compresión dinámica contra picos
     // NOTA TÉCNICA: DynamicsCompressorNode actúa como un supresor dinámico de picos
@@ -1321,6 +1449,103 @@ export class AudioEngineService implements IAudioEngineService {
     return Math.sqrt(sumSquares / dataArray.length);
   }
 
+
+  /** Conecta la fuente al desplazador de KEY LOCK o directamente a la ganancia del canal. */
+  private connectDeckSource(deckId: DeckId, sourceNode: AudioBufferSourceNode): void {
+    const graph = this.getDeckGraph(deckId);
+    const keyLockNode = this.getDeckTransport(deckId).keyLocked ? graph.keyLockNode : null;
+    sourceNode.connect(keyLockNode ?? graph.gainNode);
+  }
+
+  /** Reconecta la fuente que está sonando tras activar o desactivar KEY LOCK. */
+  private routeDeckSource(deckId: DeckId): void {
+    const graph = this.deckGraphs.get(deckId);
+    const sourceNode = graph?.sourceNode;
+    if (!graph || !sourceNode || !this.audioContext) return;
+    if (graph.keyLockNode) {
+      const rate = this.calculateEffectiveRate(this.getDeckTransport(deckId).playbackRate, this.getDeckTransport(deckId).bendAmount);
+      graph.keyLockNode.parameters.get('rate')?.setValueAtTime(rate, this.audioContext.currentTime);
+    }
+    try {
+      sourceNode.disconnect();
+    } catch {
+      // Ignorar si no estaba conectada
+    }
+    this.connectDeckSource(deckId, sourceNode);
+  }
+
+  /** Registra el AudioWorklet una vez por contexto. */
+  private ensureKeyLockModule(): Promise<boolean> {
+    const ctx = this.audioContext;
+    if (!ctx || typeof AudioWorkletNode === 'undefined' || !ctx.audioWorklet) return Promise.resolve(false);
+    if (!this.keyLockModule) {
+      this.keyLockModule = this.keyLockLoader(ctx).then(
+        () => true,
+        (err) => {
+          console.error('[AudioEngineService] KEY LOCK no disponible: no se pudo cargar el AudioWorklet.', err);
+          return false;
+        },
+      );
+    }
+    return this.keyLockModule;
+  }
+
+  /** Crea el desplazador del deck, conectado siempre a la ganancia del canal. */
+  private async createKeyLockNode(deckId: DeckId): Promise<void> {
+    const ctx = this.audioContext;
+    if (!(await this.ensureKeyLockModule()) || ctx !== this.audioContext || !ctx) return;
+    const graph = this.deckGraphs.get(deckId);
+    if (!graph || graph.keyLockNode) return;
+    const node = new AudioWorkletNode(ctx, KEY_LOCK_PROCESSOR_NAME, {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+    });
+    node.connect(graph.gainNode);
+    graph.keyLockNode = node;
+  }
+
+  /**
+   * Parámetro de velocidad de la fuente. Con desplazador creado devuelve un parámetro compuesto
+   * que programa lo mismo en la fuente y en el desplazador: las rampas de ALIGN, el pitch bend y
+   * el fader mueven velocidad y corrección de tono a la vez.
+   */
+  private getRateParam(graph: DeckAudioGraph, sourceNode: AudioBufferSourceNode): AudioParam {
+    const primary = sourceNode.playbackRate;
+    const mirror = graph.keyLockNode?.parameters.get('rate');
+    if (!mirror) return primary;
+    type Hold = AudioParam & { cancelAndHoldAtTime?: (cancelTime: number) => AudioParam };
+    const fanOut = {
+      get value() {
+        return primary.value;
+      },
+      setValueAtTime(value: number, time: number) {
+        primary.setValueAtTime(value, time);
+        mirror.setValueAtTime(value, time);
+        return fanOut;
+      },
+      linearRampToValueAtTime(value: number, time: number) {
+        primary.linearRampToValueAtTime(value, time);
+        mirror.linearRampToValueAtTime(value, time);
+        return fanOut;
+      },
+      cancelScheduledValues(time: number) {
+        primary.cancelScheduledValues(time);
+        mirror.cancelScheduledValues(time);
+        return fanOut;
+      },
+    } as Record<string, unknown>;
+    if (typeof (primary as Hold).cancelAndHoldAtTime === 'function') {
+      fanOut.cancelAndHoldAtTime = (time: number) => {
+        (primary as Hold).cancelAndHoldAtTime!(time);
+        const mirrorHold = mirror as Hold;
+        if (typeof mirrorHold.cancelAndHoldAtTime === 'function') mirrorHold.cancelAndHoldAtTime(time);
+        else mirror.cancelScheduledValues(time);
+        return fanOut;
+      };
+    }
+    return fanOut as unknown as AudioParam;
+  }
 
   private stopSourceNode(graph: DeckAudioGraph): void {
     if (graph.sourceNode) {

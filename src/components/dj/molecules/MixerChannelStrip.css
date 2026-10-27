@@ -1,0 +1,63 @@
+/* Columna de canal: cabecera, cinco pomos apilados, CUE y el fader con su vúmetro */
+.mixer-channel {
+  --knob-width-channel: var(--mixer-knob, 2.4rem);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mixer-gap, 8px);
+  min-width: 0;
+  min-height: 0;
+}
+
+.mixer-channel__signal {
+  display: inline-flex;
+  padding: 2px;
+}
+
+.mixer-channel__knobs,
+.mixer-channel__eq {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--mixer-gap, 8px) * 0.6);
+}
+
+.mixer-channel__cue {
+  flex: none;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 10px;
+  font-size: 9px;
+}
+
+/* Fader centrado bajo los pomos; el vúmetro, pegado del lado del MASTER */
+.mixer-channel__fader {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  width: 100%;
+  min-height: 7rem;
+}
+
+.mixer-channel__fader .console-fader {
+  --cap-short: 1.35rem;
+  min-height: 0;
+}
+
+.mixer-channel__meter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  min-height: 0;
+}
+
+.mixer-channel--a .mixer-channel__meter {
+  left: calc(50% + 1.45rem);
+}
+
+.mixer-channel--b .mixer-channel__meter {
+  right: calc(50% + 1.45rem);
+}

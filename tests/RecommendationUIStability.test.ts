@@ -33,10 +33,10 @@ describe('Recommendation UI stability and localization', () => {
     }
 
     const card = fs.readFileSync('src/components/dashboard/SmartRecommendationCard.tsx', 'utf8');
-    const deck = fs.readFileSync('src/components/dj/Deck.tsx', 'utf8');
+    const deck = fs.readFileSync('src/services/console/deckPanelModel.ts', 'utf8');
     assert.match(card, /t\('dashboard\.current_track_info'/);
-    assert.match(deck, /t\('dj\.master'\)/);
-    assert.match(deck, /t\(barSyncReasonKey\)/);
+    assert.match(deck, /msg\('dj\.master'\)/);
+    assert.match(deck, /msg\(d\.barSyncReasonKey\)/);
     // Keys used by the active UI must resolve in both locales.
     assert.equal(en.dj.master, 'MASTER');
     assert.equal(es.dj.master, 'MASTER');

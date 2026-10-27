@@ -1,0 +1,97 @@
+.downbeat-meter {
+  /* Lado corto del pomo del fader; la escala de debajo usa el mismo recorrido */
+  --meter-cap: 0.95rem;
+  --meter-cap-long: calc(var(--meter-cap) * 470 / 279);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.downbeat-meter__displays {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.downbeat-meter__readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.downbeat-meter__caption {
+  color: var(--console-silkscreen-dim);
+  font-size: var(--downbeat-text-sm);
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.downbeat-meter__readout .console-lcd {
+  font-size: var(--downbeat-text-lcd);
+}
+
+.downbeat-meter__readout .console-lcd[title] {
+  cursor: help;
+}
+
+.downbeat-meter__fader {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.downbeat-meter__fader .console-fader {
+  --cap-short: var(--meter-cap);
+  --slot-thickness: 5px;
+}
+
+/* Selector de métrica: no hay relleno de nivel, solo la posición del pomo */
+.downbeat-meter__fader .console-fader__fill {
+  display: none;
+}
+
+/* Escala: una marca corta y su serigrafía bajo cada posición del recorrido del pomo */
+.downbeat-meter__scale {
+  position: relative;
+  height: calc(var(--downbeat-text-sm) + 9px);
+  margin-inline: calc(var(--meter-cap-long) / 2);
+}
+
+.downbeat-meter__detent {
+  position: absolute;
+  top: 0;
+  left: calc(var(--detent) * 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transform: translateX(-50%);
+  color: var(--console-silkscreen-dim);
+  font-size: var(--downbeat-text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold, 600);
+  line-height: 1;
+}
+
+.downbeat-meter__detent::before {
+  content: '';
+  width: 1px;
+  height: 5px;
+  background-color: var(--console-tick);
+}
+
+.downbeat-meter__detent[data-selected='true'] {
+  color: var(--console-silkscreen);
+}
+
+@media (pointer: coarse) {
+  .downbeat-meter {
+    --meter-cap: 1.25rem;
+  }
+}

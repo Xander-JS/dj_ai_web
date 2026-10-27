@@ -1,0 +1,6 @@
+/* Expulsar y Referencia, lado a lado (Deck.css los pone en espejo en Deck B) */
+.deck-utility {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+}

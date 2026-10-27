@@ -21,11 +21,13 @@ export interface ChoiceTilesProps<T extends string> {
   onChange: (value: T) => void;
   /** tile: muestra grande sobre la etiqueta · swatch: círculo compacto de color */
   variant?: 'tile' | 'swatch';
+  /** Solo la muestra a la vista; la etiqueta queda como nombre accesible */
+  hideLabels?: boolean;
   className?: string;
 }
 
 // Grupo de radios nativos con muestra: flechas del teclado, foco y lectores sin lógica propia
-export function ChoiceTiles<T extends string>({ value, options, label, onChange, variant = 'tile', className }: ChoiceTilesProps<T>) {
+export function ChoiceTiles<T extends string>({ value, options, label, onChange, variant = 'tile', hideLabels, className }: ChoiceTilesProps<T>) {
   const name = useId();
   return (
     <fieldset className={clsx('sd-choice-tiles', `sd-choice-tiles--${variant}`, className)}>
@@ -50,7 +52,7 @@ export function ChoiceTiles<T extends string>({ value, options, label, onChange,
                 </span>
               </span>
             )}
-            <span className="sd-choice-tile__label">{option.label}</span>
+            <span className={clsx('sd-choice-tile__label', hideLabels && 'sd-visually-hidden')}>{option.label}</span>
             {option.hint && <span className="sd-choice-tile__hint">{option.hint}</span>}
           </label>
         );

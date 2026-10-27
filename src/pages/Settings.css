@@ -380,24 +380,39 @@
   background-color: var(--sd-accent);
 }
 
-/* Movimiento: qué cubre la preferencia, como etiquetas; crece con cada animación nueva */
+/* Movimiento: qué cubre la preferencia, como lista; crece con cada animación nueva */
 .sd-settings__motion {
   display: flex;
   flex-direction: column;
   gap: var(--sd-gap-2);
+  max-width: 62ch;
 }
 
-.sd-settings__motion-scope {
+.sd-settings__motion-label,
+.sd-settings__motion-item {
+  font-size: var(--sd-text-note);
+  line-height: 1.45;
+  color: var(--sd-ink-soft);
+}
+
+.sd-settings__motion-list {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sd-settings__motion-item {
+  display: flex;
+  align-items: flex-start;
   gap: 0.375rem;
 }
 
-.sd-settings__motion-label {
-  margin-right: 0.25rem;
-  font-size: var(--sd-text-note);
-  color: var(--sd-ink-soft);
+.sd-settings__motion-item .sd-icon {
+  flex: none;
+  margin-top: 0.1em;
 }
 
 /* --------------------------------------------------------------------------
@@ -454,6 +469,11 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: var(--sd-gap-3);
+}
+
+/* Crossfader y su curva: comunes a los dos decks, a todo el ancho bajo ellos */
+.sd-shortcut-deck--mixer {
+  grid-column: 1 / -1;
 }
 
 /* Letra del deck como la serigrafía de un reproductor */
@@ -728,6 +748,48 @@
   }
 }
 
+/* --------------------------------------------------------------------------
+   Disco de los decks: muestra real sobre un plato; el elegido gira despacio
+   -------------------------------------------------------------------------- */
+.sd-disc-preview {
+  display: grid;
+  place-items: center;
+  width: 11.5rem;
+  height: 7.25rem;
+  background:
+    radial-gradient(circle at 50% 50%, var(--sd-paper) 0 30%, transparent 60%),
+    var(--sd-surface);
+}
+
+/* Plato cuadrado: discImageStyle centra cada disco en él sin deformarlo */
+.sd-disc-preview__platter {
+  position: relative;
+  width: 6.25rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0 6px 16px -6px rgb(0 0 0 / 0.5);
+}
+
+.sd-disc-preview__platter img {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+
+.sd-choice-tile.is-checked .sd-disc-preview__platter img {
+  animation: sd-disc-spin 3.6s linear infinite;
+}
+
+@keyframes sd-disc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:root[data-animations='off'] .sd-choice-tile.is-checked .sd-disc-preview__platter img {
+  animation: none;
+}
+
 @media (pointer: coarse) {
   .sd-settings__tab {
     min-height: 3rem;
@@ -741,7 +803,8 @@
     transition-duration: 0ms;
   }
 
-  .sd-binding.is-listening {
+  .sd-binding.is-listening,
+  .sd-choice-tile.is-checked .sd-disc-preview__platter img {
     animation: none;
   }
 }

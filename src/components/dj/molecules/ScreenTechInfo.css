@@ -1,0 +1,47 @@
+/* Rejilla 2 × 5 idéntica para ambos decks: cabeceras arriba, valores debajo */
+.screen-tech-info {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0 2px;
+  margin: 0;
+  padding: 3px 4px 4px;
+  border-top: 2px solid color-mix(in srgb, var(--console-tone) 70%, transparent);
+  background-color: var(--screen-well);
+  border-radius: 2px;
+}
+
+.screen-tech-info__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.screen-tech-info dt {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-size: var(--screen-text-xs);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--screen-ink-dim);
+}
+
+.screen-tech-info dd {
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--screen-text-md);
+  letter-spacing: -0.01em;
+  font-weight: var(--font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  color: var(--screen-ink);
+}
+
+.screen-tech-info__cell--key dd,
+.screen-tech-info__cell--camelot dd {
+  color: color-mix(in srgb, var(--console-tone) 55%, var(--screen-ink));
+}

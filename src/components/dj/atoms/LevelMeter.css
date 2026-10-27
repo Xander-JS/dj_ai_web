@@ -1,0 +1,55 @@
+/* Vúmetro de LEDs: ventana negra empotrada con segmentos de 3 px; el ancho lo fija el contenedor */
+.level-meter {
+  --meter-segments: repeating-linear-gradient(to top, #000 0 3px, transparent 3px 5px);
+
+  position: relative;
+  flex-shrink: 0;
+  width: 8px;
+  min-height: 4rem;
+  border-radius: 2px;
+  background-color: var(--console-meter-bg);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.8), 0 1px 0 hsl(0 0% 100% / 0.05);
+  overflow: hidden;
+}
+
+.level-meter__scale,
+.level-meter__fill {
+  position: absolute;
+  inset: 2px;
+  background: linear-gradient(to top,
+    var(--console-led-green) 0%,
+    var(--console-led-green) 68%,
+    var(--console-led-amber) 68%,
+    var(--console-led-amber) 86%,
+    var(--console-led-red) 86%);
+  -webkit-mask-image: var(--meter-segments);
+  mask-image: var(--meter-segments);
+}
+
+/* LEDs apagados: la misma escala, muy atenuada */
+.level-meter__scale {
+  opacity: 0.14;
+}
+
+.level-meter__fill {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--console-led-green) 55%, transparent));
+  transition: clip-path 60ms linear;
+}
+
+.level-meter__clip {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+.level-meter__clip.is-on {
+  background-color: var(--console-led-red);
+  box-shadow: 0 0 6px var(--console-led-red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .level-meter__fill { transition: none; }
+}

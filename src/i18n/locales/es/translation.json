@@ -833,7 +833,7 @@
     "motion_title": "Movimiento",
     "animations_title": "Animaciones",
     "animations_desc": "Efectos de movimiento decorativos. Desactivarlos no cambia ninguna función de la consola.",
-    "animations_scope": "Incluye",
+    "animations_scope": "Incluye:",
     "animations_list": {
       "sidebar": "Luz de la barra lateral que sigue al cursor",
       "selection_bar": "Entrada de la barra de selección de la Biblioteca",
@@ -864,16 +864,7 @@
     "shortcuts_section": "Sección",
     "disc_title": "Disco de los decks",
     "disc_desc": "Diseño del disco giratorio que muestran Deck A y Deck B. Solo cambia su aspecto: la reproducción, el BPM, los cues y el SYNC no se ven afectados.",
-    "disc": {
-      "a": "Disco óptico",
-      "b": "Vinilo neón",
-      "c": "Vinilo clásico"
-    },
-    "disc_hint": {
-      "a": "Plateado e iridiscente",
-      "b": "Surcos con reflejos turquesa",
-      "c": "Etiqueta amarilla de estudio"
-    },
+    "disc_option": "Disco {{n}}",
     "shortcuts_mixer_group": "Crossfader",
     "shortcuts_mixer_short": "XF",
     "shortcuts_console_title": "Atajos de consola",

@@ -833,7 +833,7 @@
     "motion_title": "Motion",
     "animations_title": "Animations",
     "animations_desc": "Decorative motion effects. Turning them off does not change any console feature.",
-    "animations_scope": "Includes",
+    "animations_scope": "Includes:",
     "animations_list": {
       "sidebar": "Sidebar light that follows the cursor",
       "selection_bar": "Library selection bar entrance",
@@ -864,16 +864,7 @@
     "shortcuts_section": "Section",
     "disc_title": "Deck disc",
     "disc_desc": "Design of the spinning disc shown on Deck A and Deck B. It only changes its look: playback, BPM, cues and SYNC are not affected.",
-    "disc": {
-      "a": "Optical disc",
-      "b": "Neon vinyl",
-      "c": "Classic vinyl"
-    },
-    "disc_hint": {
-      "a": "Silver and iridescent",
-      "b": "Grooves with teal highlights",
-      "c": "Yellow studio label"
-    },
+    "disc_option": "Disc {{n}}",
     "shortcuts_mixer_group": "Crossfader",
     "shortcuts_mixer_short": "XF",
     "shortcuts_console_title": "Console shortcuts",

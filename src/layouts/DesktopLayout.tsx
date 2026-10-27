@@ -1,12 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import './DesktopLayout.css';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { PlayerBar } from './PlayerBar';
 import { ToastViewport } from '../components/molecules/ToastViewport';
+import { IconButton } from '../components/atoms/IconButton';
+import { Icon } from '../components/atoms/Icon';
 import { registerConsoleNavigator } from '../services/navigation/consoleNavigator';
 import { NAV_SECTION_PATHS } from '../services/keyboard/keyboardShortcuts';
 import { DURATION, EASE_OUT } from '../design-system/motion';
@@ -34,20 +38,65 @@ function useConsoleNavigator(): void {
   }), [navigate]);
 }
 
+/**
+ * Barra lateral en Mixer: se retira y la consola ocupa todo el ancho; una pestaña en el borde
+ * izquierdo la muestra encima de la consola, sin moverla. Cambiar de sección o Esc la cierra.
+ */
+function useSidebarPeek(isMixer: boolean, pathname: string) {
+  // Abierta solo en la ruta donde se abrió: al navegar se cierra sola
+  const [peekPath, setPeekPath] = useState<string | null>(null);
+  const isOpen = isMixer && peekPath === pathname;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPeekPath(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
+
+  return { isOpen, toggle: () => setPeekPath(isOpen ? null : pathname) };
+}
+
 export const DesktopLayout: React.FC<DesktopLayoutProps> = ({ children }) => {
   useConsoleNavigator();
+  const { t } = useTranslation();
   // Mixer ya tiene su propio transporte por deck: la barra se retira (sin desmontarse, para no
-  // perder su estado) y su fila del shell se pliega. La ruta es la sección activa del router.
+  // perder su estado) y su fila del shell se pliega. La barra lateral también se retira. La
+  // ruta es la sección activa del router.
   const { pathname } = useLocation();
-  const isPlayerHidden = pathname === NAV_SECTION_PATHS.mixer;
+  const isMixer = pathname === NAV_SECTION_PATHS.mixer;
+  const isPlayerHidden = isMixer;
+  const sidebarPeek = useSidebarPeek(isMixer, pathname);
   // Cambio de módulo: la vista saliente se funde y, al terminar, entra la nueva subiendo
   // levemente. Solo se anima el contenido de <main>; cabecera, barra lateral y reproductor
   // no se mueven. Sin animaciones (Ajustes o movimiento reducido) el cambio es inmediato.
   const animationsEnabled = useAnimationsEnabled();
   return (
-    <div className={clsx('desktop-layout', isPlayerHidden && 'desktop-layout--player-hidden')}>
+    <div
+      className={clsx(
+        'desktop-layout',
+        isPlayerHidden && 'desktop-layout--player-hidden',
+        isMixer && 'desktop-layout--mixer',
+        sidebarPeek.isOpen && 'desktop-layout--sidebar-open',
+      )}
+    >
       <Header />
-      <Sidebar />
+      <Sidebar inert={isMixer && !sidebarPeek.isOpen} />
+      {isMixer && (
+        <IconButton
+          className="layout-sidebar-tab"
+          variant="surface"
+          size="sm"
+          icon={<Icon icon={sidebarPeek.isOpen ? PanelLeftClose : PanelLeftOpen} size="sm" />}
+          label={t(sidebarPeek.isOpen ? 'navigation.sidebar_hide' : 'navigation.sidebar_show')}
+          aria-expanded={sidebarPeek.isOpen}
+          aria-controls="app-sidebar"
+          onClick={sidebarPeek.toggle}
+          data-testid="sidebar-tab"
+        />
+      )}
       <main className="layout-main">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div

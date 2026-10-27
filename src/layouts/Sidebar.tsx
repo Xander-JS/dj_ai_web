@@ -70,7 +70,12 @@ function useCursorLight(ref: React.RefObject<HTMLElement | null>, enabled: boole
   }, [ref, enabled]);
 }
 
-export const Sidebar: React.FC = () => {
+export interface SidebarProps {
+  /** Retirada fuera de la vista (Mixer): no recibe foco ni puntero. */
+  inert?: boolean;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ inert = false }) => {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
   useCursorLight(panelRef, useAnimationsEnabled());
@@ -79,7 +84,7 @@ export const Sidebar: React.FC = () => {
     clsx('sidebar-nav-item', isActive && 'active');
 
   return (
-    <aside className="layout-sidebar sidebar-aside">
+    <aside id="app-sidebar" className="layout-sidebar sidebar-aside" inert={inert}>
       <div ref={panelRef} className="sidebar-panel">
         <span className="sidebar-panel__edge" aria-hidden="true" />
         <nav className="sidebar-nav">
@@ -99,7 +104,7 @@ export const Sidebar: React.FC = () => {
             <span className="sidebar-nav-label">{t('navigation.playlists')}</span>
           </NavLink>
 
-          <NavLink to="/mixer" className={getNavClass} title={t('navigation.mixer')}>
+          <NavLink to="/mixer" className={(state) => clsx(getNavClass(state), 'sidebar-nav-item--mixer')} title={t('navigation.mixer')}>
             <Icon icon={SlidersHorizontal} size="md" />
             <span className="sidebar-nav-label">{t('navigation.mixer')}</span>
           </NavLink>

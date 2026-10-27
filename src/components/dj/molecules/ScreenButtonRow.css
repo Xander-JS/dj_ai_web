@@ -1,7 +1,10 @@
-/* Cinco teclas de igual ancho sobre el borde superior del marco de la pantalla */
+/* Cinco teclas de igual ancho sobre el borde superior del marco de la pantalla; el indicador de
+   estado, si lo hay, cierra la fila por la derecha con su ancho natural */
 .screen-button-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
   gap: 6px;
   height: var(--screen-key-height, 26px);
 }
@@ -9,4 +12,15 @@
 /* Serigrafía de LOAD en el color de su deck, encendida o no */
 .screen-button-row__load:not(.is-lit) {
   color: color-mix(in srgb, var(--console-tone) 55%, var(--console-silkscreen-dim));
+}
+
+.screen-button-row__status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-inline: 4px 2px;
+}
+
+.screen-button-row__status .console-live {
+  color: var(--console-silkscreen);
 }

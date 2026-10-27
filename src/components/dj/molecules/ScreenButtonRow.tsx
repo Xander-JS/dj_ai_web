@@ -15,9 +15,14 @@ export interface ScreenButtonRowProps {
   onGrid(): void;
   onLoad(deckId: DeckId): void;
   onRec(): void;
+  /** Indicador de estado alineado al extremo derecho de la botonera. */
+  status?: React.ReactNode;
 }
 
-/** Botonera del borde superior de la pantalla: MENU, GRID, LOAD A, LOAD B y REC, en ese orden. */
+/**
+ * Botonera del borde superior de la pantalla: MENU, GRID, LOAD A, LOAD B y REC, en ese orden, y
+ * el indicador de estado en el extremo derecho.
+ */
 export const ScreenButtonRow: React.FC<ScreenButtonRowProps> = ({
   view,
   subsection,
@@ -27,6 +32,7 @@ export const ScreenButtonRow: React.FC<ScreenButtonRowProps> = ({
   onGrid,
   onLoad,
   onRec,
+  status,
 }) => {
   const { t } = useTranslation();
   const menuOpen = view === 'menu';
@@ -81,6 +87,7 @@ export const ScreenButtonRow: React.FC<ScreenButtonRowProps> = ({
         <ConsoleLed on={recording} color="red" blink />
         {t('mixer.rec_label')}
       </ConsoleKey>
+      {status && <div className="screen-button-row__status">{status}</div>}
     </div>
   );
 };

@@ -79,8 +79,8 @@ describe('Módulo DOWNBEAT & COMPÁS — reglas puras', () => {
 
   it('antes de confirmar se enciende solo el LED del knob y el LED de CONFIRMAR parpadea fuera de OFF', () => {
     const facts = getDownbeatTrackFacts(makeTrack({ suggested: 1.5 }));
-    const sug = getInitialSelection(facts);
-    assert.equal(sug.source, 'suggested');
+    assert.equal(getInitialSelection(facts).source, 'off', 'el knob arranca en OFF');
+    const sug = selectSource(facts, getInitialSelection(facts), 'suggested', 0)!;
     assert.deepEqual(getStatusLeds(facts, sug), { unconfirmed: false, playhead: false, suggested: true, confirmed: false });
     assert.equal(hasPendingChange(facts, sug), true);
 
@@ -95,8 +95,8 @@ describe('Módulo DOWNBEAT & COMPÁS — reglas puras', () => {
 
   it('tras confirmar, CONFIRMADO + la fuente quedan fijos aunque se gire el knob o se mueva el fader', () => {
     const facts = getDownbeatTrackFacts(makeTrack({ suggested: 1.5, confirmed: { position: 12.48, origin: 'playhead' } }));
-    const initial = getInitialSelection(facts);
-    assert.equal(initial.source, 'playhead', 'el knob arranca en la fuente confirmada');
+    assert.equal(getInitialSelection(facts).source, 'off', 'el knob arranca en OFF también con confirmación');
+    const initial = selectSource(facts, getInitialSelection(facts), 'playhead', 12.48)!;
     assert.equal(hasPendingChange(facts, initial), false, 'lo elegido coincide con lo confirmado');
 
     const fixed = { unconfirmed: false, playhead: true, suggested: false, confirmed: true };

@@ -14,14 +14,13 @@ export interface JogWheelProps {
   spinning: boolean;
   /** Velocidad real del deck: escala las 33⅓ rpm. */
   playbackRate: number;
-  /** Disco elegido en Ajustes: es el plato que gira bajo la etiqueta central. */
+  /** Disco elegido en Ajustes: es el plato que gira, tal cual, sin nada encima. */
   disc: JogDisc;
 }
 
 /**
  * Disco del deck. Decorativo: no responde a clics, arrastres ni teclado (sin scratch ni nudge).
- * Capas: aro metálico con marcas radiales, plato (el disco de Ajustes), aro interior y la etiqueta
- * central en el color del deck con el marcador de posición, la letra y `JOG`.
+ * Capas: aro metálico con marcas radiales y el plato con el disco de Ajustes, sin superposiciones.
  */
 export const JogWheel: React.FC<JogWheelProps> = ({ deckId, spinning, playbackRate, disc }) => {
   const asset = DISC_ASSETS[disc];
@@ -40,12 +39,6 @@ export const JogWheel: React.FC<JogWheelProps> = ({ deckId, spinning, playbackRa
       <div className="jog-wheel__platter">
         <div className="jog-wheel__disc">
           <img src={asset.src} alt="" draggable={false} decoding="async" style={discImageStyle(asset)} />
-        </div>
-        <div className="jog-wheel__inner-ring" />
-        <div className="jog-wheel__label">
-          <span className="jog-wheel__marker" />
-          <span className="jog-wheel__letter">{deckId}</span>
-          <span className="jog-wheel__caption">JOG</span>
         </div>
       </div>
     </div>

@@ -12,8 +12,8 @@ export interface HardwareButtonProps extends Omit<React.ButtonHTMLAttributes<HTM
   lit: boolean;
   /** Icono impreso en la goma. */
   icon: React.ReactNode;
-  /** Serigrafía bajo el botón, sobre la placa. */
-  caption: string;
+  /** Serigrafía bajo el botón, sobre la placa; sin ella (botones agrupados) no se imprime. */
+  caption?: string;
 }
 
 /**
@@ -43,7 +43,7 @@ export const HardwareButton: React.FC<HardwareButtonProps> = ({ variant, lit, ic
           </span>
         </button>
       </span>
-      <span className="hw-button__caption" aria-hidden="true">{caption}</span>
+      {caption && <span className="hw-button__caption" aria-hidden="true">{caption}</span>}
     </span>
   );
 };

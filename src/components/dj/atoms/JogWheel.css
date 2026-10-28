@@ -57,6 +57,62 @@
   height: auto;
 }
 
+/* Centro del disco: botón de backspin del tamaño de la etiqueta central. Solo la flecha ↺, blanca
+   y translúcida, flota sobre el disco; sin fondo ni aro */
+.jog-wheel__backspin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 30%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jog-wheel__backspin-icon {
+  display: inline-flex;
+  width: 40%;
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+.jog-wheel__backspin-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.jog-wheel__backspin:not(:disabled):hover .jog-wheel__backspin-icon,
+.jog-wheel__backspin:focus-visible .jog-wheel__backspin-icon {
+  opacity: 0.85;
+}
+
+.jog-wheel__backspin:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: 2px;
+}
+
+/* Sin pista o en pausa: casi invisible e inerte. Durante el backspin conserva su luz */
+.jog-wheel__backspin:disabled {
+  cursor: default;
+}
+
+.jog-wheel__backspin:disabled .jog-wheel__backspin-icon {
+  opacity: 0.2;
+}
+
+.jog-wheel.is-backspinning .jog-wheel__backspin-icon {
+  opacity: 0.45;
+}
+
 @keyframes jogWheelSpin {
   to { transform: rotate(360deg); }
 }

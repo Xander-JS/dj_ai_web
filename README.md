@@ -52,6 +52,8 @@ Gemini returns explanations only. The request contains a local track ID for corr
 
 ### Optional local Gemini development endpoint
 
+**DeepSeek:** set `DEEPSEEK_API_KEY` in `.env` (or `.env.local`) to use DeepSeek (`deepseek-chat`) instead of Gemini. When both keys are set, DeepSeek wins. The same server-only rules below apply to it.
+
 `vite.config.ts` contains a server-side middleware for the Vite development server only. It reads `GEMINI_API_KEY` from the server environment and calls Gemini from that process. The key is not a `VITE_*` variable and is not included in the browser bundle. The dashboard automatically posts selected local recommendations to `/api/ai/explanations` for text explanations.
 
 For local development only, copy `.env.example` to `.env.local` and set `GEMINI_API_KEY` there. `.env.local` is ignored by Git. Never use a `VITE_*` variable for the provider key. The middleware validates request method, shape, metadata, duplicate IDs, and a 16 KB body limit; it is still not a production backend and has no authentication, rate limiting, or operational controls. It is not mounted in `vite preview`, and a static production deployment has no Gemini endpoint. Do not deploy a provider key with the frontend. Automated tests use local mocks and do not certify that the live Gemini provider works. A production integration requires a separately specified and deployed backend.

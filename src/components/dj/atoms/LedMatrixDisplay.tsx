@@ -24,6 +24,8 @@ export type LedMatrixContent =
       progress: number | null;
       /** Marcadores en orden de dibujo (el último queda encima). */
       markers: LedMarker[];
+      /** Región del Auto Loop (0–1): banda translúcida en el color del loop bajo la onda. */
+      region?: { from: number; to: number } | null;
     };
 
 export interface LedMatrixDisplayProps {
@@ -42,6 +44,7 @@ const PAGE_MS = 2500;
 const TEXT_MARGIN = 1;
 const FONT = '700 12px system-ui, sans-serif';
 const PLAYHEAD = '--console-led-red';
+const LOOP = '--console-loop';
 
 interface Mask {
   width: number;
@@ -142,16 +145,21 @@ function buildFrame(content: LedMatrixContent, cols: number, reducedMotion: bool
     return { cells, palette, animated: true };
   }
 
-  // 1 pendiente · 2 reproducido · 3 línea base · 4 playhead · 5+ marcadores
+  // 1 pendiente · 2 reproducido · 3 línea base · 4 playhead · 5 región del loop · 6 onda en el loop · 7+ marcadores
   const palette = [
     { color: '', alpha: 0 },
     { color: content.color, alpha: 1 },
     { color: content.color, alpha: 0.32 },
     { color: content.color, alpha: 0.25 },
     { color: PLAYHEAD, alpha: 1 },
+    { color: LOOP, alpha: 0.45 },
+    { color: LOOP, alpha: 1 },
   ];
   const peaks = content.peaks ?? [];
   const playCol = content.progress === null ? -1 : Math.min(cols - 1, Math.floor(content.progress * cols));
+  const loopFrom = content.region ? Math.max(0, Math.floor(content.region.from * cols)) : cols;
+  const loopTo = content.region ? Math.min(cols - 1, Math.floor(content.region.to * cols)) : -1;
+  for (let x = loopFrom; x <= loopTo; x++) column(x, 5);
 
   if (peaks.length === 0) {
     for (let x = 0; x < cols; x++) cells[Math.floor(ROWS / 2) * cols + x] = 3;
@@ -165,12 +173,12 @@ function buildFrame(content: LedMatrixContent, cols: number, reducedMotion: bool
       for (let i = i0; i < i1; i++) peak = Math.max(peak, peaks[i]);
       const height = Math.max(1, Math.round(Math.min(1, peak) * ROWS));
       const y0 = Math.floor((ROWS - height) / 2);
-      column(x, x < playCol ? 2 : 1, y0, y0 + height);
+      column(x, x >= loopFrom && x <= loopTo ? 6 : x < playCol ? 2 : 1, y0, y0 + height);
     }
   }
 
   for (const marker of content.markers) {
-    let index = palette.findIndex((p, i) => i >= 5 && p.color === marker.color);
+    let index = palette.findIndex((p, i) => i >= 7 && p.color === marker.color);
     if (index === -1) index = palette.push({ color: marker.color, alpha: 1 }) - 1;
     column(Math.min(cols - 1, Math.floor(marker.at * cols)), index);
   }

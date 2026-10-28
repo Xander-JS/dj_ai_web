@@ -57,6 +57,8 @@ function makeDeck(deckId: 'A' | 'B', overrides: Partial<DeckStoreState> = {}): D
     errorCode: null,
     errorMessage: null,
     syncFeedback: null,
+    loop: { beats: 1, region: null, warning: false },
+    isBackspinning: false,
     ...overrides,
   };
 }
@@ -257,6 +259,12 @@ describe('Panel de deck — mensaje del display LED', () => {
     assert.deepEqual(levelAndKey(input({})), ['guide', 'dj.display_load_track']);
     const rejected = getDeckMessage(input({ errorCode: 'sync_failed', syncFeedback: { key: 'dj.sync_reject_slave_track' } }));
     assert.deepEqual(rejected, { level: 'error', message: { key: 'dj.sync_reject_slave_track' } });
+  });
+
+  it('loop sin BPM analizado: warning por delante del bloqueo de BAR SYNC; con BPM desaparece', () => {
+    const loop = { beats: 1, region: null, warning: true };
+    assert.deepEqual(levelAndKey(input({ track, loop })), ['warning', 'dj.loop_requires_bpm']);
+    assert.notEqual(levelAndKey(input({ track, loop, calculatedBpm: 124 }))?.[1], 'dj.loop_requires_bpm');
   });
 
   it('el error de reproducción es un error con su texto; sin estado de error no se muestra', () => {

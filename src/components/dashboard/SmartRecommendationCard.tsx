@@ -30,6 +30,7 @@ import { Panel } from '../molecules/Panel';
 import { DURATION, EASE_OUT } from '../../design-system/motion';
 import { useAnimationsEnabled } from '../../design-system/motionPreference';
 import { useDJStore } from '../../store/useDJStore';
+import { recommendationStore, useRecommendationStore } from '../../store/useRecommendationStore';
 import { indexedDBStorage } from '../../services/storage/IndexedDBStorage';
 import { LatestRequest } from '../../services/ai/LatestRequest';
 import { notificationCenter } from '../../services/notifications/notificationCenter';
@@ -38,7 +39,6 @@ import {
   getTrackRecommendationExplanations,
   applyRecommendationExplanations,
   extractCandidateMetadata,
-  type TrackRecommendation,
 } from '../../services/ai';
 import type { Track } from '../../types/track';
 import { resolveReferenceDeck, type ReferenceDeck } from './referenceDeck';
@@ -145,18 +145,11 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
 
   const [uncontrolledDeck, setUncontrolledDeck] = useState<ReferenceDeck | null>(null);
   const selectedDeck = controlledDeck !== undefined ? controlledDeck : uncontrolledDeck;
-  const [localTracks, setLocalTracks] = useState<Track[]>([]);
-  const [recommendationResult, setRecommendationResult] = useState<{
-    referenceTrack: Track;
-    availableTracks: Track[];
-    recommendations: TrackRecommendation[];
-    insufficientCandidateCount: number;
-  } | null>(null);
+  const [localTracks, setLocalTracks] = useState<Track[] | null>(null);
+  // El resultado vive en recommendationStore: sobrevive al cambiar de sección y no se recalcula solo
+  const recommendationResult = useRecommendationStore();
   const [activeRequest, setActiveRequest] = useState<{ id: number; referenceTrack: Track; availableTracks: Track[] } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isMockResult, setIsMockResult] = useState<boolean>(false);
-  const [modelUsed, setModelUsed] = useState<string | null>(null);
-  const [explanationsUnavailable, setExplanationsUnavailable] = useState(false);
   const recommendationRequest = useRef(new LatestRequest());
   const animationsEnabled = useAnimationsEnabled();
   // Recomendación visible: una tarjeta a la vez entre las ya calculadas (no pide otras)
@@ -185,7 +178,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
 
   // Solo las pistas locales tienen un recurso de audio que el deck puede cargar.
   const availableTracks = useMemo<Track[]>(() => {
-    const validLocalTracks = localTracks.filter((t) => Boolean(t && typeof t.id === 'string' && t.id.trim()));
+    const validLocalTracks = (localTracks ?? []).filter((t) => Boolean(t && typeof t.id === 'string' && t.id.trim()));
     return validLocalTracks;
   }, [localTracks]);
 
@@ -206,16 +199,24 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
     return deckB.track || null;
   }, [activeDeck, deckA.track, deckB.track]);
 
-  const recommendations = recommendationResult?.referenceTrack === referenceTrack &&
-    recommendationResult.availableTracks === availableTracks
-    ? recommendationResult.recommendations
-    : [];
+  // El resultado guardado vale para la misma pista de referencia mientras todas las pistas
+  // recomendadas sigan en la biblioteca (al volver a Inicio, antes de leerla, se da por válido)
+  const resultIsCurrent = (result: typeof recommendationResult, track: Track | null | undefined) =>
+    Boolean(track) &&
+    result !== null &&
+    result.referenceTrackId === track?.id &&
+    (localTracks === null || result.recommendations.every((rec) => availableTracks.some((tr) => tr.id === rec.trackId)));
+  const currentResult = resultIsCurrent(recommendationResult, referenceTrack) ? recommendationResult : null;
+  const recommendations = currentResult?.recommendations ?? [];
+  const insufficientCandidateCount = currentResult?.insufficientCandidateCount ?? 0;
+  const isMockResult = currentResult?.isMock ?? false;
+  const modelUsed = currentResult?.model ?? null;
+  const explanationsUnavailable = currentResult?.explanationsUnavailable ?? false;
   const isLoading = activeRequest?.referenceTrack === referenceTrack &&
     activeRequest.availableTracks === availableTracks;
-  const insufficientCandidateCount = recommendationResult?.referenceTrack === referenceTrack &&
-    recommendationResult.availableTracks === availableTracks
-    ? recommendationResult.insufficientCandidateCount
-    : 0;
+  // Un único estado visible en el hueco de resultados: el cálculo local termina antes que las
+  // explicaciones, y desde ese momento las recomendaciones sustituyen a la carga
+  const isCalculating = isLoading && recommendations.length === 0;
 
   // La posición se reinicia con cada lista nueva; las explicaciones tardías no la mueven
   const recommendationsKey = recommendations.map((rec) => rec.trackId).join('|');
@@ -230,11 +231,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
 
   // Cambiar de deck no anima si no cambiaría nada: ambos vacíos, o la misma pista sin recomendaciones calculadas
   const hasRecommendationsFor = (track: Track | null | undefined) =>
-    Boolean(track) &&
-    recommendationResult !== null &&
-    recommendationResult.referenceTrack === track &&
-    recommendationResult.availableTracks === availableTracks &&
-    recommendationResult.recommendations.length > 0;
+    resultIsCurrent(recommendationResult, track) && (recommendationResult?.recommendations.length ?? 0) > 0;
   const isSameDeckTrack = Boolean(deckA.track && deckB.track && deckA.track.id === deckB.track.id);
   const skipDeckAnimation =
     (!deckA.track && !deckB.track) ||
@@ -256,7 +253,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
         typeof referenceTrack.analysis.bpm !== 'number' ||
         !(referenceTrack.analysis.camelot || referenceTrack.analysis.key)
       ) {
-        setRecommendationResult(null);
+        recommendationStore.set(null);
         setErrorMsg('dashboard.reference_analysis_required');
         notificationCenter.push({ type: 'error', messageKey: 'dashboard.reference_analysis_required' });
         return;
@@ -266,7 +263,8 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
       const isCurrentRequest = () => recommendationRequest.current.isCurrent(request.id);
       setActiveRequest({ id: request.id, referenceTrack, availableTracks });
       setErrorMsg(null);
-      setExplanationsUnavailable(false);
+      // Durante el cálculo solo se ve la carga, no la lista anterior debajo
+      recommendationStore.set(null);
 
       let localResultsReady = false;
       try {
@@ -279,16 +277,15 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
         if (response.success) {
           const localRecommendations = response.recommendations;
           localResultsReady = true;
-          const localResult = {
-            referenceTrack,
-            availableTracks,
+          // Publish local decisions immediately; Gemini can only enrich text.
+          recommendationStore.set({
+            referenceTrackId: referenceTrack.id,
             recommendations: localRecommendations,
             insufficientCandidateCount: response.insufficientCandidateCount ?? 0,
-          };
-          // Publish local decisions immediately; Gemini can only enrich text.
-          setRecommendationResult(localResult);
-          setIsMockResult(response.isMock);
-          setModelUsed(response.model || null);
+            isMock: response.isMock,
+            model: response.model || null,
+            explanationsUnavailable: false,
+          });
           if (response.warning && response.recommendations.length === 0) {
             notificationCenter.push({ type: 'error', messageKey: 'dashboard.no_candidates' });
           }
@@ -302,13 +299,12 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
             if (!isCurrentRequest()) return;
 
             if (explanationResponse.success) {
-              setRecommendationResult({
-                ...localResult,
+              recommendationStore.update({
                 recommendations: applyRecommendationExplanations(localRecommendations, explanationResponse.explanations),
+                explanationsUnavailable: Boolean(explanationResponse.warning),
               });
-              setExplanationsUnavailable(Boolean(explanationResponse.warning));
             } else if (explanationResponse.errorCode !== 'cancelled') {
-              setExplanationsUnavailable(true);
+              recommendationStore.update({ explanationsUnavailable: true });
             }
           }
         } else {
@@ -325,12 +321,11 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
 
           setErrorMsg(userMessage);
           notificationCenter.push({ type: 'error', messageKey: userMessage });
-          setIsMockResult(false);
         }
       } catch (err: unknown) {
         if (!isCurrentRequest()) return;
         if (localResultsReady) {
-          setExplanationsUnavailable(true);
+          recommendationStore.update({ explanationsUnavailable: true });
         } else {
           const error = err as { name?: string };
           const messageKey = error?.name === 'AbortError' ? 'dashboard.error_timeout' : 'dashboard.error_server';
@@ -456,10 +451,12 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
               <p className="smart-rec-empty-hint" role="status">{t('dashboard.reference_analysis_required')}</p>
             )}
 
-            {/* Estados de Contenido */}
-            {isLoading && (
+            {/* Estados de Contenido: carga, invitación y resultados ocupan el mismo hueco
+                (.smart-rec-slot, alto mínimo común), así que pasar de uno a otro no mueve la página */}
+            {isCalculating && (
               <EmptyState
                 status="loading"
+                className="smart-rec-slot"
                 title={t('dashboard.loading_recommendations')}
                 description={t('dashboard.loading_recommendations_desc')}
               />
@@ -483,7 +480,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
               !errorMsg &&
               referenceTrack &&
               recommendations.length === 0 && insufficientCandidateCount === 0 && (
-                <div className="smart-rec-empty-box">
+                <div className="smart-rec-empty-box smart-rec-slot">
                   <Icon icon={SlidersVertical} size="lg" />
                   <p>
                     {t('dashboard.current_track_info', {
@@ -504,7 +501,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
 
             {/* Recomendaciones obtenidas: una tarjeta a la vez, con navegación entre las calculadas */}
             {!errorMsg && recommendations.length > 0 && (
-              <>
+              <div className="smart-rec-results smart-rec-slot">
                 <div className="smart-rec-pager">
                   <p className="smart-rec-list-head" role="status">
                     {t('dashboard.results_summary', { count: recommendations.length, title: referenceTrack?.title ?? '' })}
@@ -658,7 +655,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
                     })}
                   </AnimatePresence>
                 </ol>
-              </>
+              </div>
             )}
           </motion.div>
         </AnimatePresence>

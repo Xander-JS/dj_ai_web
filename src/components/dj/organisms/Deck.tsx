@@ -15,6 +15,7 @@ import { toggleDeckDisplayMode } from '../../../hooks/useDeckDisplayMode';
 import { JogWheel } from '../atoms/JogWheel';
 import { DeckNoticeStrip } from '../molecules/DeckNoticeStrip';
 import { DeckUtilityButtons } from '../molecules/DeckUtilityButtons';
+import { DeckLoopControl } from '../molecules/DeckLoopControl';
 import { DeckSyncRow } from '../molecules/DeckSyncRow';
 import { DeckHotCues } from '../molecules/DeckHotCues';
 import { DeckTransport } from '../molecules/DeckTransport';
@@ -29,7 +30,7 @@ export interface DeckProps {
 
 /**
  * Deck A / Deck B (secciones 2 y 3): Expulsar, Referencia y Modo (alterna el display LED, sobre
- * DOWNBEAT & COMPÁS) junto a los avisos, disco, fila de sincronización, Hot Cues, CUE y PLAY / PAUSE, y el fader de tempo. Deck B es el espejo horizontal de Deck A. Título, artista,
+ * DOWNBEAT & COMPÁS) junto a los avisos y el Auto Loop, disco (su centro lanza el backspin), fila de sincronización, Hot Cues, CUE y PLAY / PAUSE, y el fader de tempo. Deck B es el espejo horizontal de Deck A. Título, artista,
  * forma de onda e información técnica están en la pantalla digital.
  */
 export const Deck: React.FC<DeckProps> = ({ deckName }) => {
@@ -56,6 +57,9 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
     setHotCue,
     jumpToHotCue,
     deleteHotCue,
+    toggleLoop,
+    stepLoop,
+    backspin,
   } = useDJStore();
 
   const [isTriggeringAnalysis, setIsTriggeringAnalysis] = useState(false);
@@ -238,8 +242,27 @@ export const Deck: React.FC<DeckProps> = ({ deckName }) => {
           </div>
         </div>
 
+        <div className="deck-panel__loop">
+          <DeckLoopControl
+            deckId={deckName}
+            enabled={!controlsDisabled}
+            active={deck.loop.region !== null}
+            beats={deck.loop.beats}
+            onToggle={() => toggleLoop(deckName)}
+            onStep={(direction) => stepLoop(deckName, direction)}
+          />
+        </div>
+
         <div className="deck-panel__jog">
-          <JogWheel deckId={deckName} spinning={isPlaying} playbackRate={deck.playbackRate} disc={settings.jogDisc} />
+          <JogWheel
+            deckId={deckName}
+            spinning={isPlaying}
+            playbackRate={deck.playbackRate}
+            disc={settings.jogDisc}
+            backspinEnabled={hasTrack && isPlaying && !deck.isBackspinning}
+            backspinning={deck.isBackspinning}
+            onBackspin={() => backspin(deckName)}
+          />
         </div>
 
         <div className="deck-panel__transport">

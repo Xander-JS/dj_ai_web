@@ -16,7 +16,6 @@ import { SegmentedControl } from '../components/molecules/SegmentedControl';
 import { SelectMenu } from '../components/molecules/SelectMenu';
 import { ConfirmDialog } from '../components/molecules/ConfirmDialog';
 import { PageHeader } from '../components/molecules/PageHeader';
-import { Notice } from '../components/molecules/Notice';
 import { EmptyState } from '../components/molecules/EmptyState';
 import { ConsoleTemplate } from '../components/templates/ConsoleTemplate';
 import { useSmoothScroll } from '../design-system/smoothScroll';
@@ -204,10 +203,10 @@ export const Library: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
-  const [feedback, setFeedback] = useState<{
-    type: 'success' | 'warning' | 'error';
-    text: string;
-  } | null>(null);
+  // Análisis en curso lanzados desde esta vista: los avisos cuentan el lote completo
+  const analysisBatchRef = useRef({ pending: 0, done: 0, failed: 0 });
+  const deletedToastText = (count: number) =>
+    count === 1 ? t('library.toast.deleted') : t('library.toast.deleted_count', { count });
 
   const [deleteConfirmTrack, setDeleteConfirmTrack] = useState<Track | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -371,6 +370,8 @@ export const Library: React.FC = () => {
       return;
     }
 
+    const batch = analysisBatchRef.current;
+    batch.pending += 1;
     try {
       // Marcado visual optimista
       setLocalTracks((prev) =>
@@ -381,14 +382,22 @@ export const Library: React.FC = () => {
 
       const result = await analyzeTrack(track, force);
 
+      // Un solo aviso por resultado que se actualiza en el sitio: «Análisis completado (X)»
       if (result.status === 'failed') {
-        toastStore.show('warning', t('library.toast.analysis_failed'));
+        batch.failed += 1;
+        toastStore.show('warning', t('library.toast.analysis_failed'), { group: 'library-analysis-failed', count: batch.failed });
       } else if (result.status === 'analyzed') {
-        toastStore.show('success', t(force ? 'library.toast.reanalyzed' : 'library.toast.analyzed'));
+        batch.done += 1;
+        toastStore.show('success', t(force ? 'library.toast.reanalyzed' : 'library.toast.analyzed'), { group: 'library-analysis-done', count: batch.done });
       }
     } catch (err) {
       console.error('[Library] Error al solicitar análisis:', err);
-      toastStore.show('error', t('library.toast.analysis_failed'));
+      batch.failed += 1;
+      toastStore.show('error', t('library.toast.analysis_failed'), { group: 'library-analysis-failed', count: batch.failed });
+    } finally {
+      // Lote terminado: el siguiente empieza a contar desde cero
+      batch.pending -= 1;
+      if (batch.pending === 0) analysisBatchRef.current = { pending: 0, done: 0, failed: 0 };
     }
   };
 
@@ -414,7 +423,7 @@ export const Library: React.FC = () => {
       removeSeed(track.id);
 
       await refreshLocalTracks();
-      toastStore.show('success', t('library.toast.deleted'));
+      toastStore.show('success', deletedToastText, { group: 'library-deleted' });
     } catch (err) {
       console.error('[Library] Error al eliminar pista:', err);
       toastStore.show('error', t('library.delete_error', { error: err instanceof Error ? err.message : String(err) }));
@@ -601,10 +610,7 @@ export const Library: React.FC = () => {
       // La vista de Playlists abre directamente la playlist recién generada
       navigate('/playlists', { state: { playlistId: created.id } });
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        text: t('library.playlist_add_error', { error: err instanceof Error ? err.message : String(err) }),
-      });
+      toastStore.show('error', t('library.playlist_add_error', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setIsGenerating(false);
     }
@@ -619,18 +625,11 @@ export const Library: React.FC = () => {
       const before = playlist.trackIds.length;
       const updated = await playlistService.update(playlist.id, (p) => addTracksToPlaylist(p, ids));
       const added = updated ? updated.trackIds.length - before : 0;
-      setFeedback({
-        type: added > 0 ? 'success' : 'warning',
-        text: added > 0
-          ? t('library.playlist_add_success', { count: added, name: playlist.name })
-          : t('library.playlist_add_none', { name: playlist.name }),
-      });
+      if (added > 0) toastStore.show('success', t('library.playlist_add_success', { count: added, name: playlist.name }));
+      else toastStore.show('warning', t('library.playlist_add_none', { name: playlist.name }));
       clearSelection();
     } catch (err) {
-      setFeedback({
-        type: 'error',
-        text: t('library.playlist_add_error', { error: err instanceof Error ? err.message : String(err) }),
-      });
+      toastStore.show('error', t('library.playlist_add_error', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
@@ -672,7 +671,7 @@ export const Library: React.FC = () => {
         added > 0 ? t('library.bulk.queue_added', { count: added }) : '',
         t('library.bulk.queue_duplicates', { count: duplicates }),
       ];
-      setFeedback({ type: 'warning', text: parts.filter(Boolean).join(' ') });
+      toastStore.show('warning', parts.filter(Boolean).join(' '));
     }
   };
 
@@ -702,15 +701,12 @@ export const Library: React.FC = () => {
     setBulkDeleteOpen(false);
 
     const deleted = targets.length - failedIds.length;
-    if (failedIds.length === 0) {
-      setFeedback({ type: 'success', text: t('library.bulk.delete_success', { count: deleted }) });
-    } else if (deleted > 0) {
-      setFeedback({
-        type: 'warning',
-        text: t('library.bulk.delete_partial', { deleted, total: targets.length, failed: failedIds.length, errors: errors.join(' | ') }),
-      });
-    } else {
-      setFeedback({ type: 'error', text: t('library.bulk.delete_failed', { total: targets.length, errors: errors.join(' | ') }) });
+    // Mismo aviso agrupado que el borrado individual: «Pistas eliminadas (X)»
+    if (deleted > 0) toastStore.show('success', deletedToastText, { group: 'library-deleted', count: deleted });
+    if (failedIds.length > 0 && deleted > 0) {
+      toastStore.show('warning', t('library.bulk.delete_partial', { deleted, total: targets.length, failed: failedIds.length, errors: errors.join(' | ') }));
+    } else if (failedIds.length > 0) {
+      toastStore.show('error', t('library.bulk.delete_failed', { total: targets.length, errors: errors.join(' | ') }));
     }
   };
 
@@ -801,17 +797,6 @@ export const Library: React.FC = () => {
             <span className="sd-library-dropzone__hint">{t('library.drag_drop_subtitle')}</span>
           </span>
         </div>
-
-        {/* Notificaciones y alertas */}
-        {feedback && (
-          <Notice
-            tone={feedback.type}
-            dismissLabel={t('common.close')}
-            onDismiss={() => setFeedback(null)}
-          >
-            {feedback.text}
-          </Notice>
-        )}
 
         <div className="sd-library-toolbar">
           <TextField

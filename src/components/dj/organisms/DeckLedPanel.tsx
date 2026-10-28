@@ -17,7 +17,8 @@ const LEVEL_COLOR = { error: '--console-led-red', warning: '--console-led-amber'
 
 /**
  * Bloque LED del deck: fila de MODO (GUÍA / MAPA) y el display. GUÍA muestra el mensaje del deck
- * en su color de prioridad; MAPA, la vista general de la pista con playhead, Hot Cues y CUE.
+ * en su color de prioridad; MAPA, la vista general de la pista con playhead, Hot Cues, CUE y la
+ * región del Auto Loop.
  * El mensaje se repite en texto para lectores de pantalla. Vive sobre DOWNBEAT & COMPÁS de su
  * deck; el botón MODE del deck lo alterna.
  */
@@ -29,7 +30,7 @@ export const DeckLedPanel: React.FC<DeckLedPanelProps> = ({ deckName }) => {
   const message = useDeckMessage({ deckName, deck, otherDeck, syncMasterDeck });
   const mode = useDeckDisplayMode(deckName, message);
   const animations = useAnimationsEnabled();
-  const { duration, currentTime, hotCues, mainCue } = deck;
+  const { duration, currentTime, hotCues, mainCue, loop } = deck;
   const analysis = deck.track?.analysis;
   const level = message?.level;
   const text = message?.text.toLocaleUpperCase(i18n.language) ?? '';
@@ -54,6 +55,7 @@ export const DeckLedPanel: React.FC<DeckLedPanelProps> = ({ deckName }) => {
                 ...(mainCue !== null ? [{ at: mainCue / duration, color: '--console-led-amber' }] : []),
               ]
             : [],
+          region: duration > 0 && loop.region ? { from: loop.region.start / duration, to: loop.region.end / duration } : null,
         }
       : null;
 

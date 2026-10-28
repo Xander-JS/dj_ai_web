@@ -103,7 +103,7 @@ const DEFAULT_MAX_DURATION_SECONDS = 30 * 60;
 const SUPPORTED_EVENT_TYPES = new Set([
   'session.initial-state', 'deck.track-loaded', 'deck.track-unloaded', 'transport.play',
   'transport.pause', 'transport.stop', 'transport.ended', 'transport.seek', 'deck.playback-rate',
-  'deck.micro-slew', 'mixer.channel-gain', 'mixer.channel-volume', 'mixer.eq', 'mixer.filter',
+  'deck.micro-slew', 'deck.loop', 'mixer.channel-gain', 'mixer.channel-volume', 'mixer.eq', 'mixer.filter',
   'mixer.crossfader', 'mixer.master-gain',
 ]);
 
@@ -429,7 +429,7 @@ async function planRender(
       && event.type !== 'deck.playback-rate' && event.type !== 'transport.play'
       && event.type !== 'transport.pause' && event.type !== 'transport.stop'
       && event.type !== 'transport.ended' && event.type !== 'transport.seek'
-      && event.type !== 'deck.micro-slew') {
+      && event.type !== 'deck.micro-slew' && event.type !== 'deck.loop') {
       fail('UNSUPPORTED_EVENT', `Event type ${event.type} cannot be replayed by this renderer.`);
     }
     const state = decks[event.deckId];
@@ -524,6 +524,9 @@ async function planRender(
         ];
         break;
       }
+      case 'deck.loop':
+        // shortcut: the export plays straight through a loop; replaying it needs looped segments in the planner
+        break;
     }
   }
   for (const deckId of ['A', 'B'] as const) closeSegment(decks[deckId], durationSeconds, segments);

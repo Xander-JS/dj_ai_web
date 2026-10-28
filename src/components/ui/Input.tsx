@@ -1,5 +1,6 @@
 import React, { type InputHTMLAttributes } from 'react';
 import { clsx } from 'clsx';
+import { INPUT_MAX_LENGTH } from '../../config/constants';
 import './Input.css';
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -8,8 +9,9 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   wrapperClassName?: string;
 }
 
+// Longitud máxima común (INPUT_MAX_LENGTH) salvo que el campo pida un límite propio más estricto
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, icon, wrapperClassName, id, ...props }, ref) => {
+  ({ className, label, icon, wrapperClassName, id, maxLength = INPUT_MAX_LENGTH, ...props }, ref) => {
     const generatedId = React.useId();
     const inputId = id || generatedId;
 
@@ -26,6 +28,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={clsx('input-field', icon && 'input-field-with-icon', className)}
+            maxLength={maxLength}
             {...props}
           />
         </div>

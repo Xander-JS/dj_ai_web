@@ -429,7 +429,7 @@ const LEVEL_RANK: Record<DeckMessageLevel, number> = { error: 0, warning: 1, gui
 
 /**
  * Mensaje del display LED del deck: el de mayor prioridad entre el rechazo de SYNC, el error de
- * reproducción, el rechazo o bloqueo de BAR SYNC y «Carga una pista» con el deck vacío.
+ * reproducción, el rechazo o bloqueo de BAR SYNC, el loop sin BPM y «Carga una pista» con el deck vacío.
  */
 export function getDeckMessage(input: DeckMessageInput): DeckMessage | null {
   const { deck } = input;
@@ -440,6 +440,8 @@ export function getDeckMessage(input: DeckMessageInput): DeckMessage | null {
   if (deck.playbackState === 'error' && deck.errorMessage) {
     candidates.push({ level: 'error', message: { text: deck.errorMessage } });
   }
+  // Respuesta a una pulsación: antes que el bloqueo de BAR SYNC del mismo nivel. Desaparece al llegar el BPM
+  if (deck.loop.warning && deck.calculatedBpm === null) candidates.push({ level: 'warning', message: msg('dj.loop_requires_bpm') });
   const hint = getDeckBarSyncHint(input);
   if (hint) {
     // Ser el Master no se corrige: es una indicación, no un bloqueo

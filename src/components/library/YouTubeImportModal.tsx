@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Badge, type BadgeProps } from '../ui/Badge';
 import { extractAudioFromYouTube, YouTubeImportError, type ExtractedAudio } from '../../services/youtubeService';
+import { URL_INPUT_MAX_LENGTH } from '../../config/constants';
 import '../auth/AuthForm.css';
 
 type ImportStatus = 'idle' | 'downloading' | 'importing' | 'success' | 'error';
@@ -88,6 +89,7 @@ export const YouTubeImportModal: React.FC<YouTubeImportModalProps> = ({ open, on
         <p className="auth-form-message">{t('library.youtube.description')}</p>
         <Input
           type="url"
+          maxLength={URL_INPUT_MAX_LENGTH}
           label={t('library.youtube.url_label')}
           placeholder="https://www.youtube.com/watch?v=..."
           icon={<Link2 size={16} />}

@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   getDeckBarSyncHint,
+  getDeckMessage,
   getDeckNotices,
   getDeckSyncKeys,
   translatePanelMessage,
@@ -56,6 +57,8 @@ function makeDeck(deckId: 'A' | 'B', overrides: Partial<DeckStoreState> = {}): D
     errorCode: null,
     errorMessage: null,
     syncFeedback: null,
+    loop: { beats: 1, region: null, warning: false },
+    isBackspinning: false,
     ...overrides,
   };
 }
@@ -242,6 +245,47 @@ describe('Panel de deck — fila de sincronización', () => {
     const tooltip = getDeckSyncKeys(panel).barSync.tooltip as { key: string; values: Record<string, PanelMessage> };
     assert.equal(tooltip.key, 'dj.bar_sync_tooltip_blocked');
     assert.deepEqual(tooltip.values.reason, hint.message);
+  });
+});
+
+describe('Panel de deck — mensaje del display LED', () => {
+  const track = makeTrack();
+  const levelAndKey = (panel: DeckPanelInput) => {
+    const m = getDeckMessage(panel);
+    return m && [m.level, keyOf(m.message)];
+  };
+
+  it('deck vacío: guía «Carga una pista»; un rechazo de SYNC tiene prioridad', () => {
+    assert.deepEqual(levelAndKey(input({})), ['guide', 'dj.display_load_track']);
+    const rejected = getDeckMessage(input({ errorCode: 'sync_failed', syncFeedback: { key: 'dj.sync_reject_slave_track' } }));
+    assert.deepEqual(rejected, { level: 'error', message: { key: 'dj.sync_reject_slave_track' } });
+  });
+
+  it('loop sin BPM analizado: warning por delante del bloqueo de BAR SYNC; con BPM desaparece', () => {
+    const loop = { beats: 1, region: null, warning: true };
+    assert.deepEqual(levelAndKey(input({ track, loop })), ['warning', 'dj.loop_requires_bpm']);
+    assert.notEqual(levelAndKey(input({ track, loop, calculatedBpm: 124 }))?.[1], 'dj.loop_requires_bpm');
+  });
+
+  it('el error de reproducción es un error con su texto; sin estado de error no se muestra', () => {
+    const failed = getDeckMessage(input({ track, playbackState: 'error', errorMessage: 'boom' }));
+    assert.deepEqual(failed, { level: 'error', message: { text: 'boom' } });
+    assert.notEqual(levelAndKey(input({ track, errorMessage: 'SYNC desactivado' }))?.[0], 'error');
+  });
+
+  it('BAR SYNC: bloqueo corregible = warning, rechazo = error, ser Master = guía', () => {
+    const blocked = getDeckMessage(input({ track }))!;
+    assert.equal(blocked.level, 'warning');
+    assert.equal(keyOf(blocked.message), 'dj.display_bar_sync');
+    const rejected = getDeckMessage(input({ track, barSync: { status: 'rejected_unconfirmed' } as DeckStoreState['barSync'] }))!;
+    assert.equal(rejected.level, 'error');
+    const master = getDeckMessage(input({ track, isMaster: true }))!;
+    assert.equal(master.level, 'guide');
+  });
+
+  it('con varios mensajes gana el de mayor prioridad', () => {
+    const both = getDeckMessage(input({ track, errorCode: 'sync_failed', syncFeedback: { key: 'dj.sync_reject_slave_bpm' } }))!;
+    assert.deepEqual([both.level, keyOf(both.message)], ['error', 'dj.sync_reject_slave_bpm']);
   });
 });
 

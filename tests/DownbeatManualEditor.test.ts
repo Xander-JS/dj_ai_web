@@ -198,7 +198,7 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       assert.deepEqual(getStatusLeds(facts, selection), { unconfirmed: true, playhead: false, suggested: false, confirmed: false });
     });
 
-    it('1.2 Pista con sugerencia algorítmica: knob en SUG, SUGERIDO encendido y nunca CONFIRMADO', async () => {
+    it('1.2 Pista con sugerencia algorítmica: el knob arranca en OFF y la sugerencia nunca es CONFIRMADO', async () => {
       const { track, file } = await createTrackWithRealHash('suggested.mp3');
       track.analysis = { status: 'analyzed', bpm: 124.0, bpmConfidence: 0.95, firstBeatTime: 1.25 };
       track.downbeat = createSuggestedDownbeat(1.25);
@@ -214,8 +214,8 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       const facts = factsOf('A');
       assert.equal(facts.suggestedPosition, 1.25);
       const selection = getInitialSelection(facts);
-      assert.deepEqual(selection, { source: 'suggested', candidate: 1.25, meterIndex: 0 });
-      assert.deepEqual(getStatusLeds(facts, selection), { unconfirmed: false, playhead: false, suggested: true, confirmed: false });
+      assert.deepEqual(selection, { source: 'off', candidate: null, meterIndex: 0 });
+      assert.deepEqual(getStatusLeds(facts, selectSource(facts, selection, 'suggested', 0)!), { unconfirmed: false, playhead: false, suggested: true, confirmed: false });
     });
 
     it('1.3 Pista confirmada manualmente: CONFIRMADO + LED de la fuente, métrica confirmada en el fader', async () => {
@@ -231,7 +231,7 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       // Confirmación anterior al módulo, sin origen guardado: coincide con la sugerencia → SUG
       assert.equal(facts.confirmed?.origin, 'suggested');
       const selection = getInitialSelection(facts);
-      assert.equal(selection.source, 'suggested');
+      assert.equal(selection.source, 'off');
       assert.equal(selection.meterIndex, 1, '3 pulsos → posición 3/4 del fader');
       assert.deepEqual(getStatusLeds(facts, selection), { unconfirmed: false, playhead: false, suggested: true, confirmed: true });
       assert.equal(facts.noteValueMissing, true, 'Sin unidad de nota confirmada se enciende el aviso ámbar');
@@ -306,9 +306,9 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       assert.equal(persistedTrack?.downbeat?.confirmation?.position, 1.5);
       assert.equal(persistedTrack?.downbeat?.confirmation?.origin, 'playhead');
 
-      // Tras confirmar: CONFIRMADO + CABEZAL, y el LED de cambio pendiente apagado
+      // Tras confirmar: CONFIRMADO + CABEZAL, y el LED de cambio pendiente apagado (knob en CAB, congelado)
       const after = factsOf('A');
-      const synced = getInitialSelection(after);
+      const synced = { ...selection, candidate: after.confirmed!.position };
       assert.deepEqual(getStatusLeds(after, synced), { unconfirmed: false, playhead: true, suggested: false, confirmed: true });
       assert.equal(hasPendingChange(after, synced), false);
     });
@@ -346,8 +346,7 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
 
       const before = factsOf('A');
       assert.equal(getClearButton(before, { saving: false, unavailable: false }).disabled, false);
-      const selection = getInitialSelection(before);
-      assert.equal(selection.source, 'playhead');
+      const selection = selectSource(before, getInitialSelection(before), 'playhead', 1.2)!;
 
       assert.equal(await djStore.clearDownbeat('A'), true, 'clearDownbeat debe reportar éxito');
 
@@ -375,7 +374,8 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       await djStore.loadTrackToDeckA(track);
       await djStore.loadTrackToDeckB(track);
 
-      const params = buildConfirmParams(factsOf('A'), getInitialSelection(factsOf('A')));
+      const factsA = factsOf('A');
+      const params = buildConfirmParams(factsA, selectSource(factsA, getInitialSelection(factsA), 'suggested', 0)!);
       assert.equal(await djStore.confirmDownbeat('A', params!), true);
 
       const factsB = factsOf('B');
@@ -414,7 +414,8 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
 
       const facts = factsOf('A');
       assert.equal(facts.duration, 300);
-      assert.equal(buildConfirmParams(facts, getInitialSelection(facts)), null);
+      assert.equal(buildConfirmParams(facts, getInitialSelection(facts)), null, 'OFF no confirma');
+      assert.equal(buildConfirmParams(facts, selectSource(facts, getInitialSelection(facts), 'suggested', 0)!), null);
 
       const rejectDuration = await djStore.confirmDownbeat('A', 400.0, 4);
       assert.equal(rejectDuration, false);
@@ -444,11 +445,12 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
       await indexedDBStorage.saveTrack(trackBData.track, trackBData.file);
 
       await djStore.loadTrackToDeckA(trackAData.track);
-      assert.equal(getInitialSelection(factsOf('A')).candidate, 1.0);
+      assert.equal(factsOf('A').suggestedPosition, 1.0);
 
       await djStore.loadTrackToDeckA(trackBData.track);
       assert.equal(djStore.getSnapshot().deckA.track?.id, trackBData.track.id);
-      assert.deepEqual(getInitialSelection(factsOf('A')), { source: 'suggested', candidate: 3.5, meterIndex: 0 });
+      assert.equal(factsOf('A').suggestedPosition, 3.5);
+      assert.deepEqual(getInitialSelection(factsOf('A')), { source: 'off', candidate: null, meterIndex: 0 });
     });
   });
 
@@ -481,7 +483,6 @@ describe('Fase 23.4: Etapa C.8.2 — Interfaz Manual de Downbeat en los Decks', 
         'downbeat_position_candidate',
         'downbeat_position_none',
         'downbeat_source_label',
-        'downbeat_source_caption',
         'downbeat_source_playhead',
         'downbeat_source_off',
         'downbeat_source_suggested',

@@ -85,6 +85,14 @@ export type SessionEventPayload =
       plateauDurationSeconds?: number;
       targetDisplacementSeconds?: number;
     }
+  | {
+      /** Auto Loop activado, cambiado o quitado (start / end null). */
+      type: 'deck.loop';
+      deckId: DeckId;
+      beats: number;
+      startSeconds: number | null;
+      endSeconds: number | null;
+    }
   | { type: 'mixer.channel-gain'; deckId: DeckId; gainLinear: number }
   | { type: 'mixer.channel-volume'; deckId: DeckId; volumeLinear: number }
   | {

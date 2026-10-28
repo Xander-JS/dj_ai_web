@@ -14,6 +14,9 @@
  *   selectora de mezcla (GAIN, HI, MID, LOW, FILTER de cada deck, reasignables) ajustan ese parámetro.
  * - Comandos de consola reasignables: MUTE (B), grabación de sesión (5) y los botones LOAD A / LOAD B
  *   de la pantalla digital (V para el Deck A, N para el Deck B).
+ * - Teclas de toque (reasignables): LOOP (R / U) y MODO del display LED (F / J). Actúan al soltarse y
+ *   solo si la pulsación fue breve y sin otra tecla en medio; así F / J siguen sirviendo para mantener.
+ *   R / U mantenidas + ← / → cambian la longitud del loop (no mueven el crossfader); A se toma al pulsar.
  * - Con el menú de la pantalla abierto, sus ocho teclas de navegación (flechas, Inicio, Fin, Enter,
  *   Esc) no llegan a los atajos: ↑ / ↓ no mueven el Master ni ← / → el crossfader. Las combinaciones
  *   con una tecla mantenida (F / J + ↑ / ↓, selectoras) y con Shift siguen actuando.
@@ -35,6 +38,7 @@ export type ShortcutAction =
   | { type: 'mix'; deckId: DeckId; param: MixParam; direction: -1 | 1 }
   | { type: 'volume'; deckId: DeckId; direction: -1 | 1 }
   | { type: 'pitch-bend'; deckId: DeckId; direction: -1 | 1 }
+  | { type: 'loop-length'; deckId: DeckId; direction: -1 | 1 }
   | { type: 'master'; direction: -1 | 1 }
   | { type: 'mute' }
   | { type: 'record' }
@@ -81,8 +85,8 @@ export const MIX_PARAMS: readonly MixParam[] = ['gain', 'high', 'mid', 'low', 'f
 
 /** Comando reasignable: `A.gain`, `B.filter`, … */
 export type MixShortcutId = `${DeckId}.${MixParam}`;
-/** Comandos de consola reasignables; actúan al pulsarse, sin tecla mantenida. */
-export type ConsoleShortcutId = 'mute' | 'record' | 'libraryA' | 'libraryB';
+/** Comandos de consola reasignables; LOOP y MODO actúan al soltar un toque, los demás al pulsarse. */
+export type ConsoleShortcutId = 'mute' | 'record' | 'libraryA' | 'libraryB' | 'loopA' | 'loopB' | 'displayA' | 'displayB';
 export type ShortcutId = MixShortcutId | ConsoleShortcutId;
 /** Tecla de cada comando, como `KeyboardEvent.code` (p. ej. `KeyG`). */
 export type ShortcutBindings = Record<ShortcutId, string>;
@@ -90,7 +94,7 @@ export type ShortcutBindings = Record<ShortcutId, string>;
 export const MIX_SHORTCUT_IDS: readonly MixShortcutId[] = (['A', 'B'] as const).flatMap(
   (deckId) => MIX_PARAMS.map((param) => `${deckId}.${param}` as MixShortcutId),
 );
-export const CONSOLE_SHORTCUT_IDS: readonly ConsoleShortcutId[] = ['mute', 'record', 'libraryA', 'libraryB'];
+export const CONSOLE_SHORTCUT_IDS: readonly ConsoleShortcutId[] = ['mute', 'record', 'libraryA', 'libraryB', 'loopA', 'loopB', 'displayA', 'displayB'];
 export const SHORTCUT_IDS: readonly ShortcutId[] = [...MIX_SHORTCUT_IDS, ...CONSOLE_SHORTCUT_IDS];
 
 export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
@@ -109,6 +113,10 @@ export const DEFAULT_SHORTCUT_BINDINGS: ShortcutBindings = {
   record: 'Digit5',
   libraryA: 'KeyV',
   libraryB: 'KeyN',
+  loopA: 'KeyR',
+  loopB: 'KeyU',
+  displayA: DECK_KEY_CODES.A,
+  displayB: DECK_KEY_CODES.B,
 };
 
 /**
@@ -166,7 +174,9 @@ export function validateBinding(
   code: string,
 ): BindingError | null {
   if (!/^(Key[A-Z]|Digit[0-9]|Semicolon)$/.test(code)) return 'invalid';
-  if (RESERVED_SHORTCUT_CODES.includes(code)) return 'reserved';
+  // MODO puede quedarse en la tecla de su propio deck: el toque no choca con mantenerla
+  const ownDeckKey = id === 'displayA' ? DECK_KEY_CODES.A : id === 'displayB' ? DECK_KEY_CODES.B : null;
+  if (code !== ownDeckKey && RESERVED_SHORTCUT_CODES.includes(code)) return 'reserved';
   if (SHORTCUT_IDS.some((other) => other !== id && bindings[other] === code)) return 'duplicate';
   return null;
 }
@@ -204,6 +214,8 @@ export function resolveNavigationShortcut(event: ShortcutKeyEvent, bindings: Nav
   return NAV_SECTIONS.find((section) => bindings[section] === event.code) ?? null;
 }
 
+const LETTER_CODES: readonly string[] = Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`);
+
 /** Normaliza asignaciones guardadas: una entrada inválida o repetida vuelve a su tecla por defecto. */
 export function sanitizeShortcutBindings(raw: unknown): ShortcutBindings {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<ShortcutId, unknown>>;
@@ -211,6 +223,11 @@ export function sanitizeShortcutBindings(raw: unknown): ShortcutBindings {
   for (const id of SHORTCUT_IDS) {
     const code = source[id];
     if (typeof code === 'string') result[id] = code;
+  }
+  // Comando nuevo cuya tecla por defecto ya usa el usuario: toma la primera letra libre en vez de reiniciar el mapa
+  for (const id of SHORTCUT_IDS) {
+    if (typeof source[id] === 'string' || validateBinding(result, id, result[id]) !== 'duplicate') continue;
+    result[id] = LETTER_CODES.find((code) => validateBinding(result, id, code) === null) ?? result[id];
   }
   for (const id of SHORTCUT_IDS) {
     if (validateBinding(result, id, result[id])) result[id] = DEFAULT_SHORTCUT_BINDINGS[id];
@@ -249,11 +266,14 @@ export function formatKeyCode(code: string): string {
 /** Tecla que se mantiene pulsada para modificar las flechas o Espacio. */
 export type HeldKey =
   | { kind: 'mix'; id: MixShortcutId }
-  | { kind: 'deck'; deckId: DeckId };
+  | { kind: 'deck'; deckId: DeckId }
+  | { kind: 'loop'; deckId: DeckId };
 
 function findHeldKey(bindings: ShortcutBindings, code: string): HeldKey | null {
   if (code === DECK_KEY_CODES.A) return { kind: 'deck', deckId: 'A' };
   if (code === DECK_KEY_CODES.B) return { kind: 'deck', deckId: 'B' };
+  if (code === bindings.loopA) return { kind: 'loop', deckId: 'A' };
+  if (code === bindings.loopB) return { kind: 'loop', deckId: 'B' };
   const id = MIX_SHORTCUT_IDS.find((mixId) => bindings[mixId] === code);
   return id ? { kind: 'mix', id } : null;
 }
@@ -284,6 +304,7 @@ export function resolveShortcut(
     const [deckId, param] = held.id.split('.') as [DeckId, MixParam];
     return { type: 'mix', deckId, param, direction: horizontal };
   }
+  if (held?.kind === 'loop' && horizontal) return { type: 'loop-length', deckId: held.deckId, direction: horizontal };
   if (held?.kind === 'deck') {
     // F + ↑ / ↓ es volumen; con Shift, Pitch Bend del mismo deck
     if (vertical) return { type: shiftKey ? 'pitch-bend' : 'volume', deckId: held.deckId, direction: vertical };
@@ -368,6 +389,14 @@ export interface ShortcutTarget {
   pitchBend(deckId: DeckId, direction: 'up' | 'down' | 'release'): void;
   /** Pasa a la curva anterior (-1) o siguiente (1) del crossfader, en el orden de la consola. */
   cycleCrossfaderCurve(direction: -1 | 1): void;
+  /** Posición actual del deck (s de pista): el punto A del loop se toma al pulsar la tecla. */
+  getDeckPosition(deckId: DeckId): number;
+  /** Botón central del Auto Loop, con A en `position`. */
+  toggleLoop(deckId: DeckId, position: number): void;
+  /** − / + del Auto Loop. */
+  stepLoop(deckId: DeckId, direction: 1 | -1): void;
+  /** Botón MODE: alterna GUÍA / MAPA del display LED. */
+  toggleDisplayMode(deckId: DeckId): void;
   /** Inicia o detiene la grabación de la sesión; sin él la tecla de grabación no hace nada. */
   toggleRecording?(): unknown;
   /** Pulsa LOAD A / LOAD B en la pantalla digital; sin él el atajo no hace nada. */
@@ -382,11 +411,26 @@ interface ShortcutEventLike extends ShortcutKeyEvent {
   target: EventTarget | null;
   repeat: boolean;
   defaultPrevented: boolean;
+  /** ms; keydown y keyup comparten reloj, así se mide la duración del toque. */
+  timeStamp: number;
   preventDefault(): void;
 }
 
 /** Acciones que admiten autorrepetición al mantener la tecla. */
 const REPEATABLE_ACTIONS: ReadonlySet<ShortcutAction['type']> = new Set(['crossfader', 'mix', 'volume', 'master']);
+
+/** Un toque de LOOP / MODO dura menos que esto; más largo es mantener y al soltar no hace nada. */
+export const TAP_MAX_MS = 400;
+
+type TapAction = { type: 'loop' | 'display'; deckId: DeckId };
+
+function findTapAction(bindings: ShortcutBindings, code: string): TapAction | null {
+  if (code === bindings.loopA) return { type: 'loop', deckId: 'A' };
+  if (code === bindings.loopB) return { type: 'loop', deckId: 'B' };
+  if (code === bindings.displayA) return { type: 'display', deckId: 'A' };
+  if (code === bindings.displayB) return { type: 'display', deckId: 'B' };
+  return null;
+}
 
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
@@ -407,6 +451,8 @@ export function createShortcutHandlers(
   let heldBend: { deckId: DeckId; code: string } | null = null;
   // Flecha cuyo Pitch Bend se soltó antes que ella: su autorrepetición no debe pasar a volumen
   let mutedRepeatCode: string | null = null;
+  // Toque de LOOP / MODO en curso: cualquier otra tecla pulsada antes de soltarla lo anula
+  let tap: { code: string; at: number; action: TapAction; position: number } | null = null;
 
   const releaseHeldKey = (code: string): void => {
     const index = heldKeys.indexOf(code);
@@ -421,6 +467,7 @@ export function createShortcutHandlers(
   };
 
   const onKeyDown = (event: ShortcutEventLike): void => {
+    if (tap && event.code !== tap.code) tap = null;
     // Un control enfocado que ya gestionó la tecla (p. ej. el botón CUE) tiene prioridad
     if (event.defaultPrevented || isEditableTarget(event.target) || isArrowKeyTarget(event.target, event.code)) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
@@ -439,6 +486,23 @@ export function createShortcutHandlers(
     }
 
     const bindings = getBindings();
+
+    const tapAction = findTapAction(bindings, event.code);
+    if (tapAction) {
+      if (!event.repeat) {
+        tap = event.shiftKey ? null : {
+          code: event.code,
+          at: event.timeStamp,
+          action: tapAction,
+          position: tapAction.type === 'loop' ? target.getDeckPosition(tapAction.deckId) : 0,
+        };
+      }
+      // MODO reasignado a otra tecla: solo toque, nada que mantener
+      if (!findHeldKey(bindings, event.code)) {
+        event.preventDefault();
+        return;
+      }
+    }
 
     if (findHeldKey(bindings, event.code)) {
       if (!event.repeat) {
@@ -498,6 +562,9 @@ export function createShortcutHandlers(
         mutedRepeatCode = null;
         target.pitchBend(action.deckId, action.direction > 0 ? 'up' : 'down');
         break;
+      case 'loop-length':
+        target.stepLoop(action.deckId, action.direction);
+        break;
       case 'mute':
         target.toggleMasterMute();
         break;
@@ -519,6 +586,14 @@ export function createShortcutHandlers(
 
   const onKeyUp = (event: ShortcutEventLike): void => {
     releaseHeldKey(event.code);
+    if (tap?.code === event.code) {
+      const { at, action, position } = tap;
+      tap = null;
+      if (event.timeStamp - at < TAP_MAX_MS) {
+        if (action.type === 'loop') target.toggleLoop(action.deckId, position);
+        else target.toggleDisplayMode(action.deckId);
+      }
+    }
     if (event.code === mutedRepeatCode) mutedRepeatCode = null;
     // Soltar la flecha, la tecla del deck o Shift deshace la combinación del Pitch Bend
     if (heldBend && (
@@ -541,6 +616,7 @@ export function createShortcutHandlers(
     for (const deckId of heldCues) target.handleCueUp(deckId);
     heldCues.clear();
     heldKeys.length = 0;
+    tap = null;
     releaseBend();
     mutedRepeatCode = null;
   };

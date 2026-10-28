@@ -114,30 +114,18 @@ export function detentIndexFor(beatsPerBar: number, beatUnit: BeatUnit | null): 
   return sameBeats === -1 ? 0 : sameBeats;
 }
 
-/**
- * Estado del módulo al cargar la pista: la fuente con la que se confirmó; si no hay confirmación,
- * SUG cuando existe una posición sugerida, y si no OFF. La métrica confirmada, o 4/4.
- */
+/** Estado del módulo al cargar la pista: knob en OFF y la métrica confirmada, o 4/4. */
 export function getInitialSelection(facts: DownbeatTrackFacts): DownbeatSelection {
-  if (facts.confirmed) {
-    return {
-      source: facts.confirmed.origin,
-      candidate: facts.confirmed.position,
-      meterIndex: detentIndexFor(facts.confirmed.beatsPerBar, facts.confirmed.beatUnit),
-    };
-  }
-  if (facts.suggestedPosition !== null) {
-    return { source: 'suggested', candidate: facts.suggestedPosition, meterIndex: 0 };
-  }
-  return { source: 'off', candidate: null, meterIndex: 0 };
+  const meterIndex = facts.confirmed ? detentIndexFor(facts.confirmed.beatsPerBar, facts.confirmed.beatUnit) : 0;
+  return { source: 'off', candidate: null, meterIndex };
 }
 
 export const isSourceAvailable = (facts: DownbeatTrackFacts, source: DownbeatSource): boolean =>
   source !== 'suggested' || facts.suggestedPosition !== null;
 
 /**
- * Girar el knob a `source`. CAB captura el cabezal en ese instante (volver a elegir CAB captura de
- * nuevo); SUG toma la posición sugerida. Devuelve `null` si la posición no está disponible.
+ * Girar el knob a `source`. CAB captura el cabezal en ese instante (el módulo lo sigue en vivo);
+ * SUG toma la posición sugerida. Devuelve `null` si la posición no está disponible.
  */
 export function selectSource(
   facts: DownbeatTrackFacts,

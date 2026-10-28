@@ -2,7 +2,7 @@
  * SYSTEM DJ — Modelo del panel de deck (secciones 2 y 3)
  *
  * Reglas puras de lo que muestra cada deck: la franja de avisos sobre el disco, las cuatro teclas
- * de la fila de sincronización (BAR SYNC, ALIGN, SYNC, KEY LOCK) y la línea de guía de BAR SYNC.
+ * de la fila de sincronización (BAR SYNC, ALIGN, SYNC, KEY LOCK) y el mensaje de su display LED.
  * Devuelve claves i18n con sus valores (no texto), así que se prueba en Node sin React.
  */
 
@@ -53,7 +53,7 @@ export interface DeckSyncKeys {
   keyLock: DeckKey;
 }
 
-/** Línea `BAR SYNC: …` bajo el deck: por qué no puede prepararse o por qué se rechazó. */
+/** Por qué BAR SYNC no puede prepararse o por qué se rechazó. */
 export interface DeckBarSyncHint {
   message: PanelMessage;
   rejected: boolean;
@@ -73,6 +73,9 @@ export interface DeckPanelInput {
   /** Tolerancia de SYNC en Ajustes, en %. */
   syncLimitPercent: number;
 }
+
+/** Lo que necesitan la guía de BAR SYNC y el mensaje del display: los dos decks y el Master. */
+export type DeckMessageInput = Pick<DeckPanelInput, 'deckName' | 'deck' | 'otherDeck' | 'syncMasterDeck'>;
 
 const msg = (key: string, values?: Record<string, string | number | PanelMessage>): PanelMessage =>
   values ? { key, values } : { key };
@@ -108,7 +111,7 @@ const REJECTION_REASONS = new Set([
 ]);
 
 /** Valores derivados que comparten avisos, teclas y guía. */
-function derive(input: DeckPanelInput) {
+function derive(input: DeckMessageInput) {
   const { deck, otherDeck, deckName, syncMasterDeck } = input;
   const otherDeckName: DeckId = deckName === 'A' ? 'B' : 'A';
   const track = deck.track;
@@ -405,11 +408,49 @@ export function getDeckSyncKeys(input: DeckPanelInput): DeckSyncKeys {
   };
 }
 
-/** Guía de BAR SYNC bajo el deck, o `null` si BAR SYNC puede usarse y no hay rechazo. */
-export function getDeckBarSyncHint(input: DeckPanelInput): DeckBarSyncHint | null {
+/** Guía de BAR SYNC, o `null` si BAR SYNC puede usarse y no hay rechazo. */
+export function getDeckBarSyncHint(input: DeckMessageInput): DeckBarSyncHint | null {
   const d = derive(input);
   if (!d.hasTrack) return null;
   if (d.isBarSyncRejected) return { message: msg(d.barSyncReasonKey), rejected: true };
   if (d.barSyncBlockMessage) return { message: d.barSyncBlockMessage, rejected: false };
   return null;
+}
+
+/** Prioridad del mensaje del display LED: error (rojo) > warning (ámbar) > guide (blanco suave). */
+export type DeckMessageLevel = 'error' | 'warning' | 'guide';
+
+export interface DeckMessage {
+  level: DeckMessageLevel;
+  message: PanelMessage;
+}
+
+const LEVEL_RANK: Record<DeckMessageLevel, number> = { error: 0, warning: 1, guide: 2 };
+
+/**
+ * Mensaje del display LED del deck: el de mayor prioridad entre el rechazo de SYNC, el error de
+ * reproducción, el rechazo o bloqueo de BAR SYNC, el loop sin BPM y «Carga una pista» con el deck vacío.
+ */
+export function getDeckMessage(input: DeckMessageInput): DeckMessage | null {
+  const { deck } = input;
+  const candidates: DeckMessage[] = [];
+  if (deck.errorCode === 'sync_failed' && deck.syncFeedback) {
+    candidates.push({ level: 'error', message: msg(deck.syncFeedback.key, deck.syncFeedback.values) });
+  }
+  if (deck.playbackState === 'error' && deck.errorMessage) {
+    candidates.push({ level: 'error', message: { text: deck.errorMessage } });
+  }
+  // Respuesta a una pulsación: antes que el bloqueo de BAR SYNC del mismo nivel. Desaparece al llegar el BPM
+  if (deck.loop.warning && deck.calculatedBpm === null) candidates.push({ level: 'warning', message: msg('dj.loop_requires_bpm') });
+  const hint = getDeckBarSyncHint(input);
+  if (hint) {
+    // Ser el Master no se corrige: es una indicación, no un bloqueo
+    const isInfo = 'key' in hint.message && hint.message.key === 'dj.bar_sync_block_is_master';
+    candidates.push({
+      level: hint.rejected ? 'error' : isInfo ? 'guide' : 'warning',
+      message: msg('dj.display_bar_sync', { message: hint.message }),
+    });
+  }
+  if (!deck.track) candidates.push({ level: 'guide', message: msg('dj.display_load_track') });
+  return candidates.reduce<DeckMessage | null>((best, c) => (!best || LEVEL_RANK[c.level] < LEVEL_RANK[best.level] ? c : best), null);
 }

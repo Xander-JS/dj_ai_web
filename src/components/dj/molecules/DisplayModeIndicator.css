@@ -1,0 +1,40 @@
+/* Serigrafía directa sobre la placa, sin fondo: el título MODO destaca sobre las etiquetas */
+.display-mode-indicator {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* MODO casi al filo izquierdo del display; el grupo GUÍA / MAPA, dentro de su filo derecho */
+  padding: 0 11px 0 5px;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.display-mode-indicator__title {
+  color: var(--console-silkscreen);
+  font-size: 11px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.16em;
+}
+
+.display-mode-indicator__leds {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.display-mode-indicator__led {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--console-silkscreen-dim);
+  font-size: 8px;
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.14em;
+  transition: color 0.15s ease;
+}
+
+.display-mode-indicator__led.is-active {
+  color: var(--console-silkscreen);
+}

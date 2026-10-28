@@ -12,13 +12,9 @@ import { ScreenLoadMenu, type MenuDeckInfo } from './ScreenLoadMenu';
 import { useDJStore, type DeckStoreState } from '../../../store/useDJStore';
 import { useSessionCapture } from '../../../hooks/useSessionCapture';
 import { digitalScreenStore } from '../../../services/console/digitalScreenStore';
-import { deckAlert } from '../../../services/console/screenDisplayModel';
 import { toggleSessionCaptureWithFeedback } from '../../../services/session/sessionCaptureFeedback';
 import type { DeckId } from '../../../types/deck';
 import './DigitalScreen.css';
-
-/** Análisis en curso de un deck, también mientras se lanza desde su insignia. */
-const isDeckAnalyzing = (deck: DeckStoreState) => deck.track?.analysis?.status === 'analyzing';
 
 /**
  * Pantalla digital de la consola: módulo elevado con su botonera (MENU, GRID, LOAD A, LOAD B,
@@ -40,17 +36,13 @@ export const DigitalScreen: React.FC = () => {
     B: { trackId: deckB.track?.id ?? null, title: deckB.track?.title ?? null, playbackState: deckB.playbackState },
   }), [deckA.track?.id, deckA.track?.title, deckA.playbackState, deckB.track?.id, deckB.track?.title, deckB.playbackState]);
 
-  const renderIdent = (deck: DeckStoreState) => {
-    const alert = deckAlert(deck);
-    return (
-      <ScreenDeckIdent
-        deckId={deck.deckId}
-        title={deck.track?.title || t('dj.no_track')}
-        artist={deck.track ? deck.track.artist || t('dj.unknown_artist') : ''}
-        alert={alert ? (alert.kind === 'sync' ? t(alert.feedback.key, alert.feedback.values) : alert.message) : null}
-      />
-    );
-  };
+  const renderIdent = (deck: DeckStoreState) => (
+    <ScreenDeckIdent
+      deckId={deck.deckId}
+      title={deck.track?.title || t('dj.no_track')}
+      artist={deck.track ? deck.track.artist || t('dj.unknown_artist') : ''}
+    />
+  );
 
   return (
     <section className="digital-screen" aria-label={t('mixer.screen.label')} data-testid="digital-screen">
@@ -76,9 +68,9 @@ export const DigitalScreen: React.FC = () => {
         ) : (
           <div className="digital-screen__normal">
             {renderIdent(deckA)}
-            <ScreenWaveform deck={deckA} isAnalyzing={isDeckAnalyzing(deckA)} onSeek={(position) => seekDeck('A', position)} />
+            <ScreenWaveform deck={deckA} onSeek={(position) => seekDeck('A', position)} />
             {renderIdent(deckB)}
-            <ScreenWaveform deck={deckB} isAnalyzing={isDeckAnalyzing(deckB)} onSeek={(position) => seekDeck('B', position)} />
+            <ScreenWaveform deck={deckB} onSeek={(position) => seekDeck('B', position)} />
             <div className="digital-screen__tech">
               <ScreenTechInfo deck={deckA} />
               <ScreenTechInfo deck={deckB} />

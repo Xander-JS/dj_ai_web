@@ -18,6 +18,7 @@ import {
   LEGACY_SHORTCUT_BINDINGS,
   VOLUME_KEY_STEP,
   MIX_KEY_STEP,
+  TAP_MAX_MS,
   createShortcutHandlers,
   formatKeyCode,
   resolveShortcut,
@@ -49,6 +50,7 @@ interface FakeKeyEvent {
   metaKey: boolean;
   repeat: boolean;
   defaultPrevented: boolean;
+  timeStamp: number;
   target: EventTarget | null;
   prevented: boolean;
   preventDefault(): void;
@@ -63,6 +65,7 @@ function key(code: string, extra: Partial<Omit<FakeKeyEvent, 'target'>> & { targ
     metaKey: false,
     repeat: false,
     defaultPrevented: false,
+    timeStamp: 0,
     prevented: false,
     ...extra,
     target: (extra.target ?? null) as EventTarget | null,
@@ -107,6 +110,10 @@ function recordingTarget() {
     toggleRecording: () => calls.push('record'),
     pressLoadButton: (deckId) => calls.push(`picker:${deckId}`),
     navigate: (section) => calls.push(`nav:${section}`),
+    getDeckPosition: (deckId) => (deckId === 'A' ? 12 : 34),
+    toggleLoop: (deckId, position) => calls.push(`loop:${deckId}:${position}`),
+    stepLoop: (deckId, direction) => calls.push(`loopStep:${deckId}:${direction}`),
+    toggleDisplayMode: (deckId) => calls.push(`mode:${deckId}`),
   };
   return { target, calls };
 }
@@ -343,11 +350,11 @@ describe('Atajos de consola — manejadores', () => {
     const { target, calls } = recordingTarget();
     let bindings: ShortcutBindings = { ...DEFAULT_SHORTCUT_BINDINGS };
     const { onKeyDown } = createShortcutHandlers(target, () => bindings);
-    bindings = { ...bindings, libraryA: 'KeyX', libraryB: 'KeyU', record: 'KeyR', mute: 'KeyM' };
+    bindings = { ...bindings, libraryA: 'KeyX', libraryB: 'KeyY', record: 'KeyT', mute: 'KeyM' };
     onKeyDown(key('KeyX'));
     onKeyDown(key('KeyV'));
-    onKeyDown(key('KeyU'));
-    onKeyDown(key('KeyR'));
+    onKeyDown(key('KeyY'));
+    onKeyDown(key('KeyT'));
     onKeyDown(key('Digit5'));
     onKeyDown(key('KeyM'));
     onKeyDown(key('KeyB'));
@@ -396,6 +403,9 @@ describe('Atajos de consola — validación, persistencia y migración', () => {
     assert.equal(bindings.libraryA, 'KeyV');
     assert.equal(bindings.libraryB, 'KeyN');
     assert.equal(bindings.mute, 'KeyB');
+    // LOOP B no existía: su U por defecto ya era del usuario, así que toma una letra libre
+    assert.notEqual(bindings.loopB, 'KeyU');
+    assert.equal(validateBinding(bindings, 'loopB', bindings.loopB), null);
   });
 
   it('migra el MUTE predeterminado de la v3 (Y) a B y conserva un MUTE personalizado', () => {
@@ -676,5 +686,59 @@ describe('Consola — integración visual e i18n', () => {
       assert.equal(typeof es.mixer[`rec_blocked_${reason}`], 'string');
       assert.equal(typeof en.mixer[`rec_blocked_${reason}`], 'string');
     }
+  });
+});
+
+describe('LOOP (R / U) y MODO (F / J) — toque y mantener', () => {
+  const at = (code: string, timeStamp: number, extra = {}) => key(code, { timeStamp, ...extra });
+
+  it('un toque breve de R / U activa el loop con A tomada al pulsar; uno largo no hace nada', () => {
+    const { target, calls } = recordingTarget();
+    let position = 12;
+    target.getDeckPosition = () => position;
+    const { onKeyDown, onKeyUp } = createShortcutHandlers(target);
+    onKeyDown(at('KeyR', 0));
+    position = 13;
+    onKeyUp(at('KeyR', 200));
+    onKeyDown(at('KeyU', 1000));
+    onKeyUp(at('KeyU', 1000 + TAP_MAX_MS));
+    assert.deepEqual(calls, ['loop:A:12']);
+  });
+
+  it('R / U + ← / → cambian la longitud, no mueven el crossfader y al soltar no conmutan el loop', () => {
+    const { target, calls } = recordingTarget();
+    const { onKeyDown, onKeyUp } = createShortcutHandlers(target);
+    onKeyDown(at('KeyU', 0));
+    onKeyDown(at('ArrowRight', 50));
+    onKeyDown(at('ArrowLeft', 80, { shiftKey: true }));
+    onKeyUp(at('KeyU', 100));
+    onKeyDown(at('ArrowRight', 200));
+    assert.deepEqual(calls, ['loopStep:B:1', 'loopStep:B:-1', 'xf:55']);
+  });
+
+  it('un toque de F / J alterna el display; F + Espacio sigue reproduciendo sin alternarlo', () => {
+    const { target, calls } = recordingTarget();
+    const { onKeyDown, onKeyUp } = createShortcutHandlers(target);
+    onKeyDown(at('KeyJ', 0));
+    onKeyUp(at('KeyJ', 100));
+    onKeyDown(at('KeyF', 200));
+    onKeyDown(at('Space', 250));
+    onKeyUp(at('Space', 260));
+    onKeyUp(at('KeyF', 300));
+    onKeyDown(at('KeyF', 400, { shiftKey: true }));
+    onKeyUp(at('KeyF', 450));
+    assert.deepEqual(calls, ['mode:B', 'play:A']);
+  });
+
+  it('MODO reasignado a otra tecla responde a su toque y la validación acepta F / J solo en su deck', () => {
+    const { target, calls } = recordingTarget();
+    const bindings: ShortcutBindings = { ...DEFAULT_SHORTCUT_BINDINGS, displayA: 'KeyZ' };
+    const { onKeyDown, onKeyUp } = createShortcutHandlers(target, () => bindings);
+    onKeyDown(at('KeyZ', 0));
+    onKeyUp(at('KeyZ', 100));
+    assert.deepEqual(calls, ['mode:A']);
+    assert.equal(validateBinding(DEFAULT_SHORTCUT_BINDINGS, 'displayA', 'KeyF'), null);
+    assert.equal(validateBinding(DEFAULT_SHORTCUT_BINDINGS, 'displayA', 'KeyJ'), 'reserved');
+    assert.equal(validateBinding(DEFAULT_SHORTCUT_BINDINGS, 'mute', 'KeyR'), 'duplicate');
   });
 });

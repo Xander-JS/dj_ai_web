@@ -41,6 +41,28 @@ interface DeckTransportInternal {
   slewEpoch: number;        // Contador monotónico para invalidación de automatizaciones obsoletas
   activeSlew: ActiveSlewInternal | null; // Perfil de micro-slew activo en ejecución
   keyLocked: boolean;       // KEY LOCK: la fuente pasa por el desplazador de tono
+  loop: { start: number; end: number } | null; // Auto Loop: región A→B (s de buffer)
+  backspin: BackspinInternal | null;            // Backspin en curso (fuente invertida)
+}
+
+interface BackspinInternal {
+  source: AudioBufferSourceNode;
+  from: number;       // Posición al empezar (s de buffer)
+  startedAt: number;  // audioContext.currentTime al empezar
+  onEnd: () => void;
+}
+
+/** Backspin: arranca a 3× hacia atrás y se frena con curva exponencial hasta parar en 0,8 s. */
+export const BACKSPIN_SECONDS = 0.8;
+export const BACKSPIN_START_RATE = 3;
+// exponentialRamp no admite 0: a 0,01× ya es inaudible
+const BACKSPIN_END_RATE = 0.01;
+const BACKSPIN_DECAY = Math.log(BACKSPIN_START_RATE / BACKSPIN_END_RATE) / BACKSPIN_SECONDS;
+
+/** Distancia recorrida (s) tras `elapsed` s de backspin: integral de 3·e^(−k·t). */
+export function backspinTravel(elapsed: number): number {
+  const t = Math.max(0, Math.min(BACKSPIN_SECONDS, elapsed));
+  return (BACKSPIN_START_RATE / BACKSPIN_DECAY) * (1 - Math.exp(-BACKSPIN_DECAY * t));
 }
 
 /** Registra el AudioWorklet de KEY LOCK en el contexto. */
@@ -114,6 +136,8 @@ export class AudioEngineService implements IAudioEngineService {
   private keyLockLoader: KeyLockModuleLoader = loadKeyLockModule;
   /** Registro del AudioWorklet en el contexto actual: true si quedó disponible. */
   private keyLockModule: Promise<boolean> | null = null;
+  /** Copia invertida de cada buffer, creada al primer backspin de la pista. */
+  private reversedBuffers: WeakMap<AudioBuffer, AudioBuffer> = new WeakMap();
 
   public constructor() {
     this.initTransport('A');
@@ -217,6 +241,7 @@ export class AudioEngineService implements IAudioEngineService {
   public loadBufferToDeck(deckId: DeckId, buffer: AudioBuffer): void {
     this.ensureInitialized();
     this.cancelDeckSlew(deckId);
+    this.stopBackspin(deckId);
     const graph = this.getDeckGraph(deckId);
     const transport = this.getDeckTransport(deckId);
 
@@ -234,6 +259,7 @@ export class AudioEngineService implements IAudioEngineService {
     transport.startOffset = 0;
     transport.startedAt = 0;
     transport.activeSlew = null;
+    transport.loop = null;
   }
 
   /**
@@ -241,6 +267,7 @@ export class AudioEngineService implements IAudioEngineService {
    */
   public unloadDeck(deckId: DeckId): void {
     this.cancelDeckSlew(deckId);
+    this.stopBackspin(deckId);
     const graph = this.deckGraphs.get(deckId);
     if (!graph) return;
 
@@ -254,6 +281,7 @@ export class AudioEngineService implements IAudioEngineService {
       transport.startedAt = 0;
       transport.bendAmount = 0;
       transport.activeSlew = null;
+      transport.loop = null;
     }
   }
 
@@ -264,6 +292,7 @@ export class AudioEngineService implements IAudioEngineService {
    */
   public playDeck(deckId: DeckId, startOffsetSeconds?: number, when?: number): void {
     this.ensureInitialized();
+    this.stopBackspin(deckId);
     const graph = this.getDeckGraph(deckId);
     const transport = this.getDeckTransport(deckId);
 
@@ -294,10 +323,17 @@ export class AudioEngineService implements IAudioEngineService {
     if (offset < 0 || offset >= duration) {
       offset = 0;
     }
+    if (transport.loop && offset >= transport.loop.end) offset = transport.loop.start;
 
     const ctx = this.audioContext!;
     const sourceNode = ctx.createBufferSource();
     sourceNode.buffer = graph.buffer;
+    if (transport.loop) {
+      // Bucle nativo de la fuente: repite A→B con precisión de muestra, sin clics ni huecos
+      sourceNode.loop = true;
+      sourceNode.loopStart = transport.loop.start;
+      sourceNode.loopEnd = transport.loop.end;
+    }
     const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
     sourceNode.playbackRate.setValueAtTime(effectiveRate, ctx.currentTime);
     if (graph.keyLockNode) {
@@ -362,13 +398,99 @@ export class AudioEngineService implements IAudioEngineService {
     const current = this.getDeckCurrentTime(deckId);
     if (!transport?.isPlaying || !this.audioContext) return current;
     const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
-    return current + Math.max(0, contextTime - Math.max(this.audioContext.currentTime, transport.startedAt)) * effectiveRate;
+    return this.wrapLoop(transport, current + Math.max(0, contextTime - Math.max(this.audioContext.currentTime, transport.startedAt)) * effectiveRate);
+  }
+
+  /**
+   * Auto Loop: activa o cambia la región A→B. Con el deck sonando se aplica al instante sobre la
+   * fuente; si el playhead ya pasó la nueva B, vuelve a A.
+   */
+  public setDeckLoop(deckId: DeckId, start: number, end: number): void {
+    this.ensureInitialized();
+    const graph = this.getDeckGraph(deckId);
+    const transport = this.getDeckTransport(deckId);
+    if (!graph.buffer || !(end > start)) return;
+    this.consolidatePosition(deckId);
+    transport.loop = { start, end: Math.min(end, graph.buffer.duration) };
+    const position = this.getDeckCurrentTime(deckId);
+    if (position >= transport.loop.end) {
+      if (transport.isPlaying) this.playDeck(deckId, transport.loop.start);
+      else transport.startOffset = transport.loop.start;
+      return;
+    }
+    if (graph.sourceNode) {
+      graph.sourceNode.loopStart = transport.loop.start;
+      graph.sourceNode.loopEnd = transport.loop.end;
+      graph.sourceNode.loop = true;
+    }
+  }
+
+  /** Quita el Auto Loop: la reproducción sigue desde la posición actual. */
+  public clearDeckLoop(deckId: DeckId): void {
+    const transport = this.deckTransports.get(deckId);
+    if (!transport?.loop) return;
+    this.consolidatePosition(deckId);
+    transport.loop = null;
+    const sourceNode = this.deckGraphs.get(deckId)?.sourceNode;
+    if (sourceNode) sourceNode.loop = false;
+  }
+
+  /**
+   * Backspin: reproduce la pista hacia atrás desde la posición actual, de 3× a parar en 0,8 s, por
+   * la cadena normal del canal. Al acabar (o al interrumpirse) el deck queda en pausa donde llegó
+   * y se llama a `onEnd`. Devuelve false si el deck no está sonando o ya hay un backspin.
+   */
+  public backspinDeck(deckId: DeckId, onEnd: () => void): boolean {
+    this.ensureInitialized();
+    const graph = this.getDeckGraph(deckId);
+    const transport = this.getDeckTransport(deckId);
+    const ctx = this.audioContext;
+    if (!ctx || !graph.buffer || !transport.isPlaying || transport.backspin) return false;
+
+    this.pauseDeck(deckId);
+    transport.loop = null;
+    const from = transport.startOffset;
+    const sourceNode = ctx.createBufferSource();
+    sourceNode.buffer = this.getReversedBuffer(graph.buffer);
+    const now = ctx.currentTime;
+    sourceNode.playbackRate.setValueAtTime(BACKSPIN_START_RATE, now);
+    sourceNode.playbackRate.exponentialRampToValueAtTime(BACKSPIN_END_RATE, now + BACKSPIN_SECONDS);
+    // Directo a la ganancia del canal: KEY LOCK no corrige el tono del vinilo frenando
+    sourceNode.connect(graph.gainNode);
+    sourceNode.onended = () => this.stopBackspin(deckId);
+    transport.backspin = { source: sourceNode, from, startedAt: now, onEnd };
+    // La posición `from` en la copia invertida es su espejo
+    sourceNode.start(now, Math.max(0, graph.buffer.duration - from));
+    sourceNode.stop(now + BACKSPIN_SECONDS);
+    return true;
+  }
+
+  /** Detiene el backspin en curso y deja el deck en pausa en la posición alcanzada. */
+  public stopBackspin(deckId: DeckId): void {
+    const transport = this.deckTransports.get(deckId);
+    const backspin = transport?.backspin;
+    if (!transport || !backspin) return;
+    transport.startOffset = this.getDeckCurrentTime(deckId);
+    transport.backspin = null;
+    backspin.source.onended = null;
+    try {
+      backspin.source.stop();
+      backspin.source.disconnect();
+    } catch {
+      // Ignorar si ya había terminado
+    }
+    backspin.onEnd();
+  }
+
+  public isDeckBackspinning(deckId: DeckId): boolean {
+    return Boolean(this.deckTransports.get(deckId)?.backspin);
   }
 
   /**
    * Pausa la reproducción reteniendo la posición temporal exacta en segundos.
    */
   public pauseDeck(deckId: DeckId): void {
+    this.stopBackspin(deckId);
     const graph = this.deckGraphs.get(deckId);
     const transport = this.deckTransports.get(deckId);
     if (!graph || !transport || !transport.isPlaying) {
@@ -388,6 +510,7 @@ export class AudioEngineService implements IAudioEngineService {
    * Detiene la reproducción y rebobina el cursor al inicio (0:00).
    */
   public stopDeck(deckId: DeckId): void {
+    this.stopBackspin(deckId);
     const graph = this.deckGraphs.get(deckId);
     const transport = this.deckTransports.get(deckId);
     if (!graph || !transport) {
@@ -409,6 +532,7 @@ export class AudioEngineService implements IAudioEngineService {
   public seekDeck(deckId: DeckId, positionSeconds: number): void {
     this.ensureInitialized();
     this.cancelDeckSlew(deckId);
+    this.stopBackspin(deckId);
     const graph = this.getDeckGraph(deckId);
     const transport = this.getDeckTransport(deckId);
 
@@ -744,6 +868,11 @@ export class AudioEngineService implements IAudioEngineService {
     const transport = this.deckTransports.get(deckId);
     if (!graph || !transport) return 0;
 
+    if (transport.backspin && this.audioContext) {
+      const { from, startedAt } = transport.backspin;
+      return Math.max(0, from - backspinTravel(this.audioContext.currentTime - startedAt));
+    }
+
     if (!transport.isPlaying || !this.audioContext) {
       return transport.startOffset;
     }
@@ -764,7 +893,7 @@ export class AudioEngineService implements IAudioEngineService {
         elapsedInSlew = integrateSlewTrajectory(plan, 0, Math.max(0, relTime));
       }
 
-      const current = transport.startOffset + elapsedInSlew;
+      const current = this.wrapLoop(transport, transport.startOffset + elapsedInSlew);
       if (graph.buffer) {
         return Math.min(current, graph.buffer.duration);
       }
@@ -773,7 +902,7 @@ export class AudioEngineService implements IAudioEngineService {
 
     const effectiveRate = this.calculateEffectiveRate(transport.playbackRate, transport.bendAmount);
     const elapsed = Math.max(0, this.audioContext.currentTime - transport.startedAt) * effectiveRate;
-    const current = transport.startOffset + elapsed;
+    const current = this.wrapLoop(transport, transport.startOffset + elapsed);
 
     if (graph.buffer) {
       return Math.min(current, graph.buffer.duration);
@@ -1265,6 +1394,8 @@ export class AudioEngineService implements IAudioEngineService {
       slewEpoch: 0,
       activeSlew: null,
       keyLocked: false,
+      loop: null,
+      backspin: null,
     });
   }
 
@@ -1545,6 +1676,35 @@ export class AudioEngineService implements IAudioEngineService {
       };
     }
     return fanOut as unknown as AudioParam;
+  }
+
+  /** Con el bucle activo, la posición lineal pasada B vuelve a A como hace la fuente nativa. */
+  private wrapLoop(transport: DeckTransportInternal, position: number): number {
+    const loop = transport.loop;
+    if (!loop || position < loop.end) return position;
+    return loop.start + ((position - loop.start) % (loop.end - loop.start));
+  }
+
+  /** Fija la posición actual (ya envuelta) como nuevo origen del transporte antes de cambiar el bucle. */
+  private consolidatePosition(deckId: DeckId): void {
+    this.cancelDeckSlew(deckId);
+    const transport = this.getDeckTransport(deckId);
+    if (!transport.isPlaying || !this.audioContext) return;
+    transport.startOffset = this.getDeckCurrentTime(deckId);
+    transport.startedAt = Math.max(this.audioContext.currentTime, transport.startedAt);
+  }
+
+  /** Copia invertida del buffer (cada canal al revés), en caché por buffer. */
+  private getReversedBuffer(buffer: AudioBuffer): AudioBuffer {
+    let reversed = this.reversedBuffers.get(buffer);
+    if (!reversed) {
+      reversed = this.audioContext!.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+      for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+        reversed.getChannelData(channel).set(buffer.getChannelData(channel).slice().reverse());
+      }
+      this.reversedBuffers.set(buffer, reversed);
+    }
+    return reversed;
   }
 
   private stopSourceNode(graph: DeckAudioGraph): void {

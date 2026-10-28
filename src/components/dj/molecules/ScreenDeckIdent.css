@@ -1,4 +1,4 @@
-/* Fila compacta: letra del deck, título en su color y artista atenuado; errores en rojo */
+/* Fila compacta: letra del deck, título en su color y artista atenuado */
 .screen-deck-ident {
   display: flex;
   align-items: baseline;
@@ -41,11 +41,3 @@
   color: var(--screen-ink-dim);
 }
 
-.screen-deck-ident__alert {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: var(--font-weight-semibold, 600);
-  color: var(--screen-alert);
-}

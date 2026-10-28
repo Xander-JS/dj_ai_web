@@ -1,6 +1,6 @@
 /* ==========================================================================
    Deck A / Deck B (secciones 2 y 3): placa de plástico negro mate dentro de la carcasa.
-   Rejilla de 3 columnas (transporte · principal · pitch) y 4 filas (Expulsar / Referencia y
+   Rejilla de 3 columnas (transporte · principal · pitch) y 4 filas (Expulsar / Referencia / Modo y
    avisos · disco · sync · Hot Cues). Deck B es el espejo horizontal: pitch a la izquierda, transporte a la derecha.
    Las medidas siguen al ancho del deck (container query), así escala con la consola.
    ========================================================================== */
@@ -33,7 +33,7 @@
   grid-template-columns: minmax(0, 20fr) minmax(0, 70fr) minmax(3.25rem, 10fr);
   grid-template-rows: auto auto auto auto;
   grid-template-areas:
-    "top top ."
+    "top top loop"
     "jog jog pitch"
     "transport sync pitch"
     "transport cues pitch";
@@ -45,7 +45,7 @@
 .dj-deck.deck-b .deck-panel {
   grid-template-columns: minmax(3.25rem, 10fr) minmax(0, 70fr) minmax(0, 20fr);
   grid-template-areas:
-    ". top top"
+    "loop top top"
     "pitch jog jog"
     "pitch sync transport"
     "pitch cues transport";
@@ -79,6 +79,18 @@
 
 .dj-deck.deck-b .deck-utility {
   flex-direction: row-reverse;
+}
+
+/* Auto Loop sobre la columna del fader de tempo, con su borde exterior alineado al de la columna;
+   es más ancho que ella y desborda solo hacia el disco */
+.deck-panel__loop {
+  grid-area: loop;
+  justify-self: end;
+  align-self: center;
+}
+
+.dj-deck.deck-b .deck-panel__loop {
+  justify-self: start;
 }
 
 .deck-panel__notices {
@@ -119,42 +131,7 @@
   padding-top: calc(var(--jog-size) * 0.55);
 }
 
-/* Error de reproducción: el mensaje está en la pantalla; aquí solo un filo rojo */
+/* Error de reproducción: el mensaje está en el display LED; aquí además un filo rojo */
 .dj-deck.deck-has-error {
   border-color: color-mix(in srgb, var(--console-led-red) 45%, transparent);
-}
-
-/* ==========================================================================
-   Guía de BAR SYNC bajo el deck
-   ========================================================================== */
-/* Hueco fijo de tres líneas (el aviso más largo a ancho de diseño), haya aviso o no */
-.deck-sync-hint {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  flex: none;
-  height: calc(3 * 11px * 1.45 + 12px);
-  overflow: hidden;
-  margin: 0;
-  padding: 6px 10px;
-  border-left: 2px solid var(--console-led-amber);
-  border-radius: 3px;
-  background: hsl(225 8% 6%);
-  color: var(--console-silkscreen-dim);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.deck-sync-hint strong {
-  color: var(--console-silkscreen);
-  letter-spacing: 0.06em;
-}
-
-.deck-sync-hint.is-empty {
-  visibility: hidden;
-}
-
-.deck-sync-hint-rejected {
-  border-left-color: var(--console-led-red);
-  color: var(--console-silkscreen);
 }

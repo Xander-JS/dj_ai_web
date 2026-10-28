@@ -3,6 +3,7 @@ import { Deck } from './Deck';
 import { MixerConsole } from './MixerConsole';
 import { DigitalScreen } from './DigitalScreen';
 import { DownbeatPanel } from './DownbeatPanel';
+import { DeckLedPanel } from './DeckLedPanel';
 import { computeConsoleScale, type ConsoleScale } from '../../../services/console/consoleScale';
 import '../consoleTheme.css';
 import './DJConsole.css';
@@ -46,7 +47,7 @@ function useConsoleScale(
 }
 
 /**
- * Carcasa única de la consola: arriba, DOWNBEAT & COMPÁS A, la pantalla digital (sobresale del
+ * Carcasa única de la consola: arriba, DOWNBEAT & COMPÁS A (con el display LED de su deck encima), la pantalla digital (sobresale del
  * borde superior) y DOWNBEAT & COMPÁS B; debajo, Deck A, el
  * mixer y Deck B. Todo se percibe como una sola pieza de hardware.
  */
@@ -70,12 +71,14 @@ export const DJConsole: React.FC = () => {
         <div className="dj-console__housing">
           <div className="dj-console__top">
             <div className="dj-console__downbeat dj-console__downbeat--a downbeat-panel-host">
+              <DeckLedPanel deckName="A" />
               <DownbeatPanel deckName="A" />
             </div>
             <div className="dj-console__screen">
               <DigitalScreen />
             </div>
             <div className="dj-console__downbeat dj-console__downbeat--b downbeat-panel-host">
+              <DeckLedPanel deckName="B" />
               <DownbeatPanel deckName="B" />
             </div>
           </div>

@@ -147,7 +147,7 @@
   }
 
   .downbeat-panel__zone--meter {
-    padding: 12px 0 0;
+    padding: 12px 0 0 var(--downbeat-zone-gap);
     border-inline-start: 0;
     border-top: 1px solid var(--console-divider);
   }

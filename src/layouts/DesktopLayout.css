@@ -33,6 +33,14 @@
   --mixer-nav-cue-duration: 400ms;
   --mixer-sidebar-delay: 250ms;
   --mixer-sidebar-duration: 500ms;
+  /* Mostrar / ocultar con la pestaña o Esc: la barra y la pestaña comparten tiempo y curva */
+  --mixer-peek-open-duration: var(--sd-duration-base);
+  --mixer-peek-open-ease: var(--sd-ease-out);
+  --mixer-peek-close-duration: 200ms;
+  --mixer-peek-close-ease: cubic-bezier(0.4, 0, 1, 1);
+  --mixer-peek-duration: var(--mixer-peek-close-duration);
+  --mixer-peek-ease: var(--mixer-peek-close-ease);
+  --mixer-peek-tab-gap: 12px;
 
   position: relative;
   grid-template-columns: 0 minmax(0, 1fr);
@@ -54,12 +62,25 @@
     visibility 0s linear calc(var(--mixer-sidebar-delay) + var(--mixer-sidebar-duration));
 }
 
+/* Cerrada por el usuario: se retira enseguida, sin la espera de la entrada */
+.desktop-layout--sidebar-closed .layout-sidebar {
+  transition:
+    background-color var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--mixer-peek-duration) var(--mixer-peek-ease),
+    visibility 0s linear var(--mixer-peek-duration);
+}
+
+.desktop-layout--sidebar-open {
+  --mixer-peek-duration: var(--mixer-peek-open-duration);
+  --mixer-peek-ease: var(--mixer-peek-open-ease);
+}
+
 .desktop-layout--sidebar-open .layout-sidebar {
   transform: none;
   visibility: visible;
   transition:
     background-color var(--sd-duration-base) var(--sd-ease-out),
-    transform var(--sd-duration-base) var(--sd-ease-out),
+    transform var(--mixer-peek-duration) var(--mixer-peek-ease),
     visibility 0s linear 0s;
 }
 
@@ -76,26 +97,26 @@
   }
 }
 
-/* La pestaña queda siempre por encima de la barra. Se desplaza con `left` (no con transform:
-   el :active de IconButton lo reemplaza y la devolvería bajo la barra a mitad del clic). */
-.layout-sidebar-tab {
+/* La pestaña queda siempre por encima de la barra, a 12 px de su filo (cerrada, del borde). Se
+   desplaza con `translate`, independiente del `transform` que pone el :active de IconButton. El
+   selector doble evita que la transición de IconButton, que carga después, pise esta. */
+.desktop-layout--mixer .layout-sidebar-tab {
   position: absolute;
   top: calc(var(--layout-header-height) + var(--sd-gap-2));
   left: 0;
   z-index: 31;
-  border-radius: 0 var(--sd-radius-pill) var(--sd-radius-pill) 0;
+  translate: var(--mixer-peek-tab-gap) 0;
+  border-radius: var(--sd-radius-pill);
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
   transition:
     background-color var(--sd-duration-fast) var(--sd-ease-out),
     color var(--sd-duration-fast) var(--sd-ease-out),
-    left var(--sd-duration-base) var(--sd-ease-out),
-    transform var(--sd-duration-base) var(--sd-ease-out);
+    transform var(--sd-duration-base) var(--sd-ease-out),
+    translate var(--mixer-peek-duration) var(--mixer-peek-ease);
 }
 
-/* Abierta: separada 12 px del filo de la barra, ya como pastilla completa */
 .desktop-layout--sidebar-open .layout-sidebar-tab {
-  left: calc(var(--layout-sidebar-width) + 12px);
-  border-radius: var(--sd-radius-pill);
+  translate: calc(var(--layout-sidebar-width) + var(--mixer-peek-tab-gap)) 0;
 }
 
 /* Barra superior y lateral: papel del Design System v2, sin filetes; separan por espacio */
@@ -346,7 +367,7 @@
   .desktop-layout,
   .layout-player,
   .desktop-layout--mixer .layout-sidebar,
-  .layout-sidebar-tab {
+  .desktop-layout--mixer .layout-sidebar-tab {
     transition-duration: 0s;
     transition-delay: 0s;
   }

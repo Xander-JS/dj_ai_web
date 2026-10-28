@@ -17,6 +17,9 @@ import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '
 import { audioEngine } from '../audio/index.ts';
 import { PHASE_LOCK_LEAD_SECONDS } from '../audio/AudioEngineService.ts';
 import { indexedDBStorage } from '../services/storage/IndexedDBStorage.ts';
+import { ensureWaveformDetail } from '../services/console/waveformDetail.ts';
+import { getBarGrid } from '../services/console/zoomedWaveform.ts';
+import { DEFAULT_LOOP_BEATS, loopRegion, stepLoopBeats } from '../services/console/deckLoop.ts';
 import { analysisSyncManager } from '../services/analysis/index.ts';
 import {
   sessionRecorder,
@@ -111,7 +114,20 @@ export interface DeckStoreState {
   errorCode: DeckErrorCode | null;
   errorMessage: string | null;
   syncFeedback: SyncFeedback | null;
+  loop: DeckLoopState;
+  /** Backspin en curso: el deck ya está en pausa y el motor suena hacia atrás hasta parar. */
+  isBackspinning: boolean;
 }
+
+/** Auto Loop: longitud elegida en pulsos y la región A→B mientras está activo. */
+export interface DeckLoopState {
+  beats: number;
+  region: { start: number; end: number } | null;
+  /** Se pulsó el loop sin BPM analizado: aviso en el display LED. */
+  warning: boolean;
+}
+
+const IDLE_BAR_SYNC: BarSyncState = { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null };
 
 
 export interface DJStoreState {
@@ -124,7 +140,7 @@ export interface DJStoreState {
 }
 
 /** Margen para que un Seek al 100 % no reinicie la pista desde 0:00. */
-const SEEK_END_MARGIN_SECONDS = 0.05;
+export const SEEK_END_MARGIN_SECONDS = 0.05;
 /** Frecuencia de refresco de la posición en la interfaz. */
 const TIME_UPDATE_INTERVAL_MS = 100;
 const DEFAULT_PITCH_RANGE = 0.08;
@@ -182,6 +198,8 @@ const INITIAL_DECK_A: DeckStoreState = {
   errorCode: null,
   errorMessage: null,
   syncFeedback: null,
+  loop: { beats: DEFAULT_LOOP_BEATS, region: null, warning: false },
+  isBackspinning: false,
 };
 
 const INITIAL_DECK_B: DeckStoreState = {
@@ -217,6 +235,8 @@ const INITIAL_DECK_B: DeckStoreState = {
   errorCode: null,
   errorMessage: null,
   syncFeedback: null,
+  loop: { beats: DEFAULT_LOOP_BEATS, region: null, warning: false },
+  isBackspinning: false,
 };
 
 
@@ -265,7 +285,7 @@ const INITIAL_STATE: DJStoreState = {
 
 
 /** BPM analizado real, o null si la pista no tiene BPM analizado/almacenado válido. */
-function getAnalyzedBpm(track: Track | null): number | null {
+export function getAnalyzedBpm(track: Track | null): number | null {
   if (!track || !track.analysis) return null;
   // Nunca transformar estados fallidos o no soportados en resultados musicales válidos
   if (track.analysis.status === 'failed' || track.analysis.status === 'unsupported') {
@@ -777,6 +797,7 @@ class DJStore {
 
       // 4. Replace the audio and synchronize the current pitch and volume.
       audioEngine.loadBufferToDeck(deckId, audioBuffer);
+      void ensureWaveformDetail(effectiveTrack.id, effectiveTrack.fileMeta?.contentHash, audioBuffer);
       audioEngine.setDeckPitchBend(deckId, 0);
       audioEngine.setDeckPlaybackRate(deckId, this.getDeckState(deckId).playbackRate);
       audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : this.state.masterVolume);
@@ -798,6 +819,8 @@ class DJStore {
         errorCode: null,
         errorMessage: null,
         syncFeedback: null,
+        loop: { ...this.getDeckState(deckId).loop, region: null, warning: false },
+        isBackspinning: false,
       });
       this.recordSessionEvent({
         type: 'deck.track-loaded',
@@ -848,6 +871,8 @@ class DJStore {
    * Inicia la reproducción real en el deck especificado.
    */
   public async playDeck(deckId: DeckId): Promise<void> {
+    // PLAY durante un backspin lo corta y arranca desde donde llegó
+    audioEngine.stopBackspin(deckId);
     const deckState = this.getDeckState(deckId);
     if (!deckState.track || deckState.duration === 0 || deckState.playbackState === 'loading' || deckState.playbackState === 'error') {
       return;
@@ -1015,6 +1040,7 @@ class DJStore {
    */
   public seekDeck(deckId: DeckId, positionSeconds: number): void {
     this.isCupPlaying[deckId] = false;
+    this.cancelLoop(deckId);
     this.cancelPhaseAlignment(deckId);
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     this.cancelPhaseAlignment(otherDeckId);
@@ -1114,6 +1140,7 @@ class DJStore {
 
     const targetPos = deck.mainCue ?? 0;
     this.isCupPlaying[deckId] = false;
+    this.cancelLoop(deckId);
 
     const barSyncReset = (deck.barSync?.status === 'armed' || deck.barSync?.status === 'already_aligned')
       ? { status: 'idle' as const, preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null }
@@ -1159,6 +1186,9 @@ class DJStore {
    * - En pausa: fija el CUE en currentTime (si se desplazó) y activa reproducción CUP mientras se mantenga presionado.
    */
   public async handleCueDown(deckId: DeckId): Promise<void> {
+    // CUE durante un backspin lo corta y actúa desde donde llegó
+    audioEngine.stopBackspin(deckId);
+    this.cancelLoop(deckId);
     const deck = this.getDeckState(deckId);
     if (!deck.track || deck.duration <= 0 || deck.playbackState === 'loading' || deck.playbackState === 'error') {
       return;
@@ -1992,6 +2022,7 @@ class DJStore {
    * 9. Invalida operaciones obsoletas si la selección o el hash del archivo cambian concurrentemente.
    */
   public prepareBarSync(deckId: DeckId, toleranceSec?: number): BarSyncPlanResult {
+    this.cancelLoop(deckId);
     const slaveDeckId: DeckId = deckId;
     const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
 
@@ -2600,6 +2631,96 @@ class DJStore {
     return true;
   }
 
+  // =========================================================================
+  // Auto Loop y Backspin
+  // =========================================================================
+
+  /** Botón central del Auto Loop: activa A→B desde el playhead (o `position`) o lo quita. */
+  public toggleLoop(deckId: DeckId, position?: number): void {
+    const deck = this.getDeckState(deckId);
+    if (!deck.track || deck.duration <= 0 || deck.playbackState === 'loading' || deck.playbackState === 'error') return;
+    if (deck.loop.region) {
+      this.cancelLoop(deckId);
+      return;
+    }
+    const bpm = getAnalyzedBpm(deck.track);
+    if (bpm === null) {
+      this.setDeck(deckId, { loop: { ...deck.loop, warning: true } });
+      return;
+    }
+    const grid = getBarGrid(deck.track, bpm);
+    this.applyLoop(deckId, deck.loop.beats, loopRegion(position ?? audioEngine.getDeckCurrentTime(deckId), deck.loop.beats, bpm, grid?.origin ?? null));
+  }
+
+  /** − / +: divide o dobla la longitud; con el bucle activo mueve B y A queda fija. */
+  public stepLoop(deckId: DeckId, direction: 1 | -1): void {
+    const deck = this.getDeckState(deckId);
+    const beats = stepLoopBeats(deck.loop.beats, direction);
+    if (beats === deck.loop.beats) return;
+    const bpm = getAnalyzedBpm(deck.track);
+    if (!deck.loop.region || bpm === null) {
+      this.setDeck(deckId, { loop: { ...deck.loop, beats } });
+      return;
+    }
+    this.applyLoop(deckId, beats, loopRegion(deck.loop.region.start, beats, bpm, null));
+  }
+
+  private applyLoop(deckId: DeckId, beats: number, region: { start: number; end: number }): void {
+    const deck = this.getDeckState(deckId);
+    const end = Math.min(region.end, deck.duration);
+    if (!(end > region.start)) return;
+    // El micro-slew integra desde el origen del transporte, que el bucle reescribe (como en seekDeck)
+    this.cancelPhaseAlignment(deckId);
+    this.cancelPhaseAlignment(deckId === 'A' ? 'B' : 'A');
+    audioEngine.setDeckLoop(deckId, region.start, end);
+    this.setDeck(deckId, {
+      loop: { beats, region: { start: region.start, end }, warning: false },
+      currentTime: audioEngine.getDeckCurrentTime(deckId),
+    });
+    this.recordSessionEvent({ type: 'deck.loop', deckId, beats, startSeconds: region.start, endSeconds: end });
+  }
+
+  /** Quita el bucle activo (seek, Hot Cue, CUE, carga, BAR SYNC, backspin o el propio botón). */
+  private cancelLoop(deckId: DeckId): void {
+    const deck = this.getDeckState(deckId);
+    if (!deck.loop.region) return;
+    audioEngine.clearDeckLoop(deckId);
+    this.setDeck(deckId, { loop: { ...deck.loop, region: null } });
+    this.recordSessionEvent({ type: 'deck.loop', deckId, beats: deck.loop.beats, startSeconds: null, endSeconds: null });
+  }
+
+  /**
+   * Centro del disco: backspin desde la posición actual. Cancela ALIGN y el bucle, invalida un
+   * BAR SYNC preparado y no toca los roles de SYNC. Al acabar, el deck queda en pausa donde llegó.
+   */
+  public backspin(deckId: DeckId): void {
+    const deck = this.getDeckState(deckId);
+    if (deck.playbackState !== 'playing' || deck.isBackspinning) return;
+    this.isCupPlaying[deckId] = false;
+    this.cuePreviewHeld[deckId] = false;
+    this.cancelPhaseAlignment(deckId);
+    this.cancelPhaseAlignment(deckId === 'A' ? 'B' : 'A');
+    this.cancelLoop(deckId);
+    if (!audioEngine.backspinDeck(deckId, () => this.finishBackspin(deckId))) return;
+
+    for (const id of ['A', 'B'] as const) {
+      const status = this.getDeckState(id).barSync?.status;
+      if (status === 'armed' || status === 'already_aligned') this.setDeck(id, { barSync: IDLE_BAR_SYNC });
+    }
+    const trackPositionSeconds = audioEngine.getDeckCurrentTime(deckId);
+    this.setDeck(deckId, { playbackState: 'paused', isBackspinning: true, isCupPlaying: false, currentTime: trackPositionSeconds });
+    // shortcut: la sesión grabada pausa y salta a la posición final; el audio invertido no se reproduce al exportar
+    this.recordSessionEvent({ type: 'transport.pause', deckId, trackPositionSeconds });
+    this.ensureTimeLoop();
+  }
+
+  private finishBackspin(deckId: DeckId): void {
+    const trackPositionSeconds = audioEngine.getDeckCurrentTime(deckId);
+    this.setDeck(deckId, { isBackspinning: false, currentTime: trackPositionSeconds });
+    this.recordSessionEvent({ type: 'transport.seek', deckId, trackPositionSeconds, playbackState: 'paused' });
+    this.checkStopTimeLoop();
+  }
+
   /**
    * Descarga la pista del deck indicado y libera sus recursos en memoria.
    */
@@ -2625,6 +2746,7 @@ class DJStore {
       isMaster: false,
       phaseAlignment: { status: 'idle', progressPercent: 0 },
       barSync: { status: 'idle', preparedPosition: null, previousPosition: null, displacementSec: null, targetDownbeatSec: null, beatsPerBar: null, reason: null },
+      loop: { ...initialDeck.loop, beats: currentDeck.loop.beats },
     };
     const currentOtherDeck = this.getDeckState(otherDeckId);
     const otherBarSync = currentOtherDeck.barSync?.status === 'armed' || currentOtherDeck.barSync?.status === 'already_aligned'
@@ -2984,8 +3106,8 @@ class DJStore {
     this.lastRafUpdate = 0;
 
     const loop = (timestamp: number) => {
-      const aPlaying = this.state.deckA.playbackState === 'playing';
-      const bPlaying = this.state.deckB.playbackState === 'playing';
+      const aPlaying = this.state.deckA.playbackState === 'playing' || this.state.deckA.isBackspinning;
+      const bPlaying = this.state.deckB.playbackState === 'playing' || this.state.deckB.isBackspinning;
 
       if (!aPlaying && !bPlaying) {
         this.rafId = null;
@@ -3031,8 +3153,8 @@ class DJStore {
   }
 
   private checkStopTimeLoop(): void {
-    const aPlaying = this.state.deckA.playbackState === 'playing';
-    const bPlaying = this.state.deckB.playbackState === 'playing';
+    const aPlaying = this.state.deckA.playbackState === 'playing' || this.state.deckA.isBackspinning;
+    const bPlaying = this.state.deckB.playbackState === 'playing' || this.state.deckB.isBackspinning;
     if (!aPlaying && !bPlaying) {
       this.stopTimeLoop();
     }
@@ -3143,6 +3265,11 @@ export function useDJStore(): {
   prepareBarSync: (deckId: DeckId, toleranceSec?: number) => BarSyncPlanResult;
   cancelBarSync: (deckId: DeckId) => void;
 
+  // Auto Loop y Backspin
+  toggleLoop: (deckId: DeckId, position?: number) => void;
+  stepLoop: (deckId: DeckId, direction: 1 | -1) => void;
+  backspin: (deckId: DeckId) => void;
+
   // Confirmación y limpieza de downbeat (BAR SYNC V1)
   confirmDownbeatA: (positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
   confirmDownbeatB: (positionOrParams: number | ConfirmDownbeatParams, metric?: number) => Promise<boolean>;
@@ -3215,6 +3342,9 @@ export function useDJStore(): {
     prepareBarSyncB: djStore.prepareBarSyncDeckB.bind(djStore),
     prepareBarSync: djStore.prepareBarSync.bind(djStore),
     cancelBarSync: djStore.cancelBarSync.bind(djStore),
+    toggleLoop: djStore.toggleLoop.bind(djStore),
+    stepLoop: djStore.stepLoop.bind(djStore),
+    backspin: djStore.backspin.bind(djStore),
 
     // Confirmación y limpieza de downbeat (BAR SYNC V1)
     confirmDownbeatA: djStore.confirmDownbeatA.bind(djStore),

@@ -104,14 +104,6 @@
   box-shadow: 0 0 3px hsl(0 0% 100% / 0.35);
 }
 
-.console-selector__caption {
-  color: var(--console-silkscreen-dim);
-  font-size: 9px;
-  font-weight: var(--font-weight-bold, 700);
-  letter-spacing: 0.14em;
-  line-height: 1;
-}
-
 .console-selector.is-disabled {
   opacity: 0.45;
 }

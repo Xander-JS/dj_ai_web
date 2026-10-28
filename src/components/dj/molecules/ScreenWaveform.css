@@ -1,4 +1,4 @@
-/* Vista general de la pista: ocupa todo el ancho y la mayor parte de la altura de la pantalla */
+/* Forma de onda ampliada: ocupa todo el ancho y la mayor parte de la altura de la pantalla */
 .screen-waveform {
   position: relative;
   min-height: 0;
@@ -11,77 +11,25 @@
 }
 
 .screen-waveform.is-interactive {
-  cursor: pointer;
+  cursor: grab;
+  /* El arrastre horizontal busca en la pista: el táctil no debe desplazar la página */
+  touch-action: none;
 }
 
-.screen-waveform__progress {
+.screen-waveform.is-interactive:active {
+  cursor: grabbing;
+}
+
+.screen-waveform:focus-visible {
+  outline: 2px solid var(--console-focus);
+  outline-offset: -2px;
+}
+
+/* Absoluto: el lienzo nunca cambia el tamaño de su celda */
+.screen-waveform__canvas {
   position: absolute;
-  inset: 0 auto 0 0;
-  background-color: color-mix(in srgb, var(--console-tone) 18%, transparent);
-  border-right: 1px solid color-mix(in srgb, var(--console-tone) 70%, transparent);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  transition: width 100ms linear;
-}
-
-.screen-waveform__playhead {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  margin-left: -1px;
-  background-color: var(--screen-playhead);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--screen-playhead) 70%, transparent);
-  pointer-events: none;
-  transition: left 100ms linear;
-}
-
-.screen-waveform__hotcue,
-.screen-waveform__cue {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  pointer-events: none;
-}
-
-.screen-waveform__hotcue {
-  width: 1px;
-  background-color: var(--marker-color);
-}
-
-.screen-waveform__cue {
-  width: 2px;
-  background-color: var(--console-led-amber);
-}
-
-.screen-waveform__hotcue-tag,
-.screen-waveform__cue-tag {
-  position: absolute;
-  left: 0;
-  display: grid;
-  place-items: center;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  font-family: var(--font-family-mono);
-  font-size: 8px;
-  font-weight: var(--font-weight-bold, 700);
-  line-height: 1;
-}
-
-.screen-waveform__hotcue-tag {
-  top: 1px;
-  background-color: var(--marker-color);
-  color: #fff;
-}
-
-.screen-waveform__cue-tag {
-  bottom: 1px;
-  background-color: var(--console-led-amber);
-  color: #111;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .screen-waveform__progress,
-  .screen-waveform__playhead { transition: none; }
 }

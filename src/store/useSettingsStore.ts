@@ -38,6 +38,8 @@ export type CueMode = 'cdj' | 'standard';
 export type VisualizerIntensity = 'subtle' | 'balanced' | 'vivid';
 /** Diseño del disco giratorio de los decks (public/assets/mixer/disk/rotating-disc-*.png). */
 export type JogDisc = 'a' | 'b' | 'c';
+/** Segundos que muestra la forma de onda ampliada de la pantalla alrededor del playhead. */
+export type WaveformZoom = 4 | 8 | 16;
 
 export interface AppSettings {
   theme: ThemeMode;
@@ -51,6 +53,7 @@ export interface AppSettings {
   cueMode: CueMode;
   /** Tolerancia máxima de SYNC como fracción (0.08 = ±8 %), entre SYNC_RANGE_MIN y SYNC_RANGE_MAX. */
   syncRange: number;
+  waveformZoom: WaveformZoom;
   shortcutsEnabled: boolean;
   /** Teclas selectoras de GAIN / HI / MID / LOW / FILTER por deck y comandos de consola reasignables. */
   shortcutBindings: ShortcutBindings;
@@ -93,6 +96,7 @@ export function stepCrossfaderCurve(curve: CrossfaderCurve, direction: -1 | 1): 
 export const PITCH_RANGES: readonly PitchRange[] = [0.06, 0.08, 0.16];
 export const BUFFER_SIZES: readonly AudioBufferSize[] = [256, 512, 1024];
 export const AUTO_TRANSITION_BEATS: readonly AutoTransitionBeats[] = [8, 16, 32];
+export const WAVEFORM_ZOOMS: readonly WaveformZoom[] = [4, 8, 16];
 export const SYNC_RANGE_MIN = 0.04;
 export const SYNC_RANGE_MAX = 0.2;
 export const SYNC_RANGE_STEP = 0.01;
@@ -108,6 +112,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoTransitionBeats: 16,
   cueMode: 'cdj',
   syncRange: 0.08,
+  waveformZoom: 8,
   shortcutsEnabled: true,
   shortcutBindings: DEFAULT_SHORTCUT_BINDINGS,
   navigationBindings: DEFAULT_NAVIGATION_BINDINGS,
@@ -169,6 +174,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     autoTransitionBeats: pick(source.autoTransitionBeats, AUTO_TRANSITION_BEATS, d.autoTransitionBeats),
     cueMode: pick(source.cueMode, ['cdj', 'standard'] as const, d.cueMode),
     syncRange: sanitizeSyncRange(source.syncRange),
+    waveformZoom: pick(source.waveformZoom, WAVEFORM_ZOOMS, d.waveformZoom),
     shortcutsEnabled: typeof source.shortcutsEnabled === 'boolean' ? source.shortcutsEnabled : d.shortcutsEnabled,
     shortcutBindings: sanitizeShortcutBindings(source.shortcutBindings),
     navigationBindings: sanitizeNavigationBindings(source.navigationBindings),

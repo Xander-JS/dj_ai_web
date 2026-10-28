@@ -15,6 +15,7 @@ import { createDJShortcutTarget } from '../keyboard/djShortcutTarget';
 import { transitionPlayer } from '../../audio/transitionPlayer';
 import { navigateToSection } from '../navigation/consoleNavigator';
 import { toggleSessionCaptureWithFeedback } from '../session/sessionCaptureFeedback';
+import { zoomedWaveformLoop } from '../console/zoomedWaveform';
 
 let uninstallShortcuts: (() => void) | null = null;
 
@@ -47,6 +48,8 @@ function apply(next: AppSettings, previous: AppSettings | null): void {
   djStore.setCueMode(next.cueMode);
   djStore.setSyncRateLimit(next.syncRange);
   transitionPlayer.configure(next.autoTransitionBeats);
+  // Tras aplicar la apariencia: la pantalla relee también sus colores
+  zoomedWaveformLoop.configure(next.waveformZoom);
   // La curva guardada es la predeterminada de cada sesión; la consola puede cambiarla en vivo
   if (!previous || previous.crossfaderCurve !== next.crossfaderCurve) {
     djStore.setCrossfaderCurve(next.crossfaderCurve);

@@ -42,6 +42,8 @@
   --console-led-green: hsl(142 72% 48%);
   --console-led-amber: hsl(38 95% 54%);
   --console-led-neutral: hsl(220 8% 70%);
+  /* Auto Loop (ambos decks): azul claro, distinto de los tonos de A y B */
+  --console-loop: hsl(196 100% 72%);
 
   /* Mini displays LCD (módulo DOWNBEAT & COMPÁS) */
   --console-lcd-bg: hsl(205 60% 6%);

@@ -8,6 +8,8 @@
 import { djStore } from '../../store/useDJStore.ts';
 import { stepCrossfaderCurve } from '../../store/useSettingsStore.ts';
 import { digitalScreenStore } from '../console/digitalScreenStore.ts';
+import { audioEngine } from '../../audio/index.ts';
+import { toggleDeckDisplayMode } from '../../hooks/useDeckDisplayMode.ts';
 import type { DeckId } from '../../types/deck.ts';
 import type { MixParam, ShortcutTarget } from './keyboardShortcuts.ts';
 
@@ -48,6 +50,10 @@ export function createDJShortcutTarget(
     setMasterVolume: (volume) => djStore.setMasterVolume(volume),
     toggleMasterMute: () => djStore.toggleMasterMute(),
     pitchBend: (deckId, direction) => djStore.pitchBend(deckId, direction),
+    getDeckPosition: (deckId) => audioEngine.getDeckCurrentTime(deckId),
+    toggleLoop: (deckId, position) => djStore.toggleLoop(deckId, position),
+    stepLoop: (deckId, direction) => djStore.stepLoop(deckId, direction),
+    toggleDisplayMode: toggleDeckDisplayMode,
     // Igual que los botones CP / LIN / CUT: cambia la curva en vivo, no la predeterminada guardada
     cycleCrossfaderCurve: (direction) => {
       djStore.setCrossfaderCurve(stepCrossfaderCurve(djStore.getSnapshot().mixer.crossfaderCurve, direction));

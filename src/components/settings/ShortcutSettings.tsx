@@ -171,6 +171,10 @@ const CONSOLE_COMMAND_KEYS: Record<ConsoleShortcutId, { before?: string }> = {
   record: {},
   libraryA: {},
   libraryB: {},
+  loopA: {},
+  loopB: {},
+  displayA: {},
+  displayB: {},
 };
 
 /**
@@ -424,7 +428,11 @@ export const ShortcutSettings: React.FC = () => {
                 className={clsx('sd-shortcut-deck', group === 'mix' && 'sd-shortcut-deck--mixer')}
                 aria-label={group === 'mix' ? t('settings.shortcuts_mixer_group') : t('settings.shortcuts_deck', { deck: group.toUpperCase() })}
               >
-                <p className="sd-shortcut-deck__name" aria-hidden="true">{group === 'mix' ? t('settings.shortcuts_mixer_short') : group.toUpperCase()}</p>
+                <p
+                  className="sd-shortcut-deck__name"
+                  aria-hidden="true"
+                  title={group === 'mix' ? t('settings.shortcuts_mixer_group') : undefined}
+                >{group === 'mix' ? t('settings.shortcuts_mixer_short') : group.toUpperCase()}</p>
                 <ul className="sd-shortcut-list">
                   {shortcuts.map((shortcut) => (
                     <li key={shortcut.labelKey} className="sd-shortcut">

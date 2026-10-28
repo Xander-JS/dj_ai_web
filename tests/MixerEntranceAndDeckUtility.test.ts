@@ -78,10 +78,12 @@ describe('Expulsar y Referencia en cada deck', () => {
     assert.match(buttonCss, /prefers-reduced-motion: reduce/);
   });
 
-  it('Deck A los pone en su esquina izquierda y Deck B en espejo a la derecha', () => {
+  it('Deck A los pone en su esquina izquierda (Auto Loop sobre el fader de tempo) y Deck B en espejo', () => {
     const css = read('src/components/dj/organisms/Deck.css');
     assert.match(css, /grid-template-areas: "utility notices \.";/);
     assert.match(css, /\.dj-deck\.deck-b \.deck-panel__top \{\s*grid-template-areas: "\. notices utility";/);
+    assert.match(css, /"top top loop"\s*"jog jog pitch"/);
+    assert.match(css, /"loop top top"\s*"pitch jog jog"/);
   });
 
   it('los avisos están traducidos con la letra del deck', () => {

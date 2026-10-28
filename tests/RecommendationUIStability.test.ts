@@ -132,3 +132,25 @@ describe('Recommendation UI stability and localization', () => {
     assert.equal(error, 'current');
   });
 });
+
+describe('Recomendaciones de mezcla — un solo hueco y resultado persistente', () => {
+  const card = fs.readFileSync('src/components/dashboard/SmartRecommendationCard.tsx', 'utf8');
+
+  it('la carga solo se muestra hasta que llegan las recomendaciones locales, en el mismo hueco', () => {
+    assert.match(card, /const isCalculating = isLoading && recommendations\.length === 0;/);
+    assert.match(card, /\{isCalculating && \(\s*<EmptyState\s+status="loading"\s+className="smart-rec-slot"/);
+    assert.match(card, /className="smart-rec-results smart-rec-slot"/);
+    assert.match(fs.readFileSync('src/components/dashboard/SmartRecommendationCard.css', 'utf8'), /\.smart-rec-slot \{\s+min-height: 20rem;/);
+  });
+
+  it('el resultado vive en recommendationStore y sobrevive a desmontar la tarjeta', async () => {
+    assert.match(card, /const recommendationResult = useRecommendationStore\(\);/);
+    assert.doesNotMatch(card, /useState<\{\s*referenceTrack: Track;\s*availableTracks/);
+    const { RecommendationStore } = await import('../src/store/useRecommendationStore.ts');
+    const store = new RecommendationStore();
+    store.set({ referenceTrackId: 'ref', recommendations: [], insufficientCandidateCount: 0, isMock: false, model: null, explanationsUnavailable: false });
+    store.update({ explanationsUnavailable: true });
+    assert.equal(store.getSnapshot()?.referenceTrackId, 'ref');
+    assert.equal(store.getSnapshot()?.explanationsUnavailable, true);
+  });
+});

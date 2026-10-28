@@ -274,6 +274,62 @@ html[data-scroll-mode='document'] {
 }
 
 /* ==========================================================================
+   Cambio de tema e idioma (viewTransition.ts). Tema: fundido de toda la página, así
+   fondo, texto y superficies cambian a la vez. Idioma: la barra se funde y el contenido
+   entra con una subida corta. Con movimiento reducido solo queda el fundido.
+   ========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--sd-ease-out);
+}
+
+:root[data-view-transition='language'] .sd-landing__main {
+  view-transition-name: sd-page-content;
+}
+
+::view-transition-old(sd-page-content) {
+  animation: sd-vt-fade-out var(--sd-duration-fast) ease-in both;
+}
+
+::view-transition-new(sd-page-content) {
+  animation: sd-vt-fade-rise 320ms var(--sd-ease-out) both;
+}
+
+/* El grupo no se desplaza: solo cambia el texto dentro del mismo marco */
+::view-transition-group(sd-page-content) {
+  animation-duration: 0s;
+}
+
+/* La transición de color propia de la página se apaga: el fundido ya la sustituye */
+:root[data-view-transition] .sd-landing {
+  transition: none;
+}
+
+@keyframes sd-vt-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes sd-vt-fade-rise {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--sd-duration-base);
+  }
+
+  ::view-transition-new(sd-page-content) {
+    animation-name: sd-vt-fade-in;
+  }
+
+  @keyframes sd-vt-fade-in {
+    from { opacity: 0; }
+  }
+}
+
+/* ==========================================================================
    Acento elegido en Ajustes → Apariencia (data-accent en <html>, appearance.ts).
    Mismo valor en ambos temas, como los campos. Todos admiten tinta negra encima
    con AA (≥ 5.4:1); el hover sube un paso de saturación, como el naranja.

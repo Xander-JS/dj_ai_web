@@ -1,6 +1,5 @@
 .desktop-layout {
-  /* Marco de la aplicación (--layout-frame-width, index.css): cabecera, área de trabajo y
-     barra de reproducción comparten este ancho, centrado */
+  /* Cabecera, área de trabajo y barra de reproducción ocupan todo el ancho de la ventana */
   display: grid;
   grid-template-areas:
     "header header"
@@ -10,8 +9,7 @@
   /* minmax(0, ...) keeps wide children from stretching the track past the viewport */
   grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
   height: 100vh;
-  width: var(--layout-frame-width);
-  margin-inline: auto;
+  width: 100%;
   overflow: hidden;
   background-color: var(--bg-base);
   color: var(--text-primary);

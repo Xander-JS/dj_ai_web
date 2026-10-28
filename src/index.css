@@ -55,11 +55,6 @@
   --layout-sidebar-width: 15.625rem; /* 250px */
   --layout-player-height: 6.25rem;  /* 100px: aire alrededor de Play en la barra */
   --layout-gutter: var(--space-4);
-  /* Marco de la aplicación: consola, Home, Login y Registro comparten este ancho, centrado.
-     En escritorio ocupa el 92 % de la ventana; cuando eso deja menos de 80rem (decks y mixer
-     necesitan espacio) crece hasta 80rem, y en pantallas pequeñas llega casi al borde con un
-     margen mínimo. En vw para que las capas fijas (avisos) puedan alinearse con él. */
-  --layout-frame-width: max(92vw, min(100vw - 2 * var(--layout-gutter), 80rem));
 
   /* TOUCH */
   --touch-target-min: var(--size-md); /* 40px */

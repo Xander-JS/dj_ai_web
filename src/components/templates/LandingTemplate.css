@@ -5,10 +5,9 @@
   --sd-accent-hover: var(--sd-brand-accent-hover);
 
   position: relative;
-  /* Mismo marco centrado que la consola (--layout-frame-width) */
-  width: var(--layout-frame-width);
+  /* Todo el ancho de la ventana, como la consola */
+  width: 100%;
   min-height: 100svh;
-  margin-inline: auto;
   overflow-x: clip;
   background-color: var(--sd-paper);
   color: var(--sd-ink);

@@ -506,7 +506,16 @@
     "display_mode_button": "Cambiar modo de pantalla",
     "display_mode_state": "Modo de pantalla: {{mode}}",
     "display_load_track": "Carga una pista",
-    "display_bar_sync": "BAR SYNC: {{message}}"
+    "display_bar_sync": "BAR SYNC: {{message}}",
+    "loop": "Auto Loop",
+    "loop_caption": "LOOP",
+    "loop_reduce": "Reducir",
+    "loop_toggle": "Activar loop",
+    "loop_increase": "Aumentar",
+    "loop_length_one": "{{beats}} pulso",
+    "loop_length_other": "{{beats}} pulsos",
+    "loop_requires_bpm": "El loop requiere un BPM analizado",
+    "backspin": "Backspin"
   },
   "mixer": {
     "channel": "CH {{num}}",
@@ -880,7 +889,7 @@
     "disc_desc": "Diseño del disco giratorio que muestran Deck A y Deck B. Solo cambia su aspecto: la reproducción, el BPM, los cues y el SYNC no se ven afectados.",
     "disc_option": "Disco {{n}}",
     "shortcuts_mixer_group": "Crossfader",
-    "shortcuts_mixer_short": "XF",
+    "shortcuts_mixer_short": "X",
     "shortcuts_console_title": "Atajos de consola",
     "shortcuts_console_desc": "Pulsa una tecla para reasignarla (Esc cancela).",
     "shortcuts_console_binding_aria": "{{action}}: tecla {{key}}. Pulsa para reasignar.",
@@ -888,7 +897,11 @@
       "mute": "Silenciar / reactivar el Master",
       "record": "Iniciar / detener la grabación",
       "libraryA": "LOAD A: abrir o cerrar la carga de pistas del Deck A en la pantalla",
-      "libraryB": "LOAD B: abrir o cerrar la carga de pistas del Deck B en la pantalla"
+      "libraryB": "LOAD B: abrir o cerrar la carga de pistas del Deck B en la pantalla",
+      "loopA": "LOOP A: toca para activar o quitar el loop del Deck A; mantén + ← / → para cambiar su longitud",
+      "loopB": "LOOP B: toca para activar o quitar el loop del Deck B; mantén + ← / → para cambiar su longitud",
+      "displayA": "MODO A: toca para alternar el display LED del Deck A entre GUÍA y MAPA",
+      "displayB": "MODO B: toca para alternar el display LED del Deck B entre GUÍA y MAPA"
     },
     "shortcuts_nav_binding_reserved": "Shift + {{key}} ya lo usa el Pitch Bend de un deck."
   },

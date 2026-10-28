@@ -506,7 +506,16 @@
     "display_mode_button": "Switch display mode",
     "display_mode_state": "Display mode: {{mode}}",
     "display_load_track": "Load a track",
-    "display_bar_sync": "BAR SYNC: {{message}}"
+    "display_bar_sync": "BAR SYNC: {{message}}",
+    "loop": "Auto loop",
+    "loop_caption": "LOOP",
+    "loop_reduce": "Reduce",
+    "loop_toggle": "Toggle loop",
+    "loop_increase": "Increase",
+    "loop_length_one": "{{beats}} beat",
+    "loop_length_other": "{{beats}} beats",
+    "loop_requires_bpm": "Loop requires an analyzed BPM",
+    "backspin": "Backspin"
   },
   "mixer": {
     "channel": "CH {{num}}",
@@ -880,7 +889,7 @@
     "disc_desc": "Design of the spinning disc shown on Deck A and Deck B. It only changes its look: playback, BPM, cues and SYNC are not affected.",
     "disc_option": "Disc {{n}}",
     "shortcuts_mixer_group": "Crossfader",
-    "shortcuts_mixer_short": "XF",
+    "shortcuts_mixer_short": "X",
     "shortcuts_console_title": "Console shortcuts",
     "shortcuts_console_desc": "Press a key to reassign it (Esc cancels).",
     "shortcuts_console_binding_aria": "{{action}}: key {{key}}. Press to reassign.",
@@ -888,7 +897,11 @@
       "mute": "Mute / unmute Master",
       "record": "Start / stop recording",
       "libraryA": "LOAD A: open or close Deck A track loading on the screen",
-      "libraryB": "LOAD B: open or close Deck B track loading on the screen"
+      "libraryB": "LOAD B: open or close Deck B track loading on the screen",
+      "loopA": "LOOP A: tap to turn the Deck A loop on or off; hold + ← / → to change its length",
+      "loopB": "LOOP B: tap to turn the Deck B loop on or off; hold + ← / → to change its length",
+      "displayA": "MODE A: tap to switch the Deck A LED display between GUIDE and MAP",
+      "displayB": "MODE B: tap to switch the Deck B LED display between GUIDE and MAP"
     },
     "shortcuts_nav_binding_reserved": "Shift + {{key}} is already used by a deck's Pitch Bend."
   },

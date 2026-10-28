@@ -22,6 +22,8 @@ export interface ScreenWaveformProps {
 }
 
 const HOT_CUE_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const LOOP_BAND_OPACITY = 0.24;
+const LOOP_EDGE_OPACITY = 0.9;
 
 interface Palette {
   tone: string;
@@ -29,6 +31,7 @@ interface Palette {
   barLine: string;
   playhead: string;
   cue: string;
+  loop: string;
   tagInk: string;
   cueTagInk: string;
   font: string;
@@ -50,6 +53,7 @@ function readPalette(element: HTMLElement, dpr: number): Palette {
     barLine: token('--screen-wave-bar-line'),
     playhead: token('--screen-playhead'),
     cue: token('--console-led-amber'),
+    loop: token('--console-loop'),
     tagInk: token('--screen-wave-tag-ink'),
     cueTagInk: token('--screen-wave-cue-tag-ink'),
     font: `${token('--font-weight-bold')} ${px('--screen-text-xs')}px ${token('--font-family-mono')}`,
@@ -144,7 +148,7 @@ export const ScreenWaveform: React.FC<ScreenWaveformProps> = ({ deck, onSeek }) 
       ctx.fillStyle = palette.baseline;
       ctx.fillRect(0, Math.floor(mid), width, Math.max(1, Math.round(dpr)));
 
-      const { track, duration: total, hotCues, mainCue } = view.deck;
+      const { track, duration: total, hotCues, mainCue, loop } = view.deck;
       if (!track || !(total > 0)) return;
 
       const position = readPosition(now, view.deck);
@@ -174,6 +178,20 @@ export const ScreenWaveform: React.FC<ScreenWaveformProps> = ({ deck, onSeek }) 
           const barHeight = Math.max(dpr, sampleAmplitude(peaks, scale, peaksPerSecond, time, time + secPerPx) * maxHeight);
           ctx.fillRect(x, mid - barHeight / 2, 1, barHeight);
         }
+        ctx.globalAlpha = 1;
+      }
+
+      // Región del Auto Loop: banda translúcida sobre la onda (se sigue leyendo a través) y A / B marcados
+      if (loop.region) {
+        const x0 = clamp(xAt(loop.region.start), 0, width);
+        const x1 = clamp(xAt(loop.region.end), 0, width);
+        const edge = Math.max(1, Math.round(2 * dpr));
+        ctx.fillStyle = palette.loop;
+        ctx.globalAlpha = LOOP_BAND_OPACITY;
+        ctx.fillRect(x0, 0, x1 - x0, height);
+        ctx.globalAlpha = LOOP_EDGE_OPACITY;
+        if (xAt(loop.region.start) >= 0) ctx.fillRect(x0, 0, edge, height);
+        if (xAt(loop.region.end) <= width) ctx.fillRect(x1 - edge, 0, edge, height);
         ctx.globalAlpha = 1;
       }
 

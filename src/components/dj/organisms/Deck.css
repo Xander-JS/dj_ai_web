@@ -33,7 +33,7 @@
   grid-template-columns: minmax(0, 20fr) minmax(0, 70fr) minmax(3.25rem, 10fr);
   grid-template-rows: auto auto auto auto;
   grid-template-areas:
-    "top top ."
+    "top top loop"
     "jog jog pitch"
     "transport sync pitch"
     "transport cues pitch";
@@ -45,7 +45,7 @@
 .dj-deck.deck-b .deck-panel {
   grid-template-columns: minmax(3.25rem, 10fr) minmax(0, 70fr) minmax(0, 20fr);
   grid-template-areas:
-    ". top top"
+    "loop top top"
     "pitch jog jog"
     "pitch sync transport"
     "pitch cues transport";
@@ -79,6 +79,18 @@
 
 .dj-deck.deck-b .deck-utility {
   flex-direction: row-reverse;
+}
+
+/* Auto Loop sobre la columna del fader de tempo, con su borde exterior alineado al de la columna;
+   es más ancho que ella y desborda solo hacia el disco */
+.deck-panel__loop {
+  grid-area: loop;
+  justify-self: end;
+  align-self: center;
+}
+
+.dj-deck.deck-b .deck-panel__loop {
+  justify-self: start;
 }
 
 .deck-panel__notices {

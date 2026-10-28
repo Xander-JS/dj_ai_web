@@ -7,6 +7,7 @@ import { Wordmark } from '../atoms/Wordmark';
 import { LanguageSwitch, type LanguageOption } from '../molecules/LanguageSwitch';
 import { ThemeToggle } from '../molecules/ThemeToggle';
 import { useSettingsStore, type AppLanguage } from '../../store/useSettingsStore';
+import { withViewTransition } from '../../design-system/viewTransition';
 import './LandingNavbar.css';
 
 export interface LandingNavbarProps {
@@ -17,7 +18,8 @@ export interface LandingNavbarProps {
 }
 
 // Barra superior de la Home: marca, idioma, tema y acceso a la cuenta.
-// Idioma y tema se guardan en settingsStore, igual que en Configuración.
+// Idioma y tema se guardan en settingsStore, igual que en Configuración; ambos cambios se
+// funden con una View Transition en lugar de saltar (viewTransition.ts).
 export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onLogIn, onSignUp, current }) => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettingsStore();
@@ -38,11 +40,13 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onLogIn, onSignUp,
             value={settings.language}
             options={languages}
             label={t('landing.nav.language')}
-            onChange={(language) => updateSettings({ language })}
+            onChange={(language) => {
+              if (language !== settings.language) withViewTransition('language', () => updateSettings({ language }));
+            }}
           />
           <ThemeToggle
             theme={settings.theme}
-            onToggle={() => updateSettings({ theme: settings.theme === 'light' ? 'dark' : 'light' })}
+            onToggle={() => withViewTransition('theme', () => updateSettings({ theme: settings.theme === 'light' ? 'dark' : 'light' }))}
             labelToDark={t('landing.nav.theme_to_dark')}
             labelToLight={t('landing.nav.theme_to_light')}
           />

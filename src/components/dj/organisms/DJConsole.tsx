@@ -6,6 +6,7 @@ import { DownbeatPanel } from './DownbeatPanel';
 import { DeckLedPanel } from './DeckLedPanel';
 import { computeConsoleScale, type ConsoleScale } from '../../../services/console/consoleScale';
 import '../consoleTheme.css';
+import '../consoleDesignSystem.css';
 import './DJConsole.css';
 
 /**

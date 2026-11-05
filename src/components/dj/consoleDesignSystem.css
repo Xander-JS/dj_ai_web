@@ -1,0 +1,328 @@
+/* ==========================================================================
+   SYSTEM DJ — Console design "system" (reskin plano v2)
+   Diseño predeterminado de la consola: misma disposición y mismos componentes, pero
+   vestidos con la identidad de póster plano del resto de la app (design-system/tokens.css):
+   papel y tinta, un solo acento naranja, campos planos, radios grandes y SIN degradados,
+   cristal, relieves ni sombras en reposo. Las superficies se separan por color y por un filo
+   de tinta, no por luz.
+
+   Se activa con data-console-design="system" en <html> (appearance.ts). "classic" no carga
+   nada de aquí, así que conserva el hardware original intacto. Todo se logra reescribiendo los
+   tokens --console-* (la mitad del aspecto) y aplanando los controles táctiles que llevaban su
+   relieve a mano; no se toca ni la lógica ni la disposición. La pantalla digital (forma de onda)
+   se deja oscura a propósito: es un display, no plástico, y sus colores los lee el canvas.
+   ========================================================================== */
+
+[data-console-design='system'] .mixer-page-container {
+  /* Tipografía de la identidad en toda la consola (pesos = jerarquía). Los componentes usan
+     var(--font-family-sans), así que se remapea el token; el mono se deja para los displays. */
+  font-family: var(--sd-font);
+  --font-family-sans: var(--sd-font);
+
+  /* Tonos de canal: A = acento cálido (sigue al acento elegido); B = tono frío de la identidad;
+     Master neutro a propósito (es la suma de ambas pistas, no pertenece a ninguna). */
+  --console-tone-a: var(--sd-accent);
+  --console-tone-b: var(--sd-console-deck-b);
+  --console-tone-master: var(--sd-ink-soft);
+
+  /* Carcasa y placas: campos planos, sin textura ni sombra; separación por color + filo */
+  --console-plastic: var(--sd-surface);
+  --console-housing-shadow: none;
+  --console-plate: var(--sd-paper);
+  --console-plate-edge: color-mix(in srgb, var(--sd-ink) 14%, transparent);
+  --console-plate-shadow: none;
+  --console-divider: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+
+  /* Serigrafía = tinta; foco = foco de la identidad */
+  --console-silkscreen: var(--sd-ink);
+  --console-silkscreen-dim: var(--sd-ink-soft);
+  --console-focus: var(--sd-focus);
+
+  /* Teclas y cuerpos de control: campo plano con filo de tinta. La luz de las teclas sigue al
+     tono del deck que las contiene (cálido en A, frío en B), no a un único naranja global: así
+     cada control se enciende con la identidad de su pista y no todo es del mismo color. Fuera de
+     un deck (sin --console-tone) cae al acento. */
+  --console-key-body: var(--sd-surface);
+  --console-key-edge: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+  --console-key-light: var(--console-tone, var(--sd-accent));
+
+  /* LEDs: colores funcionales planos, sin cúpula ni halo */
+  --console-led-unlit: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+  --console-led-neutral: var(--sd-ink-soft);
+  /* Auto Loop: el tono del propio deck, para no chocar con el otro reproductor */
+  --console-loop: var(--console-tone, var(--sd-accent));
+
+  /* Mini LCD (DOWNBEAT & COMPÁS): chip negro de la identidad con tinta ácida */
+  --console-lcd-bg: var(--sd-inverse);
+  --console-lcd-edge: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+  --console-lcd-ink: var(--sd-field-acid);
+
+  /* Ranuras, marcas y vúmetros: hueco plano de tinta */
+  --console-slot: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+  --console-tick: var(--sd-ink-soft);
+  --console-meter-bg: color-mix(in srgb, var(--sd-ink) 10%, transparent);
+
+  /* -------------------------------------------------------------- CARCASA */
+  & .dj-console__housing {
+    border: 1px solid color-mix(in srgb, var(--sd-ink) 16%, transparent);
+    border-radius: var(--sd-radius-panel);
+    box-shadow: none;
+  }
+
+  /* Zonas de color: cada placa de deck lleva un lavado tenue de su propio tono (cálido A / frío B),
+     así los dos reproductores se leen como dos sin dejar de ser la misma consola. El mixer central
+     se queda en papel: es el núcleo limpio y con presencia entre dos campos de color. --console-tone
+     se resuelve por deck porque .dj-deck es además .console-tone-a/b. */
+  & .dj-deck {
+    border-radius: var(--sd-radius-inset);
+    background: color-mix(in srgb, var(--console-tone) 7%, var(--sd-paper));
+    box-shadow: none;
+  }
+
+  /* --------------------------------------------------------------- TECLAS */
+  & .console-key {
+    background: var(--sd-surface);
+    border-color: var(--console-key-edge);
+    box-shadow: none;
+  }
+
+  & .console-key:active:not(:disabled, [aria-disabled='true']) {
+    box-shadow: none;
+  }
+
+  & .console-key.is-lit {
+    color: color-mix(in srgb, var(--key-light) 72%, var(--sd-ink));
+    border-color: var(--key-light);
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  /* Encendida a tope: la luz rellena la tecla como un campo de color de la identidad */
+  & .console-key.is-filled {
+    background: var(--key-light);
+    border-color: var(--key-light);
+    color: var(--sd-field-ink);
+    text-shadow: none;
+  }
+
+  /* ---------------------------------------------------- BOTÓN DE HARDWARE */
+  & .hw-button__well {
+    background: none;
+    box-shadow: none;
+  }
+
+  & .hw-button__cap {
+    background: var(--sd-surface);
+    border: 1px solid var(--console-key-edge);
+    box-shadow: none;
+    color: var(--sd-ink-soft);
+  }
+
+  & .hw-button__cap.is-lit {
+    border-color: var(--hw-light);
+    color: var(--hw-light);
+  }
+
+  & .hw-button__cap.is-lit .hw-button__icon {
+    filter: none;
+  }
+
+  & .hw-button__cap:active:not(:disabled) {
+    box-shadow: none;
+  }
+
+  /* -------------------------------------- CUE / PLAY (botones redondos) */
+  & .deck-round-key {
+    background: var(--sd-surface);
+    border-color: color-mix(in srgb, var(--round-light) 60%, transparent);
+    box-shadow: none;
+    color: color-mix(in srgb, var(--round-light) 72%, var(--sd-ink));
+  }
+
+  & .deck-round-key:active:not(:disabled),
+  & .deck-round-key.is-lit {
+    background: var(--round-light);
+    border-color: var(--round-light);
+    color: var(--sd-field-ink);
+    box-shadow: none;
+  }
+
+  /* ---------------------------------------------- SELECTOR ROTATIVO (curva) */
+  & .console-selector__knob {
+    border: 1px solid var(--console-key-edge);
+    background: var(--sd-surface);
+    box-shadow: none;
+  }
+
+  & .console-selector__indicator::before {
+    background-color: var(--sd-ink);
+    box-shadow: none;
+  }
+
+  /* ----------------------------------------------- POTENCIÓMETROS (EQ/GAIN) */
+  /* Pomo de imagen → disco plano con línea indicadora; el arco de valor se conserva */
+  & .console-knob__dial {
+    aspect-ratio: 1;
+  }
+
+  & .console-knob__scale,
+  & .console-knob__cap img,
+  & .console-knob__cap::after {
+    display: none;
+  }
+
+  & .console-knob__cap {
+    background: var(--sd-surface);
+    border: 1px solid var(--console-key-edge);
+    box-shadow: none;
+  }
+
+  & .console-knob__arc-track {
+    stroke: color-mix(in srgb, var(--sd-ink) 16%, transparent);
+  }
+
+  & .console-knob__arc--value {
+    filter: none;
+  }
+
+  & .console-knob__pointer::before {
+    background: var(--sd-ink);
+    box-shadow: none;
+  }
+
+  /* ------------------------------------------------------ FADERS Y PITCH */
+  & .console-fader__slot {
+    box-shadow: none;
+  }
+
+  & .console-fader__fill {
+    box-shadow: none;
+  }
+
+  /* Pomo de imagen → cápsula plana de tinta con línea de acento */
+  & .console-fader__cap {
+    filter: none;
+  }
+
+  & .console-fader__cap-body {
+    background: var(--sd-ink);
+  }
+
+  & .console-fader__cap-body img {
+    display: none;
+  }
+
+  & .deck-pitch {
+    border-color: var(--console-key-edge);
+    background: color-mix(in srgb, var(--sd-ink) 5%, transparent);
+    box-shadow: none;
+  }
+
+  & .deck-pitch__track::before {
+    box-shadow: none;
+  }
+
+  & .deck-pitch__bend {
+    background: var(--sd-surface);
+    border-color: var(--console-key-edge);
+    box-shadow: none;
+  }
+
+  & .deck-pitch__bend.is-active {
+    border-color: var(--console-tone);
+    box-shadow: none;
+  }
+
+  /* --------------------------------------------------------------- DISCO */
+  /* Se conserva el disco giratorio (es el contenido elegido en Ajustes); solo se aplana el aro */
+  & .jog-wheel__ring {
+    background: var(--sd-surface);
+    background-blend-mode: normal;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--sd-ink) 18%, transparent);
+  }
+
+  /* ----------------------------------------------------------- VÚMETROS */
+  & .level-meter,
+  & .mixer-master__meter {
+    box-shadow: none;
+  }
+
+  & .level-meter__fill {
+    filter: none;
+  }
+
+  & .level-meter__clip.is-on {
+    box-shadow: none;
+  }
+
+  /* --------------------------------------------------------------- LEDs */
+  & .console-led {
+    background: var(--console-led-unlit);
+    box-shadow: none;
+  }
+
+  & .console-led.is-on {
+    background: var(--led-color);
+    box-shadow: none;
+  }
+
+  & .console-led.is-dim {
+    background: color-mix(in srgb, var(--led-color) 45%, var(--console-led-unlit));
+    box-shadow: none;
+  }
+
+  /* ---------------------------------------------------------- MINI LCD */
+  & .console-lcd {
+    background: var(--console-lcd-bg);
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  /* -------------------------------------------- PANELES DOWNBEAT & COMPÁS */
+  /* Paneles DOWNBEAT & COMPÁS: tinte del tono de su deck, para que el indicador A/B tenga color */
+  & .downbeat-panel {
+    background: color-mix(in srgb, var(--console-tone) 9%, var(--sd-paper));
+    border-color: color-mix(in srgb, var(--console-tone) 24%, transparent);
+    border-radius: var(--sd-radius-inset);
+    box-shadow: none;
+  }
+
+  & .downbeat-panel__deck {
+    text-shadow: none;
+  }
+
+  /* ----------------------------------------------------------- HOT CUES */
+  & .deck-hotcues__clear,
+  & .deck-hotcue-pad {
+    background: var(--sd-surface);
+    box-shadow: none;
+  }
+
+  /* Pad guardado: campo plano del color del cue, con filo; sin brillo ni halo */
+  & .deck-hotcue-pad.is-defined {
+    background: color-mix(in srgb, var(--pad-color) 22%, var(--sd-paper));
+    box-shadow: none;
+    color: var(--sd-ink);
+  }
+
+  & .deck-hotcue-pad:active:not(:disabled) {
+    box-shadow: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Modo oscuro: sobre papel casi negro un 7-9 % de tono apenas se ve, así que las zonas de
+   color de los decks y los paneles suben de proporción para seguir leyéndose como campos.
+   data-theme y data-console-design viven ambos en <html> (appearance.ts). Los tonos son el
+   mismo hex en ambos temas (como los campos); solo cambia la mezcla con el papel.
+   -------------------------------------------------------------------------- */
+[data-theme='dark'][data-console-design='system'] .mixer-page-container {
+  & .dj-deck {
+    background: color-mix(in srgb, var(--console-tone) 16%, var(--sd-paper));
+  }
+
+  & .downbeat-panel {
+    background: color-mix(in srgb, var(--console-tone) 20%, var(--sd-paper));
+    border-color: color-mix(in srgb, var(--console-tone) 34%, transparent);
+  }
+}

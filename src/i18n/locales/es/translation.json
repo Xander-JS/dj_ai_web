@@ -799,7 +799,7 @@
     "applied": "Aplicado",
     "tab_desc": {
       "general": "Tu identidad en SYSTEM DJ. El audio nunca sale de este dispositivo.",
-      "appearance": "Tema, color de acento, densidad y movimiento de la consola.",
+      "appearance": "Diseño de la consola, tema, color de acento, densidad y movimiento.",
       "language": "Idioma de menús, avisos y mensajes.",
       "audio": "Cómo mezcla el crossfader y cuánto pueden moverse pitch y SYNC.",
       "playback": "Duración de las transiciones automáticas y comportamiento de CUE.",
@@ -812,6 +812,13 @@
       "light": "Claro",
       "dark": "Oscuro"
     },
+    "console_design_title": "Diseño de la consola",
+    "console_design_desc": "Elige el aspecto de la consola del Mixer. No afecta al audio, al BPM, al SYNC ni a ninguna función: solo cambia su presentación.",
+    "console_design_option": {
+      "system": "SYSTEM DJ",
+      "classic": "Clásico"
+    },
+    "console_design_default": "Predeterminado",
     "language_desc": "Se aplica al momento a toda la aplicación.",
     "audio_mixer_title": "Mezcla",
     "audio_engine_title": "Motor de audio",
@@ -834,6 +841,7 @@
     "readout": {
       "account": "Cuenta",
       "theme": "Tema",
+      "console": "Consola",
       "accent": "Acento",
       "density": "Densidad",
       "curve": "Curva",

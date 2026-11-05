@@ -39,6 +39,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   ACCENT_COLORS,
   AUTO_TRANSITION_BEATS,
+  CONSOLE_DESIGNS,
   DEFAULT_SETTINGS,
   BUFFER_SIZES,
   CROSSFADER_CURVES,
@@ -52,6 +53,7 @@ import {
   useSettingsStore,
   type AppLanguage,
   type AppSettings,
+  type ConsoleDesign,
   type JogDisc,
   type ThemeMode,
 } from '../store/useSettingsStore';
@@ -167,6 +169,24 @@ const DiscPreview: React.FC<{ disc: JogDisc }> = ({ disc }) => (
 const LanguagePreview: React.FC<{ code: string }> = ({ code }) => (
   <span className="sd-language-preview">
     <span className="sd-language-preview__code">{code}</span>
+  </span>
+);
+
+/** Maqueta de la consola en cada diseño: dos decks y el mixer, dibujados con su propio aspecto */
+const ConsoleDesignPreview: React.FC<{ design: ConsoleDesign }> = ({ design }) => (
+  <span className={clsx('sd-console-preview', `sd-console-preview--${design}`)} aria-hidden="true">
+    {(['a', 'b'] as const).map((side, index) => (
+      <span key={side} className="sd-console-preview__deck" data-side={side} style={{ order: index === 0 ? 0 : 2 }}>
+        <span className="sd-console-preview__jog" />
+        <span className="sd-console-preview__knobs">
+          <i /><i /><i />
+        </span>
+      </span>
+    ))}
+    <span className="sd-console-preview__mixer" style={{ order: 1 }}>
+      <span className="sd-console-preview__faders"><i /><i /></span>
+      <span className="sd-console-preview__xfader" />
+    </span>
   </span>
 );
 
@@ -338,6 +358,24 @@ export const Settings: React.FC = () => {
                         value: theme,
                         label: t(`settings.theme_option.${theme}`),
                         preview: <ThemePreview theme={theme} />,
+                      }))}
+                    />
+                  )}
+                />
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.console_design_title')}
+                  description={t('settings.console_design_desc')}
+                  control={(
+                    <ChoiceTiles<ConsoleDesign>
+                      label={t('settings.console_design_title')}
+                      value={settings.consoleDesign}
+                      onChange={(consoleDesign) => updateSettings({ consoleDesign })}
+                      options={CONSOLE_DESIGNS.map((design) => ({
+                        value: design,
+                        label: t(`settings.console_design_option.${design}`),
+                        hint: design === DEFAULT_SETTINGS.consoleDesign ? t('settings.console_design_default') : undefined,
+                        preview: <ConsoleDesignPreview design={design} />,
                       }))}
                     />
                   )}
@@ -616,6 +654,7 @@ function buildReadouts(
     case 'appearance':
       return [
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
+        { label: t('settings.readout.console'), value: t(`settings.console_design_option.${settings.consoleDesign}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
         { label: t('settings.readout.disc'), value: t('settings.disc_option', { n: JOG_DISCS.indexOf(settings.jogDisc) + 1 }) },

@@ -147,11 +147,12 @@ describe('Apariencia — tokens en el elemento raíz', () => {
       style: { setProperty: (name: string, value: string) => { properties[name] = value; } },
     } as unknown as HTMLElement;
 
-    applyAppearanceToRoot({ theme: 'dark', density: 'compact', accentColor: 'cyan', animations: false, experimentalInterface: true }, root);
+    applyAppearanceToRoot({ theme: 'dark', density: 'compact', accentColor: 'cyan', consoleDesign: 'classic', animations: false, experimentalInterface: true }, root);
 
     assert.equal(attributes['data-theme'], 'dark');
     assert.equal(attributes['data-density'], 'compact');
     assert.equal(attributes['data-accent'], 'cyan');
+    assert.equal(attributes['data-console-design'], 'classic');
     assert.equal(attributes['data-animations'], 'off');
     assert.equal(attributes['data-interface'], 'experimental');
     assert.equal(properties['--hue-primary'], String(ACCENT_HUES.cyan));
@@ -165,6 +166,7 @@ describe('Apariencia — tokens en el elemento raíz', () => {
     }
     assert.equal(DEFAULT_SETTINGS.accentColor, 'orange');
     assert.equal(DEFAULT_SETTINGS.animations, true);
+    assert.equal(DEFAULT_SETTINGS.consoleDesign, 'system');
     assert.equal(DEFAULT_SETTINGS.experimentalInterface, false);
   });
 });

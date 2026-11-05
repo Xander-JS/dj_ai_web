@@ -40,6 +40,8 @@ export type VisualizerIntensity = 'subtle' | 'balanced' | 'vivid';
 export type JogDisc = 'a' | 'b' | 'c';
 /** Segundos que muestra la forma de onda ampliada de la pantalla alrededor del playhead. */
 export type WaveformZoom = 4 | 8 | 16;
+/** Diseño visual de la consola: `system` (identidad plana v2, predeterminado) o `classic` (hardware). */
+export type ConsoleDesign = 'system' | 'classic';
 
 export interface AppSettings {
   theme: ThemeMode;
@@ -65,6 +67,8 @@ export interface AppSettings {
   visualizerIntensity: VisualizerIntensity;
   /** Disco que muestran ambos decks; solo es apariencia, no afecta al transporte. */
   jogDisc: JogDisc;
+  /** Diseño visual de la consola; solo es apariencia, no afecta al motor ni al transporte. */
+  consoleDesign: ConsoleDesign;
   /** Reserva la futura disposición alternativa de la consola; todavía no cambia la interfaz. */
   experimentalInterface: boolean;
 }
@@ -85,6 +89,7 @@ export const ACCENT_HUES: Record<AccentColor, number> = {
 };
 export const VISUALIZER_INTENSITIES: readonly VisualizerIntensity[] = ['subtle', 'balanced', 'vivid'];
 export const JOG_DISCS: readonly JogDisc[] = ['a', 'b', 'c'];
+export const CONSOLE_DESIGNS: readonly ConsoleDesign[] = ['system', 'classic'];
 /** Mismo orden que el selector de la consola: CP, LIN, CUT. */
 export const CROSSFADER_CURVES: readonly CrossfaderCurve[] = ['constant-power', 'linear', 'cut'];
 
@@ -120,6 +125,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   animations: true,
   visualizerIntensity: 'balanced',
   jogDisc: 'b',
+  consoleDesign: 'system',
   experimentalInterface: false,
 };
 
@@ -182,6 +188,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     animations: typeof source.animations === 'boolean' ? source.animations : d.animations,
     visualizerIntensity: pick(source.visualizerIntensity, VISUALIZER_INTENSITIES, d.visualizerIntensity),
     jogDisc: pick(source.jogDisc, JOG_DISCS, d.jogDisc),
+    consoleDesign: pick(source.consoleDesign, CONSOLE_DESIGNS, d.consoleDesign),
     experimentalInterface: typeof source.experimentalInterface === 'boolean' ? source.experimentalInterface : d.experimentalInterface,
   };
 }

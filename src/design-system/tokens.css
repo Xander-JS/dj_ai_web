@@ -125,6 +125,10 @@
   --sd-field-ink-soft: #2b2b2b;
   --sd-focus: #000000;
   --sd-selection: #f0ff1c;
+  /* Consola (reskin plano): la pista B toma un tono frío fijo frente al acento cálido de la
+     pista A, para que ambos decks se lean como dos (convención A/B). Mismo valor en ambos temas,
+     como los campos; admite tinta negra encima con AA. */
+  --sd-console-deck-b: #1fc8e3;
   /* Velo bajo los diálogos: oscurece sin desenfocar */
   --sd-scrim: rgb(0 0 0 / 0.5);
 }
@@ -369,6 +373,13 @@ html[data-scroll-mode='document'] {
 [data-accent='amber'] {
   --sd-accent: #ffb21e;
   --sd-accent-hover: #ff9f00;
+}
+
+/* Si el acento elegido ya es azulado (la pista A sería fría), la pista B pasa a ámbar para que
+   los dos decks sigan contrastando cálido/frío en lugar de fundirse en el mismo azul-cian. */
+[data-accent='blue'],
+[data-accent='cyan'] {
+  --sd-console-deck-b: #ffb21e;
 }
 
 /* ==========================================================================

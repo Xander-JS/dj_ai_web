@@ -25,20 +25,26 @@
 }
 
 /* Mixer: la barra lateral se retira hacia la izquierda y la consola ocupa todo el ancho. La
-   pestaña del borde la muestra encima de la consola, sin moverla. Tiempos de la entrada: el aviso
-   del botón Mixer y la retirada (el resto de la secuencia está en MixerEntrance.css). */
+   pestaña del borde la vuelve a mostrar: su columna se reabre, la consola se desplaza (y se
+   reajusta) a su lado y se desenfoca levemente. Tiempos de la entrada: el aviso del botón Mixer y
+   la retirada (el resto de la secuencia está en MixerEntrance.css). */
 .desktop-layout--mixer {
   --mixer-nav-cue-duration: 400ms;
   --mixer-sidebar-delay: 250ms;
   --mixer-sidebar-duration: 500ms;
-  /* Mostrar / ocultar con la pestaña o Esc: la barra y la pestaña comparten tiempo y curva */
-  --mixer-peek-open-duration: var(--sd-duration-base);
-  --mixer-peek-open-ease: var(--sd-ease-out);
-  --mixer-peek-close-duration: 200ms;
-  --mixer-peek-close-ease: cubic-bezier(0.4, 0, 1, 1);
+  /* Mostrar / ocultar con la pestaña o Esc: un solo gesto suave, idéntico al abrir y al cerrar.
+     Curva exponencial de salida (desacelera hasta posarse, sin aceleración brusca) y ~450 ms;
+     barra, columna, consola, desenfoque y pestaña comparten tiempo y curva para moverse como una
+     sola transición. */
+  --mixer-peek-open-duration: 450ms;
+  --mixer-peek-open-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --mixer-peek-close-duration: 450ms;
+  --mixer-peek-close-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mixer-peek-duration: var(--mixer-peek-close-duration);
   --mixer-peek-ease: var(--mixer-peek-close-ease);
   --mixer-peek-tab-gap: 12px;
+  /* Apenas perceptible: solo insinúa que la consola pasa a segundo plano */
+  --mixer-peek-blur: 1px;
 
   position: relative;
   grid-template-columns: 0 minmax(0, 1fr);
@@ -71,6 +77,29 @@
 .desktop-layout--sidebar-open {
   --mixer-peek-duration: var(--mixer-peek-open-duration);
   --mixer-peek-ease: var(--mixer-peek-open-ease);
+
+  grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+}
+
+/* Mostrar / ocultar con la pestaña o Esc: la columna se abre y se cierra con el mismo tiempo y
+   curva que la barra, así su filo y el de la consola avanzan juntos. La entrada al Mixer no la
+   anima (la columna se pliega al instante y solo la barra se desliza) */
+.desktop-layout--sidebar-open,
+.desktop-layout--sidebar-closed {
+  transition:
+    grid-template-rows var(--sd-duration-base) var(--sd-ease-out),
+    grid-template-columns var(--mixer-peek-duration) var(--mixer-peek-ease),
+    var(--sd-density-transition);
+}
+
+/* Desenfoque leve de la consola mientras la barra está abierta: aparece y se retira con ella.
+   Solo el área de trabajo: la barra y la pestaña quedan nítidas */
+.desktop-layout--mixer .layout-main {
+  transition: filter var(--mixer-peek-duration) var(--mixer-peek-ease);
+}
+
+.desktop-layout--sidebar-open .layout-main {
+  filter: blur(var(--mixer-peek-blur));
 }
 
 .desktop-layout--sidebar-open .layout-sidebar {
@@ -351,6 +380,7 @@
 :root[data-animations='off'] .desktop-layout,
 :root[data-animations='off'] .layout-player,
 :root[data-animations='off'] .desktop-layout--mixer .layout-sidebar,
+:root[data-animations='off'] .desktop-layout--mixer .layout-main,
 :root[data-animations='off'] .layout-sidebar-tab {
   transition-duration: 0s;
   transition-delay: 0s;
@@ -365,6 +395,7 @@
   .desktop-layout,
   .layout-player,
   .desktop-layout--mixer .layout-sidebar,
+  .desktop-layout--mixer .layout-main,
   .desktop-layout--mixer .layout-sidebar-tab {
     transition-duration: 0s;
     transition-delay: 0s;

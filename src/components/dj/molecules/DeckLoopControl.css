@@ -41,7 +41,7 @@
 
 .deck-loop__length {
   min-width: 1.5em;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: var(--font-weight-bold, 700);
   font-variant-numeric: tabular-nums;
   line-height: 1;

@@ -48,7 +48,7 @@
 .mixer-console .mixer-channel__name,
 .mixer-console .mixer-master__name {
   color: var(--console-silkscreen);
-  font-size: clamp(12px, 4.4cqi, 16px);
+  font-size: clamp(14px, 4.8cqi, 19px);
   font-weight: 800;
   letter-spacing: 0.04em;
   line-height: 1;

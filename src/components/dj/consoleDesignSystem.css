@@ -9,8 +9,9 @@
    Se activa con data-console-design="system" en <html> (appearance.ts). "classic" no carga
    nada de aquí, así que conserva el hardware original intacto. Todo se logra reescribiendo los
    tokens --console-* (la mitad del aspecto) y aplanando los controles táctiles que llevaban su
-   relieve a mano; no se toca ni la lógica ni la disposición. La pantalla digital (forma de onda)
-   se deja oscura a propósito: es un display, no plástico, y sus colores los lee el canvas.
+   relieve a mano; no se toca ni la lógica ni la disposición. Los displays (pantalla digital central,
+   matrices LED laterales y mini-LCD) comparten un chip de tinta suave (--console-display): siguen
+   siendo un cristal hundido, pero no un negro de hardware que choque sobre el papel del modo claro.
    ========================================================================== */
 
 [data-console-design='system'] .mixer-page-container {
@@ -52,10 +53,18 @@
   /* Auto Loop: el tono del propio deck, para no chocar con el otro reproductor */
   --console-loop: var(--console-tone, var(--sd-accent));
 
-  /* Mini LCD (DOWNBEAT & COMPÁS): chip negro de la identidad con tinta ácida */
-  --console-lcd-bg: var(--sd-inverse);
-  --console-lcd-edge: color-mix(in srgb, var(--sd-ink) 22%, transparent);
-  --console-lcd-ink: var(--sd-field-acid);
+  /* Chip de los displays (pantalla digital central, matrices LED laterales y mini-LCD):
+     en modo claro adopta un tono claro (#e2e6eb) para integrarse con la consola clara,
+     y en modo oscuro baja a negro / casi negro (#121418). */
+  --console-display: #e2e6eb;
+  --console-display-well: #d6dce3;
+  --console-display-edge: color-mix(in srgb, var(--sd-ink) 18%, transparent);
+  --console-led-matrix-dot: color-mix(in srgb, var(--sd-ink) 7%, transparent);
+
+  /* Mini LCD (DOWNBEAT & COMPÁS): en modo claro tinta oscura para máximo contraste */
+  --console-lcd-bg: var(--console-display);
+  --console-lcd-edge: var(--console-display-edge);
+  --console-lcd-ink: var(--sd-ink);
 
   /* Ranuras, marcas y vúmetros: hueco plano de tinta */
   --console-slot: color-mix(in srgb, var(--sd-ink) 12%, transparent);
@@ -80,8 +89,10 @@
   }
 
   /* --------------------------------------------------------------- TECLAS */
+  /* Reposo con identidad: un lavado tenue del tono del deck (cálido A / frío B; acento fuera de
+     un deck) para que las teclas no sean todas del mismo gris neutro. La luz encendida lo tapa. */
   & .console-key {
-    background: var(--sd-surface);
+    background: color-mix(in srgb, var(--console-tone, var(--sd-accent)) 7%, var(--sd-surface));
     border-color: var(--console-key-edge);
     box-shadow: none;
   }
@@ -112,10 +123,16 @@
   }
 
   & .hw-button__cap {
-    background: var(--sd-surface);
+    background: color-mix(in srgb, var(--console-tone, var(--sd-accent)) 7%, var(--sd-surface));
     border: 1px solid var(--console-key-edge);
     box-shadow: none;
     color: var(--sd-ink-soft);
+  }
+
+  /* Bisel del Auto Loop: campo hundido plano de la identidad, no el negro de hardware */
+  & .deck-loop__bezel {
+    background: var(--console-slot);
+    box-shadow: none;
   }
 
   & .hw-button__cap.is-lit {
@@ -255,6 +272,13 @@
     box-shadow: none;
   }
 
+  /* Display LED (GUÍA / MAPA): en modo claro pantalla clara con matriz de puntos nítidos */
+  & .led-matrix {
+    background: var(--console-display);
+    border-color: var(--console-display-edge);
+    box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.1), inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  }
+
   /* --------------------------------------------------------------- LEDs */
   & .console-led {
     background: var(--console-led-unlit);
@@ -276,6 +300,30 @@
     background: var(--console-lcd-bg);
     box-shadow: none;
     text-shadow: none;
+  }
+
+  /* ----------------------------------------- PANTALLA DIGITAL (central) */
+  /* En modo claro la pantalla central pasa a un tono claro (#e2e6eb) con tipografías y líneas
+     en tinta oscura con alto contraste; en modo oscuro desciende a negro. */
+  & .digital-screen {
+    --screen-bg: var(--console-display);
+    --screen-well: var(--console-display-well);
+    --screen-ink: var(--sd-ink);
+    --screen-ink-dim: var(--sd-ink-soft);
+    --screen-ink-faint: color-mix(in srgb, var(--sd-ink) 38%, transparent);
+    --screen-line: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+    --screen-line-strong: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+    --screen-wave-bar-line: color-mix(in srgb, var(--sd-ink) 14%, transparent);
+    --screen-wave-tag-ink: #ffffff;
+    --screen-wave-cue-tag-ink: #ffffff;
+    background: var(--sd-surface);
+    border-color: color-mix(in srgb, var(--sd-ink) 16%, transparent);
+    box-shadow: none;
+  }
+
+  & .digital-screen__display {
+    background: var(--console-display);
+    box-shadow: inset 0 0 0 1px var(--console-display-edge), inset 0 1px 4px rgb(0 0 0 / 0.1);
   }
 
   /* -------------------------------------------- PANELES DOWNBEAT & COMPÁS */
@@ -317,6 +365,38 @@
    mismo hex en ambos temas (como los campos); solo cambia la mezcla con el papel.
    -------------------------------------------------------------------------- */
 [data-theme='dark'][data-console-design='system'] .mixer-page-container {
+  /* En oscuro el chip de los displays baja a casi negro: sobre el papel casi negro un gris medio
+     se leería como un bloque claro, no como un cristal hundido. */
+  --console-display: #121418;
+  --console-display-well: #181b20;
+  --console-display-edge: color-mix(in srgb, var(--sd-ink) 24%, transparent);
+  --console-led-matrix-dot: hsl(0 0% 100% / 0.055);
+  --console-lcd-bg: var(--console-display);
+  --console-lcd-edge: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+  --console-lcd-ink: var(--sd-field-acid);
+
+  & .digital-screen {
+    --screen-bg: var(--console-display);
+    --screen-well: var(--console-display-well);
+    --screen-ink: hsl(210 20% 90%);
+    --screen-ink-dim: hsl(215 12% 60%);
+    --screen-ink-faint: hsl(215 10% 42%);
+    --screen-line: hsl(215 18% 16%);
+    --screen-line-strong: hsl(215 16% 28%);
+    --screen-wave-bar-line: hsl(0 0% 100% / 0.14);
+  }
+
+  & .led-matrix {
+    background: var(--console-display);
+    border-color: var(--console-lcd-edge);
+    box-shadow: none;
+  }
+
+  & .digital-screen__display {
+    background: var(--console-display);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sd-ink) 28%, transparent);
+  }
+
   & .dj-deck {
     background: color-mix(in srgb, var(--console-tone) 16%, var(--sd-paper));
   }

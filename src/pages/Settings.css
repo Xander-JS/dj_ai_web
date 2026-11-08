@@ -113,6 +113,7 @@
 /* Zona desplazable de la categoría: alto de la columna y barra al borde de la columna,
    así la vista conserva su ancho máximo */
 .sd-settings__view-scroll {
+  position: relative;
   align-self: stretch;
   min-width: 0;
   overflow-y: auto;
@@ -888,11 +889,8 @@
 .sd-disc-preview {
   display: grid;
   place-items: center;
-  width: 11.5rem;
-  height: 7.25rem;
-  background:
-    radial-gradient(circle at 50% 50%, var(--sd-paper) 0 30%, transparent 60%),
-    var(--sd-surface);
+  width: 7.5rem;
+  height: 7.5rem;
 }
 
 /* Plato cuadrado: discImageStyle centra cada disco en él sin deformarlo */
@@ -901,12 +899,14 @@
   width: 6.25rem;
   aspect-ratio: 1;
   border-radius: 50%;
+  overflow: hidden;
   box-shadow: 0 6px 16px -6px rgb(0 0 0 / 0.5);
 }
 
 .sd-disc-preview__platter img {
   position: absolute;
   max-width: none;
+  height: auto;
   pointer-events: none;
 }
 

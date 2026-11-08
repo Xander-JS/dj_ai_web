@@ -11,7 +11,7 @@
   background: color-mix(in srgb, var(--badge-light) 7%, transparent);
   color: color-mix(in srgb, var(--badge-light) 70%, #fff);
   font-family: var(--font-family-sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -68,7 +68,7 @@
   background: hsl(225 8% 13%);
   box-shadow: 0 10px 24px -8px rgb(0 0 0 / 0.8);
   color: var(--console-silkscreen);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: normal;
   line-height: 1.45;

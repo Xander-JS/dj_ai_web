@@ -214,10 +214,10 @@ function paint(canvas: HTMLCanvasElement, frame: Frame, cols: number) {
     }
   };
 
-  // Puntos apagados: siguen viéndose, sin luz
+  // Puntos apagados: siguen viéndose, sin luz (se adaptan a modo claro y oscuro)
   ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
-  ctx.fillStyle = 'hsl(0 0% 100% / 0.055)';
+  ctx.fillStyle = resolve('--console-led-matrix-dot') || 'hsl(0 0% 100% / 0.055)';
   dots(0);
   ctx.fill();
 

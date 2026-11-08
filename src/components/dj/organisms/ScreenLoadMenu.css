@@ -167,7 +167,7 @@
 }
 
 .screen-menu__row:not(.screen-menu__row--head):hover {
-  background-color: hsl(0 0% 100% / 0.04);
+  background-color: color-mix(in srgb, var(--screen-ink) 7%, transparent);
 }
 
 .screen-menu__title {

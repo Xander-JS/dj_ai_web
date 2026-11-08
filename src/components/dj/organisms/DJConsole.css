@@ -14,7 +14,7 @@
 }
 
 .dj-console {
-  --console-screen-rise: clamp(28px, 4vh, 48px);
+  --console-screen-rise: clamp(16px, 2.2vh, 28px);
   --console-screen-height: clamp(250px, 34vh, 340px);
 
   padding-top: var(--console-screen-rise);
@@ -27,12 +27,14 @@
 .dj-console__housing {
   display: grid;
   /* ≈ 35 / 30 / 35 del ancho, como el boceto */
-  grid-template-columns: minmax(0, 35fr) minmax(352px, 30fr) minmax(0, 35fr);
+  grid-template-columns: minmax(0, 30fr) minmax(420, 40fr) minmax(0, 30fr);
   grid-template-areas:
     "top top top"
     "deck-a mixer deck-b";
-  gap: var(--layout-gutter);
-  padding: 0 var(--layout-gutter) var(--layout-gutter);
+  /* Gutter horizontal pleno entre decks y mixer; vertical recortado para ganar alto */
+  column-gap: var(--layout-gutter);
+  row-gap: var(--space-2);
+  padding: 0 var(--layout-gutter) var(--space-2);
   border-radius: 18px;
   background: var(--console-plastic);
   border: 1px solid hsl(0 0% 100% / 0.06);
@@ -63,8 +65,13 @@
   padding-top: var(--layout-gutter);
 }
 
-.dj-console__downbeat--a { grid-area: downbeat-a; }
-.dj-console__downbeat--b { grid-area: downbeat-b; }
+.dj-console__downbeat--a {
+  grid-area: downbeat-a;
+}
+
+.dj-console__downbeat--b {
+  grid-area: downbeat-b;
+}
 
 /* La pantalla queda centrada sobre el mixer; los dos módulos DOWNBEAT & COMPÁS ocupan, a partes
    iguales, todo el ancho que queda a sus lados. */
@@ -83,6 +90,14 @@
   min-width: 0;
 }
 
-.dj-console__deck--a { grid-area: deck-a; }
-.dj-console__deck--b { grid-area: deck-b; }
-.dj-console__mixer { grid-area: mixer; }
+.dj-console__deck--a {
+  grid-area: deck-a;
+}
+
+.dj-console__deck--b {
+  grid-area: deck-b;
+}
+
+.dj-console__mixer {
+  grid-area: mixer;
+}

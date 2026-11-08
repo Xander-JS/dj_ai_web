@@ -171,8 +171,7 @@
 .layout-main {
   grid-area: main;
   background-color: var(--bg-base);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   overscroll-behavior: contain;
   min-width: 0;
   position: relative;

@@ -10,7 +10,8 @@
 .deck-led-panel__notices {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding: 0 11px 0 5px;
   min-height: 18px;
   min-width: 0;
 }

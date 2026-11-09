@@ -41,8 +41,9 @@
   gap: 0.375rem;
   width: 100%;
   padding: var(--sd-gap-3) 1.25rem;
+  border: 2px solid #000;
   border-radius: var(--sd-radius-inset);
-  background-color: var(--sd-paper);
+  background-color: transparent;
   color: var(--sd-ink);
   font-family: var(--sd-font);
   text-align: left;

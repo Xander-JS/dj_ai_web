@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { clsx } from 'clsx';
 import { DJConsole } from '../components/dj/organisms/DJConsole';
+import { MixerGuide } from '../components/dj/organisms/MixerGuide';
 import { useMixerImmersiveMode } from '../hooks/useMixerImmersiveMode';
 import { useMixerEntrance } from '../hooks/useMixerEntrance';
 import './Mixer.css';
@@ -29,6 +30,7 @@ export const Mixer: React.FC = () => {
       )}
     >
       <DJConsole />
+      <MixerGuide ready={!overlay && !entrance} />
 
       {overlay === 'tap' && (
         <button type="button" className="mixer-immersive-overlay" onClick={start} data-testid="mixer-tap-to-start">

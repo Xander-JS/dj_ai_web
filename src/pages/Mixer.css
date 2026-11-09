@@ -1,5 +1,6 @@
 /* Ocupa exactamente el área de trabajo: la consola se ajusta dentro, sin desplazamiento */
 .mixer-page-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;

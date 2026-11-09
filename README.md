@@ -87,3 +87,17 @@ export default defineConfig([
 ])
 
 ```
+
+## DeepSeek automatic mixing
+
+Automatic mixing requests `/api/ai/mix-plan` from the FastAPI backend. Vite proxies this path to port 8000 in development. Local harmonic/tempo ranking prepares the next deck immediately; DeepSeek plans the prepared pair with an early entry point, transition length, and bounded adjustments targeting either deck. EQ, filter and volume move from the beginning even while the request is pending. Local fallback starts an overlap after 64 beats (or earlier near the track end). The browser validates the plan and runs the audio controls locally. Missing login, unavailable service, invalid plans or quota exhaustion preserve local mixing. Audio files and waveforms never enter the request.
+
+Automatic cues use vacant slots in order 5–8, then 1–4, without replacing saved cues. Their positions are beat-based preparation markers, not inferred musical sections. Manual cue writes are serialized with automatic creation. Manual controls retain priority for five seconds after release. BAR SYNC requires confirmed grid metadata; the mode never confirms downbeats itself. A new lead track cancels obsolete planning; disabling the mode aborts requests and removes its timer and listeners.
+
+Install `server/requirements.txt`, then set **server environment variables** `DEEPSEEK_API_KEY`, `SUPABASE_URL` and `SUPABASE_ANON_KEY`. The backend verifies the user's bearer token through Supabase before spending provider tokens. Process environment variables take precedence. For local use the backend also reads root `.env.local` then `.env`, and accepts `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` as fallbacks for the public Supabase configuration. The DeepSeek key remains server-only.
+
+Production: run `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1` from `server/`, behind HTTPS. Serve the built frontend and reverse-proxy `/api/ai/mix-plan` to this service on the same origin. Never publish the provider key as a `VITE_*` variable. The process enforces one concurrent call, at least 15 seconds between calls, and at most 60 calls per hour per authenticated user. This limiter is process-local: keep one worker/replica; shared persistent quotas are required before scaling horizontally. Restarting the backend resets its hourly counters.
+
+Each activation plans a reference track at most once, with at most five candidates, eight adjustments and 700 output tokens. There are no automatic retries or periodic model calls. Stopping/unmounting aborts the client request; a disconnect cancels the backend task and closes the upstream connection. A request already accepted by the provider may still be billed. Calls that failed or were cancelled also count towards the backend quota.
+
+Tests: `cd server && .venv/bin/python -m unittest discover -s tests`, plus `npm test` at repository root. These use simulated provider responses and do not certify subjective musical quality or a live deployment.

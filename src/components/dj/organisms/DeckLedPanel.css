@@ -1,8 +1,17 @@
-/* Fila de MODO y display LED, al ancho de DOWNBEAT & COMPÁS */
+/* Fila de avisos contextuales, MODO y display LED, al ancho de DOWNBEAT & COMPÁS */
 .deck-led-panel {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.deck-led-panel__notices {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 11px 0 5px;
+  min-height: 18px;
   min-width: 0;
 }

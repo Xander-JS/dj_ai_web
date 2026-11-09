@@ -98,6 +98,17 @@
   margin-top: var(--sd-gap-2);
 }
 
+/* Botón "Cerrar sesión": borde 2px en tinta; hover/foco con un relleno más claro del mismo tono */
+.sd-profile-band__actions .sd-button--ghost {
+  border: 2px solid var(--sd-ink);
+  background-color: transparent;
+}
+
+.sd-profile-band__actions .sd-button--ghost:hover:not(:disabled),
+.sd-profile-band__actions .sd-button--ghost:focus-visible {
+  background-color: color-mix(in srgb, var(--sd-ink) 14%, transparent);
+}
+
 .sd-profile-band__notice {
   max-width: 36rem;
 }

@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured, recoveryLinkFromUrl, AVATARS_BUCKET } from '../services/supabase/client';
+import { stopAllAudioPlayback } from '../services/player/playerService';
 import type { ProfileRow } from '../types/database';
 import { buildAvatarPath } from '../utils/avatarFile';
 
@@ -60,6 +61,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!active) return;
         const { data: { subscription } } = client.auth.onAuthStateChange((event, nextSession) => {
           setSession(nextSession);
+          // Detener toda reproducción activa si la sesión se cierra externamente
+          if (event === 'SIGNED_OUT') {
+            stopAllAudioPlayback();
+          }
           // El enlace del correo de recuperación abre una sesión temporal para cambiar la contraseña
           if (event === 'PASSWORD_RECOVERY') setPasswordRecovery('active');
         });
@@ -109,11 +114,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signOut = useCallback(async () => {
-    const { error } = await (await getSupabase()).auth.signOut();
-    if (error) throw error;
-    // Limpia ya el estado local para que la redirección a "/" no vea una sesión residual
-    setSession(null);
-    setProfile(null);
+    try {
+      const { error } = await (await getSupabase()).auth.signOut();
+      if (error) throw error;
+    } finally {
+      // Detiene de inmediato cualquier reproducción de audio en curso al cerrar sesión
+      stopAllAudioPlayback();
+      // Limpia ya el estado local para que la redirección a "/" no vea una sesión residual
+      setSession(null);
+      setProfile(null);
+    }
   }, []);
 
   const updatePassword = useCallback(async (password: string) => {

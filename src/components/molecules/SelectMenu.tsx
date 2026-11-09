@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { Icon } from '../atoms/Icon';
 import '../atoms/SelectField.css';
+import { INPUT_MAX_LENGTH } from '../../config/constants';
 import './SelectMenu.css';
 
 export interface SelectMenuOption<T extends string = string> {
@@ -280,6 +281,7 @@ export function SelectMenu<T extends string>({
               <input
                 ref={searchRef}
                 type="text"
+                maxLength={INPUT_MAX_LENGTH}
                 role="combobox"
                 aria-label={searchPlaceholder}
                 aria-expanded="true"

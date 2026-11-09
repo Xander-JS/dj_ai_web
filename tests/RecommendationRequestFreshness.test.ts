@@ -46,7 +46,7 @@ describe('Recommendation request freshness', () => {
     const source = fs.readFileSync(path.resolve(process.cwd(), 'src/components/dashboard/SmartRecommendationCard.tsx'), 'utf8');
     const awaitIndex = source.indexOf('const explanationResponse = await getTrackRecommendationExplanations(');
     const freshnessGuardIndex = source.indexOf('if (!isCurrentRequest()) return;', awaitIndex);
-    const applyIndex = source.indexOf('setRecommendationResult({', freshnessGuardIndex);
+    const applyIndex = source.indexOf('recommendationStore.update({', freshnessGuardIndex);
 
     assert.ok(awaitIndex >= 0);
     assert.ok(freshnessGuardIndex > awaitIndex);

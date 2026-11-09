@@ -14,7 +14,7 @@
 
 .display-mode-indicator__title {
   color: var(--console-silkscreen);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.16em;
 }
@@ -29,7 +29,7 @@
   align-items: center;
   gap: 5px;
   color: var(--console-silkscreen-dim);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.14em;
   transition: color 0.15s ease;

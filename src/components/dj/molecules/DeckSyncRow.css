@@ -9,7 +9,7 @@
 .deck-sync-row__key {
   width: 100%;
   padding: 0 3px;
-  font-size: clamp(8px, 2.3cqi, 12px);
+  font-size: clamp(10px, 2.6cqi, 14px);
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;

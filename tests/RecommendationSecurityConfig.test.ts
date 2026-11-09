@@ -6,7 +6,7 @@ import { buildGeminiPrompt, geminiDevApiPlugin } from '../vite.config.ts';
 
 test('Gemini middleware is registered only on the Vite development server without loading environment files', () => {
   const source = fs.readFileSync('vite.config.ts', 'utf8');
-  assert.match(source, /plugins:\s*\[react\(\),\s*geminiDevApiPlugin\(apiKey\)\]/);
+  assert.match(source, /plugins:\s*\[react\(\),\s*geminiDevApiPlugin\(apiKey,\s*provider\)\]/);
   assert.match(source, /configureServer\(server:\s*ViteDevServer\)/);
   assert.doesNotMatch(source, /configurePreviewServer/);
 });

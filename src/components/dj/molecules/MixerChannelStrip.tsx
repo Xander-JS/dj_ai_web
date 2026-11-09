@@ -77,6 +77,7 @@ export const MixerChannelStrip: React.FC<MixerChannelStripProps> = ({ deckId, is
           {knob('low', 'mixer.low', channel.eq.low, (value) => setChannelEq(deckId, 'low', value))}
         </div>
         <ConsoleKnob
+          className="mixer-channel__filter"
           tone={tone}
           bipolar
           defaultValue={50}

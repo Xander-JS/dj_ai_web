@@ -39,10 +39,12 @@ import { useAuth } from '../context/AuthContext';
 import {
   ACCENT_COLORS,
   AUTO_TRANSITION_BEATS,
+  CONSOLE_DESIGNS,
   DEFAULT_SETTINGS,
   BUFFER_SIZES,
   CROSSFADER_CURVES,
   JOG_DISCS,
+  PAGE_BACKGROUNDS,
   PITCH_RANGES,
   SYNC_RANGE_MAX,
   SYNC_RANGE_MIN,
@@ -52,9 +54,12 @@ import {
   useSettingsStore,
   type AppLanguage,
   type AppSettings,
+  type ConsoleDesign,
   type JogDisc,
+  type PageBackground,
   type ThemeMode,
 } from '../store/useSettingsStore';
+import '../design-system/keycaps.css';
 import './Settings.css';
 
 type Tab = 'general' | 'appearance' | 'language' | 'audio' | 'playback' | 'shortcuts' | 'library';
@@ -167,6 +172,24 @@ const DiscPreview: React.FC<{ disc: JogDisc }> = ({ disc }) => (
 const LanguagePreview: React.FC<{ code: string }> = ({ code }) => (
   <span className="sd-language-preview">
     <span className="sd-language-preview__code">{code}</span>
+  </span>
+);
+
+/** Maqueta de la consola en cada diseño: dos decks y el mixer, dibujados con su propio aspecto */
+const ConsoleDesignPreview: React.FC<{ design: ConsoleDesign }> = ({ design }) => (
+  <span className={clsx('sd-console-preview', `sd-console-preview--${design}`)} aria-hidden="true">
+    {(['a', 'b'] as const).map((side, index) => (
+      <span key={side} className="sd-console-preview__deck" data-side={side} style={{ order: index === 0 ? 0 : 2 }}>
+        <span className="sd-console-preview__jog" />
+        <span className="sd-console-preview__knobs">
+          <i /><i /><i />
+        </span>
+      </span>
+    ))}
+    <span className="sd-console-preview__mixer" style={{ order: 1 }}>
+      <span className="sd-console-preview__faders"><i /><i /></span>
+      <span className="sd-console-preview__xfader" />
+    </span>
   </span>
 );
 
@@ -333,13 +356,59 @@ export const Settings: React.FC = () => {
                     <ChoiceTiles<ThemeMode>
                       label={t('settings.theme_title')}
                       value={settings.theme}
-                      onChange={(theme) => updateSettings({ theme })}
+                      onChange={(theme) => {
+                        if (theme === 'light' && settings.consoleDesign === 'classic') {
+                          updateSettings({ theme, consoleDesign: 'system' });
+                        } else {
+                          updateSettings({ theme });
+                        }
+                      }}
                       options={(['light', 'dark'] as const).map((theme) => ({
                         value: theme,
                         label: t(`settings.theme_option.${theme}`),
                         preview: <ThemePreview theme={theme} />,
                       }))}
                     />
+                  )}
+                />
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.console_design_title')}
+                  description={t('settings.console_design_desc')}
+                  control={(
+                    <div className="sd-settings__console-block">
+                      <ChoiceTiles<ConsoleDesign>
+                        label={t('settings.console_design_title')}
+                        value={settings.consoleDesign}
+                        onChange={(consoleDesign) => {
+                          if (consoleDesign === 'classic' && settings.theme !== 'dark') {
+                            return;
+                          }
+                          updateSettings({ consoleDesign });
+                        }}
+                        options={CONSOLE_DESIGNS.map((design) => {
+                          const isClassic = design === 'classic';
+                          const isDarkOnly = isClassic && settings.theme !== 'dark';
+                          return {
+                            value: design,
+                            label: t(`settings.console_design_option.${design}`),
+                            hint: isDarkOnly
+                              ? t('settings.console_design_dark_only')
+                              : design === DEFAULT_SETTINGS.consoleDesign
+                                ? t('settings.console_design_default')
+                                : undefined,
+                            disabled: isDarkOnly,
+                            disabledReason: isDarkOnly ? t('settings.console_design_dark_only_notice') : undefined,
+                            preview: <ConsoleDesignPreview design={design} />,
+                          };
+                        })}
+                      />
+                      {settings.theme !== 'dark' && (
+                        <Notice tone="info" className="sd-settings__console-notice">
+                          {t('settings.console_design_dark_only_notice')}
+                        </Notice>
+                      )}
+                    </div>
                   )}
                 />
                 <SettingRow
@@ -360,6 +429,29 @@ export const Settings: React.FC = () => {
                         preview: <span className="sd-accent-swatch" data-accent={color} />,
                       }))}
                     />
+                  )}
+                />
+                <SettingRow
+                  layout="stacked"
+                  title={t('settings.page_bg_title')}
+                  description={t('settings.page_bg_desc')}
+                  control={(
+                    // El contenedor contrasta con la intensidad de las muestras del tema vigente para resaltarlas
+                    <div className="sd-page-bg-field">
+                      <ChoiceTiles<PageBackground>
+                        variant="swatch"
+                        label={t('settings.page_bg_title')}
+                        value={settings.pageBackground}
+                        onChange={(pageBackground) => updateSettings({ pageBackground })}
+                        options={PAGE_BACKGROUNDS.map((bg) => ({
+                          value: bg,
+                          label: t(`settings.page_bg.${bg}`),
+                          hint: bg === DEFAULT_SETTINGS.pageBackground ? t('settings.accent_default') : undefined,
+                          // La muestra reproduce el fondo real al tema vigente (Settings.css)
+                          preview: <span className="sd-page-bg-swatch" data-page-bg={bg} data-theme={settings.theme} />,
+                        }))}
+                      />
+                    </div>
                   )}
                 />
                 <SettingRow
@@ -616,7 +708,9 @@ function buildReadouts(
     case 'appearance':
       return [
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
+        { label: t('settings.readout.console'), value: t(`settings.console_design_option.${settings.consoleDesign}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
+        { label: t('settings.readout.background'), value: t(`settings.page_bg.${settings.pageBackground}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
         { label: t('settings.readout.disc'), value: t('settings.disc_option', { n: JOG_DISCS.indexOf(settings.jogDisc) + 1 }) },
         { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },

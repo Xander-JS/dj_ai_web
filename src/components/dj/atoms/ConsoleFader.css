@@ -102,19 +102,19 @@
 .console-fader__tick {
   position: absolute;
   background-color: var(--console-tick);
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .console-fader--vertical .console-fader__tick {
   left: 2px;
   right: 2px;
-  height: 1px;
+  height: 1.5px;
   bottom: calc(var(--tick) * 100%);
   /* Marca partida: no cruza la ranura */
   background: linear-gradient(90deg,
-    var(--console-tick) 0 calc(50% - var(--slot-thickness)),
-    transparent calc(50% - var(--slot-thickness)) calc(50% + var(--slot-thickness)),
-    var(--console-tick) calc(50% + var(--slot-thickness)) 100%);
+      var(--console-tick) 0 calc(50% - var(--slot-thickness)),
+      transparent calc(50% - var(--slot-thickness)) calc(50% + var(--slot-thickness)),
+      var(--console-tick) calc(50% + var(--slot-thickness)) 100%);
 }
 
 .console-fader--vertical.console-fader--inverted .console-fader__tick {
@@ -125,12 +125,12 @@
 .console-fader--horizontal .console-fader__tick {
   top: calc(50% - var(--cap-h) / 2 + 2px);
   bottom: calc(50% - var(--cap-h) / 2 + 2px);
-  width: 1px;
+  width: 1.5px;
   left: calc(var(--tick) * 100%);
   background: linear-gradient(180deg,
-    var(--console-tick) 0 calc(50% - var(--slot-thickness)),
-    transparent calc(50% - var(--slot-thickness)) calc(50% + var(--slot-thickness)),
-    var(--console-tick) calc(50% + var(--slot-thickness)) 100%);
+      var(--console-tick) 0 calc(50% - var(--slot-thickness)),
+      transparent calc(50% - var(--slot-thickness)) calc(50% + var(--slot-thickness)),
+      var(--console-tick) calc(50% + var(--slot-thickness)) 100%);
 }
 
 .console-fader__tick.is-major {
@@ -138,11 +138,13 @@
 }
 
 .console-fader--vertical .console-fader__tick.is-major {
+  height: 2px;
   left: 0;
   right: 0;
 }
 
 .console-fader--horizontal .console-fader__tick.is-major {
+  width: 2px;
   top: calc(50% - var(--cap-h) / 2 - 2px);
   bottom: calc(50% - var(--cap-h) / 2 - 2px);
 }
@@ -199,12 +201,12 @@
   left: 8%;
   right: 8%;
   /* La línea blanca de la imagen está al 46,6 % del alto del cuerpo */
-  top: calc(46.6% - 1px);
-  height: 2px;
-  border-radius: 1px;
+  top: calc(46.6% - 1.75px);
+  height: 4px;
+  border-radius: 2px;
   background-color: var(--console-tone);
   box-shadow: 0 0 4px var(--console-tone);
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
 .console-fader__input {
@@ -234,6 +236,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .console-fader__cap,
   .console-fader__fill {
     transition: none;

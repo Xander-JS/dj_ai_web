@@ -55,11 +55,6 @@
   --layout-sidebar-width: 15.625rem; /* 250px */
   --layout-player-height: 6.25rem;  /* 100px: aire alrededor de Play en la barra */
   --layout-gutter: var(--space-4);
-  /* Marco de la aplicación: consola, Home, Login y Registro comparten este ancho, centrado.
-     En escritorio ocupa el 92 % de la ventana; cuando eso deja menos de 80rem (decks y mixer
-     necesitan espacio) crece hasta 80rem, y en pantallas pequeñas llega casi al borde con un
-     margen mínimo. En vw para que las capas fijas (avisos) puedan alinearse con él. */
-  --layout-frame-width: max(92vw, min(100vw - 2 * var(--layout-gutter), 80rem));
 
   /* TOUCH */
   --touch-target-min: var(--size-md); /* 40px */
@@ -144,11 +139,11 @@
   --color-error: hsl(348, 80%, 50%);
 
   /* Backgrounds & Surfaces (Light) */
-  --bg-base: hsl(var(--hue-neutral), 10%, 97%);
-  --bg-surface: hsl(0, 0%, 100%);
+  --bg-base: var(--sd-page-bg, #f7f6f2);
+  --bg-surface: var(--sd-page-bg, #f7f6f2);
   --bg-surface-hover: hsl(var(--hue-neutral), 15%, 94%);
   --bg-surface-active: hsl(var(--hue-neutral), 15%, 90%);
-  --bg-elevated: hsl(0, 0%, 100%);
+  --bg-elevated: var(--sd-page-bg, #f7f6f2);
   
   /* Text & Content (Light) */
   --text-primary: hsl(var(--hue-neutral), 20%, 10%);

@@ -129,4 +129,13 @@ describe('Entrada del Mixer', () => {
       assert.ok(nav.sidebar_show && nav.sidebar_hide, `Faltan las claves de la pestaña en ${lang}`);
     }
   });
+
+  it('al abrirla, la consola se desplaza a su lado y se desenfoca, sin quedar debajo', () => {
+    const css = read('src/layouts/DesktopLayout.css');
+    assert.match(css, /\.desktop-layout--sidebar-open \{[^}]*grid-template-columns: var\(--layout-sidebar-width\) minmax\(0, 1fr\);/);
+    assert.match(css, /grid-template-columns var\(--mixer-peek-duration\) var\(--mixer-peek-ease\)/);
+    assert.match(css, /\.desktop-layout--sidebar-open \.layout-main \{[^}]*filter: blur\(var\(--mixer-peek-blur\)\);/);
+    assert.match(css, /\.desktop-layout--mixer \.layout-main \{[^}]*transition: filter var\(--mixer-peek-duration\)/);
+    assert.match(css, /:root\[data-animations='off'\] \.desktop-layout--mixer \.layout-main/);
+  });
 });

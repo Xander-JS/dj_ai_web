@@ -1,10 +1,12 @@
 /* Ocupa exactamente el área de trabajo: la consola se ajusta dentro, sin desplazamiento */
 .mixer-page-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--layout-gutter);
+  /* Gutter mínimo: la consola aprovecha casi todo el ancho del área de trabajo */
+  padding: var(--space-2);
   background-color: var(--bg-base);
 }
 

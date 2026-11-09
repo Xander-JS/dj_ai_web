@@ -6,10 +6,11 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { audioEngine } from '../../audio';
-import { djStore } from '../../store/useDJStore';
-import { notificationCenter } from '../notifications/notificationCenter';
-import { PlayerQueue, type PlayerQueueState } from './playerQueue';
+import { audioEngine } from '../../audio/index.ts';
+import { djStore } from '../../store/useDJStore.ts';
+import { notificationCenter } from '../notifications/notificationCenter.ts';
+import { PlayerQueue, type PlayerQueueState } from './playerQueue.ts';
+import { recentPreview } from './recentPreview.ts';
 
 /** Deck que actúa como reproductor de la barra inferior. */
 export const PLAYER_DECK = 'A' as const;
@@ -40,4 +41,16 @@ audioEngine.onPlaybackEnded(PLAYER_DECK, () => {
 
 export function usePlayerQueue(): PlayerQueueState {
   return useSyncExternalStore(playerQueue.subscribe, playerQueue.getSnapshot, playerQueue.getSnapshot);
+}
+
+/**
+ * Detiene de forma inmediata toda reproducción activa en la aplicación:
+ * ambos decks de DJ (A y B) y la preescucha de canciones recientes.
+ */
+export function stopAllAudioPlayback(): void {
+  djStore.pauseDeck('A');
+  djStore.pauseDeck('B');
+  audioEngine.pauseDeck('A');
+  audioEngine.pauseDeck('B');
+  recentPreview.stop();
 }

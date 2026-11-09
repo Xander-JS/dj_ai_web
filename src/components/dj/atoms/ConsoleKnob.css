@@ -2,20 +2,24 @@
    fija el tamaño con --knob-width (el Master es un poco mayor que los de canal). */
 .console-knob {
   --knob-width: 2.5rem;
+  --knob-cap-scale: 1.02;
+  --knob-arc-scale: 1.14;
 
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 6px;
   min-width: 0;
 }
 
 .console-knob--master {
   --knob-width: var(--knob-width-master, 3.1rem);
+  --knob-cap-scale: var(--knob-cap-scale-master, 1.04);
 }
 
 .console-knob--channel {
   --knob-width: var(--knob-width-channel, 2.5rem);
+  --knob-cap-scale: var(--knob-cap-scale-channel, 1.02);
 }
 
 /* El pomo queda centrado: LPF / HPF cuelgan a sus lados sin desplazarlo */
@@ -29,7 +33,7 @@
   top: 50%;
   transform: translateY(-50%);
   color: var(--console-silkscreen-dim);
-  font-size: 8px;
+  font-size: 12.5px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.06em;
   line-height: 1;
@@ -38,11 +42,11 @@
 }
 
 .console-knob__side--start {
-  right: calc(100% + 3px);
+  right: calc(100% + 6px);
 }
 
 .console-knob__side--end {
-  left: calc(100% + 3px);
+  left: calc(100% + 6px);
 }
 
 /* Proporción nativa de knob-main.png (1855×1623): la imagen nunca se deforma */
@@ -77,17 +81,23 @@
   pointer-events: none;
   fill: none;
   stroke-linecap: round;
+  scale: var(--knob-arc-scale, 1.14);
+  transform-origin: 50% 57.2%;
 }
 
 .console-knob__arc-track {
   stroke: hsl(220 8% 30% / 0.55);
-  stroke-width: 70;
+  stroke-width: 160;
 }
 
 .console-knob__arc-value {
   stroke: var(--console-tone);
-  stroke-width: 82;
+  stroke-width: 160;
   transition: opacity 0.2s ease;
+}
+
+.console-knob--master .console-knob__arc-value {
+  stroke-width: 200;
 }
 
 /* El halo va en el <svg> (elemento HTML): los filtros CSS sobre nodos SVG internos no son fiables */
@@ -102,6 +112,7 @@
   overflow: hidden;
   border-radius: 50%;
   pointer-events: none;
+  scale: var(--knob-cap-scale, 1);
   transform: rotate(var(--knob-angle));
   transition: transform 70ms linear;
   box-shadow: 0 2px 5px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.5);
@@ -128,6 +139,7 @@
   position: absolute;
   aspect-ratio: 1;
   pointer-events: none;
+  scale: var(--knob-cap-scale, 1);
   transform: rotate(var(--knob-pointer));
   transition: transform 70ms linear;
 }
@@ -136,12 +148,17 @@
   content: '';
   position: absolute;
   top: 4%;
-  left: calc(50% - 1px);
-  width: 2px;
+  left: calc(50% - 1.75px);
+  width: 3.5px;
   height: 30%;
-  border-radius: 1px;
+  border-radius: 2px;
   background: hsl(0 0% 100%);
   box-shadow: 0 0 2px rgb(0 0 0 / 0.7);
+}
+
+.console-knob--master .console-knob__pointer::before {
+  left: calc(50% - 2.25px);
+  width: 4.5px;
 }
 
 /* El input nativo conserva teclado y accesibilidad; el puntero lo gestiona el dial */
@@ -156,13 +173,17 @@
 }
 
 .console-knob__dial:has(.console-knob__input:focus-visible) {
+  outline: none;
+}
+
+.console-knob__dial:has(.console-knob__input:focus-visible) .console-knob__cap {
   outline: 2px solid var(--console-focus);
-  outline-offset: 2px;
+  outline-offset: -1px;
 }
 
 .console-knob__label {
   color: var(--console-silkscreen-dim);
-  font-size: 9px;
+  font-size: 13.5px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.1em;
   line-height: 1;
@@ -179,6 +200,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .console-knob__cap,
   .console-knob__pointer {
     transition: none;

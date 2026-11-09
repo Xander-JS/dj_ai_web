@@ -7,13 +7,19 @@ import { ACCENT_HUES, type AppSettings } from '../../store/useSettingsStore.ts';
 
 /** Escribe tema, densidad, acento, movimiento e interfaz en el elemento raíz (`<html>`). */
 export function applyAppearanceToRoot(
-  settings: Pick<AppSettings, 'theme' | 'density' | 'accentColor'> & Partial<Pick<AppSettings, 'animations' | 'experimentalInterface'>>,
+  settings: Pick<AppSettings, 'theme' | 'density' | 'accentColor' | 'consoleDesign'> & Partial<Pick<AppSettings, 'animations' | 'experimentalInterface' | 'pageBackground'>>,
   root: Pick<HTMLElement, 'setAttribute' | 'style'>,
 ): void {
   root.setAttribute('data-theme', settings.theme);
   root.setAttribute('data-density', settings.density);
+  // data-page-bg tiñe el fondo general de la página a la luminosidad de referencia del tema (tokens.css)
+  root.setAttribute('data-page-bg', settings.pageBackground ?? 'default');
   // data-accent selecciona los valores --sd-accent* de tokens.css (identidad v2)
   root.setAttribute('data-accent', settings.accentColor);
+  // data-console-design elige el reskin plano de la consola (consoleDesignSystem.css).
+  // La consola Classic solo aplica en modo oscuro; en modo claro se usa siempre system.
+  const effectiveConsoleDesign = settings.theme === 'light' && settings.consoleDesign === 'classic' ? 'system' : settings.consoleDesign;
+  root.setAttribute('data-console-design', effectiveConsoleDesign);
   // Las animaciones opcionales se apagan desde CSS con :root[data-animations='off']
   root.setAttribute('data-animations', settings.animations === false ? 'off' : 'on');
   // Solo marca la preferencia; la disposición alternativa todavía no existe

@@ -72,10 +72,10 @@ export class TransitionPlayer {
    * Lleva el crossfader del deck saliente al opuesto en `beats` pulsos.
    * Devuelve false si no hay destino conectado o el deck saliente no tiene BPM.
    */
-  public start(fromDeck: DeckId): boolean {
+  public start(fromDeck: DeckId, fallbackSeconds?: number): boolean {
     const target = this.target;
     if (!target) return false;
-    const durationSec = this.computeDurationSeconds(target.getDeckBpm(fromDeck));
+    const durationSec = this.computeDurationSeconds(target.getDeckBpm(fromDeck)) ?? (Number.isFinite(fallbackSeconds) && fallbackSeconds! > 0 ? fallbackSeconds! : null);
     if (durationSec === null) return false;
 
     this.cancel();

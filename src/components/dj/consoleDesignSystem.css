@@ -1,0 +1,448 @@
+/* ==========================================================================
+   SYSTEM DJ — Console design "system" (reskin plano v2)
+   Diseño predeterminado de la consola: misma disposición y mismos componentes, pero
+   vestidos con la identidad de póster plano del resto de la app (design-system/tokens.css):
+   papel y tinta, un solo acento naranja, campos planos, radios grandes y SIN degradados,
+   cristal, relieves ni sombras en reposo. Las superficies se separan por color y por un filo
+   de tinta, no por luz.
+
+   Se activa con data-console-design="system" en <html> (appearance.ts). "classic" no carga
+   nada de aquí, así que conserva el hardware original intacto. Todo se logra reescribiendo los
+   tokens --console-* (la mitad del aspecto) y aplanando los controles táctiles que llevaban su
+   relieve a mano; no se toca ni la lógica ni la disposición. Los displays (pantalla digital central,
+   matrices LED laterales y mini-LCD) comparten un chip de tinta suave (--console-display): siguen
+   siendo un cristal hundido, pero no un negro de hardware que choque sobre el papel del modo claro.
+   ========================================================================== */
+
+[data-console-design='system'] .mixer-page-container {
+  /* Tipografía de la identidad en toda la consola (pesos = jerarquía). Los componentes usan
+     var(--font-family-sans), así que se remapea el token; el mono se deja para los displays. */
+  font-family: var(--sd-font);
+  --font-family-sans: var(--sd-font);
+
+  /* Tonos de canal: A = acento cálido (sigue al acento elegido); B = tono frío de la identidad;
+     Master neutro a propósito (es la suma de ambas pistas, no pertenece a ninguna). */
+  --console-tone-a: var(--sd-accent);
+  --console-tone-b: var(--sd-console-deck-b);
+  --console-tone-master: var(--sd-ink-soft);
+
+  /* Carcasa y placas: campos planos, sin textura ni sombra; separación por color + filo */
+  --console-plastic: var(--sd-surface);
+  --console-housing-shadow: none;
+  --console-plate: var(--sd-paper);
+  --console-plate-edge: color-mix(in srgb, var(--sd-ink) 14%, transparent);
+  --console-plate-shadow: none;
+  --console-divider: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+
+  /* Serigrafía = tinta; foco = foco de la identidad */
+  --console-silkscreen: var(--sd-ink);
+  --console-silkscreen-dim: var(--sd-ink-soft);
+  --console-focus: var(--sd-focus);
+
+  /* Tooltip de avisos contextuales con alto contraste mediante tinta invertida */
+  --console-tooltip-bg: var(--sd-inverse, #1d1d1d);
+  --console-tooltip-ink: var(--sd-inverse-ink, #f4f4f4);
+  --console-tooltip-border: color-mix(in srgb, var(--sd-inverse-ink, #fff) 14%, transparent);
+
+  /* Teclas y cuerpos de control: campo plano con filo de tinta. La luz de las teclas sigue al
+     tono del deck que las contiene (cálido en A, frío en B), no a un único naranja global: así
+     cada control se enciende con la identidad de su pista y no todo es del mismo color. Fuera de
+     un deck (sin --console-tone) cae al acento. */
+  --console-key-body: var(--sd-surface);
+  --console-key-edge: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+  --console-key-light: var(--console-tone, var(--sd-accent));
+
+  /* LEDs: colores funcionales planos, sin cúpula ni halo */
+  --console-led-unlit: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+  --console-led-neutral: var(--sd-ink-soft);
+  /* Auto Loop: el tono del propio deck, para no chocar con el otro reproductor */
+  --console-loop: var(--console-tone, var(--sd-accent));
+
+  /* Chip de los displays (pantalla digital central, matrices LED laterales y mini-LCD):
+     en modo claro adopta un tono claro (#e2e6eb) para integrarse con la consola clara,
+     y en modo oscuro baja a negro / casi negro (#121418). */
+  --console-display: #e2e6eb;
+  --console-display-well: #d5dbe2;
+  --console-display-edge: color-mix(in srgb, var(--sd-ink) 18%, transparent);
+  --console-led-matrix-dot: color-mix(in srgb, var(--sd-ink) 7%, transparent);
+
+  /* Mini LCD (DOWNBEAT & COMPÁS): en modo claro tinta oscura para máximo contraste */
+  --console-lcd-bg: var(--console-display);
+  --console-lcd-edge: var(--console-display-edge);
+  --console-lcd-ink: var(--sd-ink);
+
+  /* Placa del mixer central: sincronizada con el well metálico claro de la consola */
+  --console-mixer-bg: var(--console-display-well);
+
+  /* Ranuras, marcas y vúmetros: hueco plano de tinta */
+  --console-slot: color-mix(in srgb, var(--sd-ink) 10%, transparent);
+  --console-tick: var(--sd-ink-soft);
+  --console-meter-well: #111e;
+  --console-meter-bg: var(--console-meter-well);
+  --console-meter-scale-opacity: 0.35;
+
+
+
+
+  /* -------------------------------------------------------------- CARCASA */
+  & .dj-console__housing {
+    border: 1px solid color-mix(in srgb, var(--sd-ink) 16%, transparent);
+    border-radius: var(--sd-radius-panel);
+    box-shadow: none;
+  }
+
+  /* Zonas de color: cada placa de deck lleva un lavado tenue de su propio tono (cálido A / frío B),
+     así los dos reproductores se leen como dos sin dejar de ser la misma consola. El mixer central
+     se queda en papel: es el núcleo limpio y con presencia entre dos campos de color. --console-tone
+     se resuelve por deck porque .dj-deck es además .console-tone-a/b. */
+  & .dj-deck {
+    border-radius: var(--sd-radius-inset);
+    background: color-mix(in srgb, var(--console-tone) 7%, var(--sd-paper));
+    box-shadow: none;
+  }
+
+  & .mixer-console {
+    background: var(--console-display-well);
+  }
+
+  /* --------------------------------------------------------------- TECLAS */
+  /* Reposo con identidad: un lavado tenue del tono del deck (cálido A / frío B; acento fuera de
+     un deck) para que las teclas no sean todas del mismo gris neutro. La luz encendida lo tapa. */
+  & .console-key {
+    background: color-mix(in srgb, var(--console-tone, var(--sd-accent)) 7%, var(--sd-surface));
+    border-color: var(--console-key-edge);
+    box-shadow: none;
+  }
+
+  & .console-key:active:not(:disabled, [aria-disabled='true']) {
+    box-shadow: none;
+  }
+
+  & .console-key.is-lit {
+    color: color-mix(in srgb, var(--key-light) 72%, var(--sd-ink));
+    border-color: var(--key-light);
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  /* Encendida a tope: la luz rellena la tecla como un campo de color de la identidad */
+  & .console-key.is-filled {
+    background: var(--key-light);
+    border-color: var(--key-light);
+    color: var(--sd-field-ink);
+    text-shadow: none;
+  }
+
+  /* ---------------------------------------------------- BOTÓN DE HARDWARE */
+  & .hw-button__well {
+    background: none;
+    box-shadow: none;
+  }
+
+  & .hw-button__cap {
+    background: color-mix(in srgb, var(--console-tone, var(--sd-accent)) 7%, var(--sd-surface));
+    border: 1px solid var(--console-key-edge);
+    box-shadow: none;
+    color: var(--sd-ink-soft);
+  }
+
+  /* Bisel del Auto Loop: sin fondo gris contenedor */
+  & .deck-loop__bezel {
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  & .hw-button__cap.is-lit {
+    border-color: var(--hw-light);
+    color: var(--hw-light);
+  }
+
+  & .hw-button__cap.is-lit .hw-button__icon {
+    filter: none;
+  }
+
+  & .hw-button__cap:active:not(:disabled) {
+    box-shadow: none;
+  }
+
+  /* -------------------------------------- CUE / PLAY (botones redondos) */
+  & .deck-round-key {
+    background: var(--sd-surface);
+    border-color: color-mix(in srgb, var(--round-light) 60%, transparent);
+    box-shadow: none;
+    color: color-mix(in srgb, var(--round-light) 72%, var(--sd-ink));
+  }
+
+  & .deck-round-key:active:not(:disabled),
+  & .deck-round-key.is-lit {
+    background: var(--round-light);
+    border-color: var(--round-light);
+    color: var(--sd-field-ink);
+    box-shadow: none;
+  }
+
+  /* ---------------------------------------------- SELECTOR ROTATIVO (curva) */
+  & .console-selector__knob {
+    border: 1px solid var(--console-key-edge);
+    background: var(--sd-surface);
+    box-shadow: none;
+  }
+
+  & .console-selector__indicator::before {
+    background-color: var(--sd-ink);
+    box-shadow: none;
+  }
+
+  /* ----------------------------------------------- POTENCIÓMETROS (EQ/GAIN) */
+  /* Pomo de imagen → disco plano con línea indicadora; el arco de valor se conserva concéntrico */
+  & .console-knob__dial {
+    aspect-ratio: 1855 / 1623;
+  }
+
+  & .console-knob__scale,
+  & .console-knob__cap img,
+  & .console-knob__cap::after {
+    display: none;
+  }
+
+  & .console-knob__cap {
+    background: var(--sd-surface);
+    border: 1px solid var(--console-key-edge);
+    box-shadow: none;
+  }
+
+  /* El botón circular del master toma el tono de fondo del housing (carcasa que contiene CH1, CH2 y Mixer),
+     reforzado con un tinte más intenso para resaltar */
+  & .console-tone-master .console-knob__cap,
+  & .console-knob--master .console-knob__cap {
+    background: color-mix(in srgb, var(--sd-ink) 24%, var(--console-plastic));
+    border: 1px solid color-mix(in srgb, var(--sd-ink) 35%, transparent);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+  }
+
+  /* Los knobs de canal adoptan la identidad cromática de su respectiva pista (A / B) */
+  & .console-tone-a .console-knob__cap,
+  & .console-tone-b .console-knob__cap {
+    background: var(--console-tone);
+    border: 1px solid color-mix(in srgb, var(--console-tone) 60%, var(--sd-ink));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  }
+
+  & .console-knob__arc-track {
+    stroke: color-mix(in srgb, var(--sd-ink) 16%, transparent);
+  }
+
+  & .console-knob__arc--value {
+    filter: none;
+  }
+
+  & .console-knob__pointer::before {
+    background: var(--sd-ink);
+    box-shadow: none;
+  }
+
+  & .console-tone-a .console-knob__pointer::before,
+  & .console-tone-b .console-knob__pointer::before {
+    background: var(--sd-field-ink);
+  }
+
+  /* ------------------------------------------------------ FADERS Y PITCH */
+  & .console-fader__slot {
+    box-shadow: none;
+  }
+
+  & .console-fader__fill {
+    box-shadow: none;
+  }
+
+  /* Pomo de imagen → cápsula plana de tinta con línea de acento */
+  & .console-fader__cap {
+    filter: none;
+  }
+
+  & .console-fader__cap-body {
+    background: var(--sd-ink);
+  }
+
+  & .console-fader__cap-body img {
+    display: none;
+  }
+
+  & .deck-pitch {
+    border-color: var(--console-key-edge);
+    background: color-mix(in srgb, var(--sd-ink) 5%, transparent);
+    box-shadow: none;
+  }
+
+  & .deck-pitch__track::before {
+    box-shadow: none;
+  }
+
+  & .deck-pitch__bend {
+    background: var(--sd-surface);
+    border-color: var(--console-key-edge);
+    box-shadow: none;
+  }
+
+  & .deck-pitch__bend.is-active {
+    border-color: var(--console-tone);
+    box-shadow: none;
+  }
+
+  /* --------------------------------------------------------------- DISCO */
+  /* Se conserva el disco giratorio (es el contenido elegido en Ajustes); solo se aplana el aro */
+  & .jog-wheel__ring {
+    background: var(--sd-surface);
+    background-blend-mode: normal;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--sd-ink) 18%, transparent);
+  }
+
+  /* ----------------------------------------------------------- VÚMETROS */
+  & .level-meter,
+  & .mixer-master__meter {
+    box-shadow: none;
+  }
+
+  & .level-meter__fill {
+    filter: none;
+  }
+
+  & .level-meter__clip.is-on {
+    box-shadow: none;
+  }
+
+  /* Display LED (GUÍA / MAPA): en modo claro pantalla clara con matriz de puntos nítidos */
+  & .led-matrix {
+    background: var(--console-display);
+    border-color: var(--console-display-edge);
+    box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.1), inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  }
+
+  /* --------------------------------------------------------------- LEDs */
+  & .console-led {
+    background: var(--console-led-unlit);
+    box-shadow: none;
+  }
+
+  & .console-led.is-on {
+    background: var(--led-color);
+    box-shadow: none;
+  }
+
+  & .console-led.is-dim {
+    background: color-mix(in srgb, var(--led-color) 45%, var(--console-led-unlit));
+    box-shadow: none;
+  }
+
+  /* ---------------------------------------------------------- MINI LCD */
+  & .console-lcd {
+    background: var(--console-lcd-bg);
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  /* ----------------------------------------- PANTALLA DIGITAL (central) */
+  /* En modo claro la pantalla central pasa a un tono claro (#e2e6eb) con tipografías y líneas
+     en tinta oscura con alto contraste; en modo oscuro desciende a negro. */
+  & .digital-screen {
+    --screen-bg: var(--console-display);
+    --screen-well: var(--console-display-well);
+    --screen-ink: var(--sd-ink);
+    --screen-ink-dim: var(--sd-ink-soft);
+    --screen-ink-faint: color-mix(in srgb, var(--sd-ink) 38%, transparent);
+    --screen-line: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+    --screen-line-strong: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+    --screen-wave-bar-line: color-mix(in srgb, var(--sd-ink) 30%, transparent);
+    --screen-wave-tag-ink: #ffffff;
+    --screen-wave-cue-tag-ink: #ffffff;
+    background: var(--sd-surface);
+    border-color: color-mix(in srgb, var(--sd-ink) 16%, transparent);
+    box-shadow: none;
+  }
+
+  & .digital-screen__display {
+    background: var(--console-display);
+    box-shadow: inset 0 0 0 1px var(--console-display-edge), inset 0 1px 4px rgb(0 0 0 / 0.1);
+  }
+
+  /* -------------------------------------------- PANELES DOWNBEAT & COMPÁS */
+  /* Paneles DOWNBEAT & COMPÁS: tinte del tono de su deck, para que el indicador A/B tenga color */
+  & .downbeat-panel {
+    background: color-mix(in srgb, var(--console-tone) 9%, var(--sd-paper));
+    border-color: color-mix(in srgb, var(--console-tone) 24%, transparent);
+    border-radius: var(--sd-radius-inset);
+    box-shadow: none;
+  }
+
+  & .downbeat-panel__deck {
+    text-shadow: none;
+  }
+
+  /* ----------------------------------------------------------- HOT CUES */
+  & .deck-hotcues__clear,
+  & .deck-hotcue-pad {
+    background: var(--sd-surface);
+    box-shadow: none;
+  }
+
+  /* Pad guardado: campo plano del color del cue, con filo; sin brillo ni halo */
+  & .deck-hotcue-pad.is-defined {
+    background: color-mix(in srgb, var(--pad-color) 22%, var(--sd-paper));
+    box-shadow: none;
+    color: var(--sd-ink);
+  }
+
+  & .deck-hotcue-pad:active:not(:disabled) {
+    box-shadow: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Modo oscuro: sobre papel casi negro un 7-9 % de tono apenas se ve, así que las zonas de
+   color de los decks y los paneles suben de proporción para seguir leyéndose como campos.
+   data-theme y data-console-design viven ambos en <html> (appearance.ts). Los tonos son el
+   mismo hex en ambos temas (como los campos); solo cambia la mezcla con el papel.
+   -------------------------------------------------------------------------- */
+[data-theme='dark'][data-console-design='system'] .mixer-page-container {
+  /* En oscuro el chip de los displays baja a casi negro: sobre el papel casi negro un gris medio
+     se leería como un bloque claro, no como un cristal hundido. */
+  --console-display: #121418;
+  --console-display-well: #181b20;
+  --console-display-edge: color-mix(in srgb, var(--sd-ink) 24%, transparent);
+  --console-led-matrix-dot: hsl(0 0% 100% / 0.055);
+  --console-lcd-bg: var(--console-display);
+  --console-lcd-edge: color-mix(in srgb, var(--sd-ink) 22%, transparent);
+  --console-lcd-ink: var(--sd-field-acid);
+
+  & .digital-screen {
+    --screen-bg: var(--console-display);
+    --screen-well: var(--console-display-well);
+    --screen-ink: hsl(210 20% 90%);
+    --screen-ink-dim: hsl(215 12% 60%);
+    --screen-ink-faint: hsl(215 10% 42%);
+    --screen-line: hsl(215 18% 16%);
+    --screen-line-strong: hsl(215 16% 28%);
+    --screen-wave-bar-line: hsl(0 0% 100% / 0.3);
+  }
+
+  & .led-matrix {
+    background: var(--console-display);
+    border-color: var(--console-lcd-edge);
+    box-shadow: none;
+  }
+
+  & .digital-screen__display {
+    background: var(--console-display);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sd-ink) 28%, transparent);
+  }
+
+  & .dj-deck {
+    background: color-mix(in srgb, var(--console-tone) 16%, var(--sd-paper));
+  }
+
+  & .downbeat-panel {
+    background: color-mix(in srgb, var(--console-tone) 20%, var(--sd-paper));
+    border-color: color-mix(in srgb, var(--console-tone) 34%, transparent);
+  }
+}

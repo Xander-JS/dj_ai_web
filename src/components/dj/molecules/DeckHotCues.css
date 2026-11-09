@@ -14,7 +14,7 @@
 
 .deck-hotcues__title {
   color: var(--console-silkscreen);
-  font-size: clamp(10px, 2.4cqi, 13px);
+  font-size: clamp(12px, 2.7cqi, 15px);
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.12em;
 }
@@ -27,7 +27,7 @@
   border-radius: 3px;
   background: transparent;
   color: var(--console-silkscreen-dim);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.12em;
   cursor: pointer;
@@ -88,12 +88,12 @@
 }
 
 .deck-hotcue-pad__num {
-  font-size: clamp(13px, 4cqi, 20px);
+  font-size: clamp(15px, 4.4cqi, 23px);
   font-weight: 600;
 }
 
 .deck-hotcue-pad__time {
-  font-size: clamp(8px, 2cqi, 11px);
+  font-size: clamp(10px, 2.3cqi, 13px);
   font-weight: 600;
   letter-spacing: 0.04em;
 }

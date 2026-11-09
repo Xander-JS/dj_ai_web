@@ -40,7 +40,8 @@ function useConsoleNavigator(): void {
 
 /**
  * Barra lateral en Mixer: se retira y la consola ocupa todo el ancho; una pestaña en el borde
- * izquierdo la muestra encima de la consola, sin moverla. Cambiar de sección o Esc la cierra.
+ * izquierdo la vuelve a mostrar y la consola se desplaza a su lado (DesktopLayout.css). Cambiar
+ * de sección o Esc la cierra.
  */
 function useSidebarPeek(isMixer: boolean, pathname: string) {
   // Abierta solo en la ruta donde se abrió: al navegar se cierra sola. `open: false` marca que la

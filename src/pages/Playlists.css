@@ -20,7 +20,8 @@
   min-height: 0;
   padding: var(--sd-panel-padding) var(--sd-gap-2);
   border-radius: var(--sd-radius-panel);
-  background-color: var(--sd-surface);
+  background-color: transparent;
+  border: 1px solid color-mix(in srgb, var(--sd-ink) 15%, transparent);
   --sd-ghost-hover: var(--sd-paper);
   --sd-field-bg: var(--sd-paper);
 }
@@ -224,6 +225,19 @@
 
 .sd-playlist-detail__add-select {
   flex: 0 1 28rem;
+}
+
+/* Fondo transparente y borde 2px gris translúcido (negro en hover/foco, sin outline) */
+.sd-playlist-detail__add-select .sd-select-field__control {
+  background-color: transparent;
+  border: 2px solid color-mix(in srgb, var(--sd-ink) 30%, transparent);
+}
+
+.sd-playlist-detail__add-select .sd-select-field__control:hover:not(:disabled),
+.sd-playlist-detail__add-select .sd-select-field__control:focus,
+.sd-playlist-detail__add-select .sd-select-field__control:focus-visible {
+  border-color: var(--sd-ink);
+  outline: none;
 }
 
 .sd-playlist-detail__table-wrap {

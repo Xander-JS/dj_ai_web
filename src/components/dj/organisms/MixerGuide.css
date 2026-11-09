@@ -1,0 +1,226 @@
+ .mixer-guide-help {
+     position: absolute;
+     right: 1rem;
+     bottom: 1rem;
+     z-index: 5;
+     border: 0;
+     border-radius: 999px;
+     padding: .55rem 1rem;
+     background: var(--sd-ink, #111);
+     color: var(--sd-paper, #fff);
+     font: inherit;
+     cursor: pointer;
+     white-space: nowrap;
+ }
+
+ .mixer-guide-help__more {
+     display: inline-block;
+     max-width: 0;
+     overflow: hidden;
+     vertical-align: bottom;
+     transition: max-width .3s ease;
+ }
+
+ .mixer-guide-help:hover .mixer-guide-help__more,
+ .mixer-guide-help:focus-visible .mixer-guide-help__more {
+     max-width: 12rem;
+ }
+
+ .mixer-guide {
+     position: fixed;
+     inset: 0;
+     z-index: 1000;
+ }
+
+ .mixer-guide__mask {
+     position: absolute;
+     width: 100%;
+     height: 100%;
+     pointer-events: none;
+ }
+
+ .mixer-guide__shade {
+     position: absolute;
+     inset: 0;
+     background: rgb(0 0 0 / .58);
+     backdrop-filter: blur(5px);
+     transition: opacity .25s ease;
+ }
+
+ .mixer-guide__outline {
+     position: fixed;
+     border: 2px solid #fe7141;
+     border-radius: 8px;
+     pointer-events: none;
+     transition: left .3s ease, top .3s ease, width .3s ease, height .3s ease;
+ }
+
+ .mixer-guide__card {
+     --guide-height: min(28rem, calc(100dvh - 24px));
+     position: fixed;
+     left: 50%;
+     top: calc((100dvh - var(--guide-height)) / 2);
+     transform: translateX(-50%);
+     width: min(34rem, calc(100vw - 32px));
+     height: var(--guide-height);
+     color: var(--sd-ink, #111);
+     transition: top .35s ease, height .35s ease;
+     animation: guide-enter .3s ease both;
+     pointer-events: none;
+ }
+
+ .mixer-guide__card--top {
+     --guide-height: min(21rem, calc(100dvh - clamp(30px, 15vh, 80px) - 12px));
+     top: clamp(30px, 15vh, 80px);
+ }
+
+ .mixer-guide__panel {
+     position: relative;
+     box-sizing: border-box;
+     max-height: calc(100% - 4.5rem);
+     overflow: auto;
+     padding: 1.25rem 1.5rem;
+     border-radius: 16px;
+     background: var(--sd-paper, #fff);
+     box-shadow: 0 12px 36px rgb(0 0 0 / .3);
+     pointer-events: auto;
+ }
+
+ .mixer-guide__card--top .mixer-guide__panel {
+     scrollbar-width: none;
+ }
+
+ .mixer-guide__card--top .mixer-guide__panel::-webkit-scrollbar {
+     display: none;
+ }
+
+ .mixer-guide__card h2 {
+     margin: .25rem 0 .5rem;
+     font-size: 1.75rem;
+     line-height: 1.1;
+ }
+
+ .mixer-guide__card p {
+     margin: .65rem 0;
+     font-size: 1.125rem;
+     line-height: 1.5;
+ }
+
+ .mixer-guide__progress {
+     display: block;
+     padding-right: 8rem;
+     min-height: 2.5rem;
+     font-size: 1rem;
+     font-weight: 700;
+ }
+
+ .mixer-guide__skip {
+     position: absolute;
+     top: .75rem;
+     right: 1rem;
+     border: 0;
+     border-radius: 999px;
+     padding: .6rem .75rem;
+     background: transparent;
+     color: inherit;
+     font: inherit;
+     cursor: pointer;
+ }
+
+ .mixer-guide__skip:hover {
+     background: var(--sd-surface);
+ }
+
+ .mixer-guide__shortcut {
+     display: grid;
+     gap: .45rem;
+     margin: .8rem 0;
+     font-size: 1rem;
+ }
+
+ .mixer-guide__shortcut-row {
+     display: flex;
+     align-items: center;
+     flex-wrap: wrap;
+     gap: .5rem;
+ }
+
+ .mixer-guide__shortcut-label {
+     min-width: 4.5rem;
+     font-weight: 700;
+ }
+
+ .mixer-guide__shortcut-note {
+     color: var(--sd-ink-soft);
+ }
+
+ .mixer-guide__keys {
+     display: inline-flex;
+     align-items: center;
+     flex-wrap: wrap;
+     gap: .2rem;
+ }
+
+ .mixer-guide__keys .sd-keycap {
+     background: var(--sd-surface);
+ }
+
+ .mixer-guide__actions {
+     position: absolute;
+     bottom: 0;
+     right: 0;
+     display: flex;
+     justify-content: flex-end;
+     gap: .5rem;
+     padding: .5rem;
+     border-radius: 16px;
+     background: var(--sd-paper, #fff);
+     box-shadow: 0 8px 24px rgb(0 0 0 / .2);
+     pointer-events: auto;
+ }
+
+ .mixer-guide__actions button {
+     border: 0;
+     border-radius: 999px;
+     padding: .6rem 1rem;
+     background: transparent;
+     color: inherit;
+     font: inherit;
+     cursor: pointer;
+ }
+
+ .mixer-guide__actions .mixer-guide__next {
+     min-width: 8rem;
+     background: #fe7141;
+     color: #111;
+     font-weight: 700;
+ }
+
+ .mixer-guide button:focus-visible,
+ .mixer-guide-help:focus-visible {
+     outline: 3px solid #fe7141;
+     outline-offset: 3px;
+ }
+
+ @keyframes guide-enter {
+     from {
+         opacity: 0;
+     }
+
+     to {
+         opacity: 1;
+     }
+ }
+
+ @media (prefers-reduced-motion:reduce) {
+     .mixer-guide__card {
+         animation: none;
+         transition: none;
+     }
+
+     .mixer-guide__outline,
+     .mixer-guide__shade,
+     .mixer-guide-help__more {
+         transition: none;
+     }
+ }

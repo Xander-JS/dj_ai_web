@@ -147,11 +147,12 @@ describe('Apariencia — tokens en el elemento raíz', () => {
       style: { setProperty: (name: string, value: string) => { properties[name] = value; } },
     } as unknown as HTMLElement;
 
-    applyAppearanceToRoot({ theme: 'dark', density: 'compact', accentColor: 'cyan', animations: false, experimentalInterface: true }, root);
+    applyAppearanceToRoot({ theme: 'dark', density: 'compact', accentColor: 'cyan', consoleDesign: 'classic', animations: false, experimentalInterface: true }, root);
 
     assert.equal(attributes['data-theme'], 'dark');
     assert.equal(attributes['data-density'], 'compact');
     assert.equal(attributes['data-accent'], 'cyan');
+    assert.equal(attributes['data-console-design'], 'classic');
     assert.equal(attributes['data-animations'], 'off');
     assert.equal(attributes['data-interface'], 'experimental');
     assert.equal(properties['--hue-primary'], String(ACCENT_HUES.cyan));
@@ -165,7 +166,25 @@ describe('Apariencia — tokens en el elemento raíz', () => {
     }
     assert.equal(DEFAULT_SETTINGS.accentColor, 'orange');
     assert.equal(DEFAULT_SETTINGS.animations, true);
+    assert.equal(DEFAULT_SETTINGS.consoleDesign, 'system');
     assert.equal(DEFAULT_SETTINGS.experimentalInterface, false);
+  });
+
+  it('la consola clásica solo se habilita en modo oscuro y cae a system en modo claro', () => {
+    assert.equal(sanitizeSettings({ theme: 'light', consoleDesign: 'classic' }).consoleDesign, 'system');
+    assert.equal(sanitizeSettings({ theme: 'dark', consoleDesign: 'classic' }).consoleDesign, 'classic');
+
+    const attributes: Record<string, string> = {};
+    const root = {
+      setAttribute: (name: string, value: string) => { attributes[name] = value; },
+      style: { setProperty: () => {} },
+    } as unknown as HTMLElement;
+
+    applyAppearanceToRoot({ theme: 'light', density: 'standard', accentColor: 'orange', consoleDesign: 'classic' }, root);
+    assert.equal(attributes['data-console-design'], 'system');
+
+    applyAppearanceToRoot({ theme: 'dark', density: 'standard', accentColor: 'orange', consoleDesign: 'classic' }, root);
+    assert.equal(attributes['data-console-design'], 'classic');
   });
 });
 

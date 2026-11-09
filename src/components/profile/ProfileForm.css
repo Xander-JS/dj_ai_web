@@ -53,6 +53,23 @@
   border-color: var(--sd-ink);
 }
 
+/* Campos del perfil (alias, usuario, nombre): fondo transparente y sin realce de foco.
+   Como la barra de búsqueda: borde gris translúcido en reposo que resalta a negro al apuntar o enfocar */
+.sd-profile-form .sd-text-field__input {
+  background-color: transparent;
+  border-color: color-mix(in srgb, var(--sd-ink) 30%, transparent);
+}
+
+.sd-profile-form .sd-text-field__input:hover:not(:disabled),
+.sd-profile-form .sd-text-field__input:focus-visible {
+  border-color: #000;
+}
+
+.sd-profile-form .sd-text-field__input:focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
+
 .sd-profile-form__footer {
   display: flex;
   align-items: center;

@@ -42,6 +42,21 @@
   flex: 1;
 }
 
+/* Paneles principales de Sesiones: fondo transparente y borde de 2px.
+   Nota: en Captura esto anula el color de fondo que señalaba grabando/finalizada. */
+.sd-panel.sd-sessions-capture,
+.sd-panel.sd-sessions-export,
+.sd-panel.sd-sessions-history {
+  background-color: transparent;
+  border: 2px solid color-mix(in srgb, var(--sd-ink) 15%, transparent);
+}
+
+/* Pasos de la sesión (3 elementos): fondo transparente y borde de 2px */
+.sd-sessions__steps .sd-step {
+  background-color: transparent;
+  border: 2px solid color-mix(in srgb, var(--sd-ink) 15%, transparent);
+}
+
 /* Grabando (acento) ↔ finalizada (salvia): el campo y las tintas remapeadas cambian con un fundido */
 .sd-sessions-capture,
 .sd-sessions-capture .sd-panel__title,
@@ -128,6 +143,11 @@
   --sd-ghost-hover: var(--sd-surface);
 }
 
+/* Solo el aviso informativo de Exportar: fondo transparente */
+.sd-sessions-export__notice.sd-notice--info {
+  background-color: transparent;
+}
+
 .sd-sessions-export__options {
   display: flex;
   gap: var(--sd-gap-3) var(--sd-gap-4);
@@ -137,7 +157,7 @@
   padding: var(--sd-gap-3);
   border: 0;
   border-radius: var(--sd-radius-inset);
-  background-color: var(--sd-paper);
+  background-color: transparent;
   --sd-field-bg: var(--sd-surface);
   --sd-ghost-hover: var(--sd-surface);
 }

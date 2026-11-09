@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAutomaticMixer } from '../../../hooks/useAutomaticMixer';
 import { useTranslation } from 'react-i18next';
 import { ConsoleKey } from '../atoms/ConsoleKey';
 import { ConsoleLed } from '../atoms/ConsoleLed';
@@ -35,6 +36,7 @@ export const ScreenButtonRow: React.FC<ScreenButtonRowProps> = ({
   status,
 }) => {
   const { t } = useTranslation();
+  const automatic = useAutomaticMixer();
   const menuOpen = view === 'menu';
   const loadKey = (deckId: DeckId) => {
     const active = menuOpen && subsection === deckId;
@@ -87,7 +89,24 @@ export const ScreenButtonRow: React.FC<ScreenButtonRowProps> = ({
         <ConsoleLed on={recording} color="red" blink />
         {t('mixer.rec_label')}
       </ConsoleKey>
-      {status && <div className="screen-button-row__status">{status}</div>}
+      <div className="screen-button-row__status">
+          <span role="status" aria-live="polite" className="screen-button-row__auto-state">
+            {automatic.active || automatic.status === 'error'
+              ? t(`mixer.screen.auto_short_${automatic.status}`)
+              : status}
+          </span>
+          <ConsoleKey
+            className="screen-button-row__automatic"
+            data-testid="screen-key-automatic"
+            onClick={automatic.toggle}
+            lit={automatic.active}
+            aria-pressed={automatic.active}
+            aria-label={t(automatic.active ? 'mixer.screen.auto_stop' : 'mixer.screen.auto_off')}
+            title={t(`mixer.screen.auto_${automatic.status}`)}
+          >
+            {t('mixer.screen.automatic')}
+          </ConsoleKey>
+      </div>
     </div>
   );
 };

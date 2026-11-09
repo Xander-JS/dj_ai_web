@@ -1,6 +1,5 @@
 .desktop-layout {
-  /* Marco de la aplicación (--layout-frame-width, index.css): cabecera, área de trabajo y
-     barra de reproducción comparten este ancho, centrado */
+  /* Cabecera, área de trabajo y barra de reproducción ocupan todo el ancho de la ventana */
   display: grid;
   grid-template-areas:
     "header header"
@@ -10,8 +9,7 @@
   /* minmax(0, ...) keeps wide children from stretching the track past the viewport */
   grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
   height: 100vh;
-  width: var(--layout-frame-width);
-  margin-inline: auto;
+  width: 100%;
   overflow: hidden;
   background-color: var(--bg-base);
   color: var(--text-primary);
@@ -27,20 +25,26 @@
 }
 
 /* Mixer: la barra lateral se retira hacia la izquierda y la consola ocupa todo el ancho. La
-   pestaña del borde la muestra encima de la consola, sin moverla. Tiempos de la entrada: el aviso
-   del botón Mixer y la retirada (el resto de la secuencia está en MixerEntrance.css). */
+   pestaña del borde la vuelve a mostrar: su columna se reabre, la consola se desplaza (y se
+   reajusta) a su lado y se desenfoca levemente. Tiempos de la entrada: el aviso del botón Mixer y
+   la retirada (el resto de la secuencia está en MixerEntrance.css). */
 .desktop-layout--mixer {
   --mixer-nav-cue-duration: 400ms;
   --mixer-sidebar-delay: 250ms;
   --mixer-sidebar-duration: 500ms;
-  /* Mostrar / ocultar con la pestaña o Esc: la barra y la pestaña comparten tiempo y curva */
-  --mixer-peek-open-duration: var(--sd-duration-base);
-  --mixer-peek-open-ease: var(--sd-ease-out);
-  --mixer-peek-close-duration: 200ms;
-  --mixer-peek-close-ease: cubic-bezier(0.4, 0, 1, 1);
+  /* Mostrar / ocultar con la pestaña o Esc: un solo gesto suave, idéntico al abrir y al cerrar.
+     Curva exponencial de salida (desacelera hasta posarse, sin aceleración brusca) y ~450 ms;
+     barra, columna, consola, desenfoque y pestaña comparten tiempo y curva para moverse como una
+     sola transición. */
+  --mixer-peek-open-duration: 450ms;
+  --mixer-peek-open-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --mixer-peek-close-duration: 450ms;
+  --mixer-peek-close-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --mixer-peek-duration: var(--mixer-peek-close-duration);
   --mixer-peek-ease: var(--mixer-peek-close-ease);
   --mixer-peek-tab-gap: 12px;
+  /* Apenas perceptible: solo insinúa que la consola pasa a segundo plano */
+  --mixer-peek-blur: 1px;
 
   position: relative;
   grid-template-columns: 0 minmax(0, 1fr);
@@ -73,6 +77,29 @@
 .desktop-layout--sidebar-open {
   --mixer-peek-duration: var(--mixer-peek-open-duration);
   --mixer-peek-ease: var(--mixer-peek-open-ease);
+
+  grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+}
+
+/* Mostrar / ocultar con la pestaña o Esc: la columna se abre y se cierra con el mismo tiempo y
+   curva que la barra, así su filo y el de la consola avanzan juntos. La entrada al Mixer no la
+   anima (la columna se pliega al instante y solo la barra se desliza) */
+.desktop-layout--sidebar-open,
+.desktop-layout--sidebar-closed {
+  transition:
+    grid-template-rows var(--sd-duration-base) var(--sd-ease-out),
+    grid-template-columns var(--mixer-peek-duration) var(--mixer-peek-ease),
+    var(--sd-density-transition);
+}
+
+/* Desenfoque leve de la consola mientras la barra está abierta: aparece y se retira con ella.
+   Solo el área de trabajo: la barra y la pestaña quedan nítidas */
+.desktop-layout--mixer .layout-main {
+  transition: filter var(--mixer-peek-duration) var(--mixer-peek-ease);
+}
+
+.desktop-layout--sidebar-open .layout-main {
+  filter: blur(var(--mixer-peek-blur));
 }
 
 .desktop-layout--sidebar-open .layout-sidebar {
@@ -90,7 +117,9 @@
 }
 
 @keyframes mixerNavCue {
-  0%, 45% {
+
+  0%,
+  45% {
     background-color: var(--color-primary-500);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-500) 35%, transparent);
     color: #fff;
@@ -122,7 +151,10 @@
 /* Barra superior y lateral: papel del Design System v2, sin filetes; separan por espacio */
 .layout-header {
   grid-area: header;
-  background-color: var(--sd-paper);
+  /* Barra flotante como el reproductor: insertada por los lados (no ocupa todo el ancho) y redondeada */
+  margin: var(--sd-gap-1) var(--sd-gap-3);
+  background-color: transparent;
+  border-radius: var(--sd-bar-radius);
   display: flex;
   align-items: center;
   padding: 0 var(--sd-gap-4);
@@ -132,9 +164,29 @@
   transition: background-color var(--sd-duration-base) var(--sd-ease-out);
 }
 
+/* El reproductor es una barra clara siempre (fondo salvia / tinte de acento); en modo oscuro
+   forzamos tinta negra y superficies claras para que texto e íconos se lean sobre ella. */
+[data-theme='dark'] .sd-player {
+  --sd-ink: #000000;
+  --sd-ink-soft: #2b2b2b;
+  --sd-paper: #f7f6f2;
+  --sd-surface: #f3f3f1;
+  --sd-ghost-hover: rgb(0 0 0 / 0.08);
+  color: var(--sd-ink);
+}
+
+/* La barra superior es transparente sobre el fondo de página; en modo oscuro sus elementos usan
+   la tinta clara (color inverso) del tema para resaltar en blanco sobre el fondo oscuro. */
+[data-theme='dark'] .layout-header {
+  --sd-ink: #f4f4f4;
+  --sd-ink-soft: #b4b4b4;
+  color: var(--sd-ink);
+}
+
 .layout-sidebar {
   grid-area: sidebar;
-  background-color: var(--sd-paper);
+  /* Contenedor transparente: usa el fondo global de página. El hijo .sidebar-nav (animado) no se toca. */
+  background-color: transparent;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -144,8 +196,7 @@
 .layout-main {
   grid-area: main;
   background-color: var(--bg-base);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   overscroll-behavior: contain;
   min-width: 0;
   position: relative;
@@ -158,7 +209,8 @@
 
 .layout-player {
   grid-area: player;
-  background-color: var(--sd-paper);
+  /* Transparente: la barra redondeada (.sd-player) flota sobre el fondo de página, igual que el header */
+  background-color: transparent;
   display: flex;
   align-items: stretch;
   padding: var(--sd-gap-1) var(--sd-gap-3);
@@ -249,14 +301,36 @@
   line-height: 1;
 }
 
-.header-search-container {
+/* El formulario lleva el tamaño flexible en la cabecera; el campo lo rellena */
+.header-search-form {
+  display: flex;
   flex: 1;
   max-width: 26rem;
   margin: 0 var(--sd-gap-5);
 }
 
+.header-search-container {
+  flex: 1;
+  min-width: 0;
+}
+
 .header-search-container .sd-text-field__input {
-  height: var(--sd-control-height);
+  height: 2.25rem;
+  /* Mismo redondeado que las barras (no la píldora por defecto) y más holgura horizontal */
+  border-radius: var(--sd-bar-radius);
+  padding-left: 3rem;
+  padding-right: 1.5rem;
+  /* Fondo transparente; borde gris translúcido por defecto (resalta a negro en hover/foco) */
+  background-color: transparent;
+  border-color: color-mix(in srgb, var(--sd-ink) 30%, transparent);
+}
+
+/* Hover y foco: borde negro para resaltar, sin outline */
+.header-search-container .sd-text-field__input:hover:not(:disabled),
+.header-search-container .sd-text-field__input:focus,
+.header-search-container .sd-text-field__input:focus-visible {
+  border-color: var(--sd-ink);
+  outline: none;
 }
 
 /* Sin la «x» nativa del campo de búsqueda: la píldora queda limpia */
@@ -336,8 +410,11 @@
     white-space: nowrap;
   }
 
-  .header-search-container {
+  .header-search-form {
     margin: 0;
+  }
+
+  .header-search-container {
     min-width: 0;
   }
 
@@ -353,6 +430,7 @@
 :root[data-animations='off'] .desktop-layout,
 :root[data-animations='off'] .layout-player,
 :root[data-animations='off'] .desktop-layout--mixer .layout-sidebar,
+:root[data-animations='off'] .desktop-layout--mixer .layout-main,
 :root[data-animations='off'] .layout-sidebar-tab {
   transition-duration: 0s;
   transition-delay: 0s;
@@ -367,6 +445,7 @@
   .desktop-layout,
   .layout-player,
   .desktop-layout--mixer .layout-sidebar,
+  .desktop-layout--mixer .layout-main,
   .desktop-layout--mixer .layout-sidebar-tab {
     transition-duration: 0s;
     transition-delay: 0s;

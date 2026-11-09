@@ -31,7 +31,7 @@
 }
 
 /* Líneas divisorias finas, sin cajas: el MASTER las dibuja a ambos lados */
-.mixer-console__columns > .mixer-master {
+.mixer-console__columns>.mixer-master {
   border-inline: 1px solid var(--console-divider);
 }
 
@@ -42,16 +42,17 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  width: 100%;
   min-height: 22px;
+  padding-bottom: clamp(15px, 1.8cqi, 10px);
 }
 
 .mixer-console .mixer-channel__name,
 .mixer-console .mixer-master__name {
   color: var(--console-silkscreen);
-  font-size: clamp(12px, 4.4cqi, 16px);
+  font-size: clamp(14px, 4.8cqi, 19px);
   font-weight: 800;
   letter-spacing: 0.04em;
   line-height: 1;
   white-space: nowrap;
 }
-

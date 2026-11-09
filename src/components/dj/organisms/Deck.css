@@ -96,6 +96,7 @@
 .deck-panel__notices {
   grid-area: notices;
   min-width: 0;
+  display: none;
 }
 
 .deck-panel__jog {

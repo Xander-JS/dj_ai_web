@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import config
 from app.routes import router
+from app.mix_plan import router as mix_router
 
 app = FastAPI(title="SYSTEM DJ · Audio Extraction Service", version="1.0.0")
 
@@ -13,11 +14,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
     expose_headers=["Content-Disposition", "X-Audio-Duration"],
 )
 
 app.include_router(router)
+app.include_router(mix_router)
 
 
 if __name__ == "__main__":

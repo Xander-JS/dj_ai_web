@@ -772,10 +772,10 @@ describe('SYSTEM DJ — Auditoría y Validación de Precisión Musical', () => {
     test('La tarjeta solicita explicaciones después de publicar recomendaciones locales y conserva la lista ante fallos', () => {
       const cardPath = path.resolve(process.cwd(), 'src/components/dashboard/SmartRecommendationCard.tsx');
       const cardSource = fs.readFileSync(cardPath, 'utf8');
-      const localPublish = cardSource.indexOf('setRecommendationResult(localResult)');
+      const localPublish = cardSource.indexOf('recommendationStore.set({\n            referenceTrackId');
       const explanationCall = cardSource.indexOf('await getTrackRecommendationExplanations(');
       assert.ok(localPublish >= 0 && explanationCall > localPublish);
-      assert.match(cardSource, /if \(localResultsReady\)\s*\{\s*setExplanationsUnavailable\(true\)/);
+      assert.match(cardSource, /if \(localResultsReady\)\s*\{\s*recommendationStore\.update\(\{ explanationsUnavailable: true \}\)/);
       assert.match(cardSource, /!errorMsg && recommendations\.length > 0/);
       assert.doesNotMatch(cardSource, /handleLoadTrack\(rec,/);
     });

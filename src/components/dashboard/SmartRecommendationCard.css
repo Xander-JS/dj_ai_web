@@ -27,6 +27,24 @@
   display: none;
 }
 
+/* Hueco único de resultados: invitación, carga y recomendaciones lo ocupan por turnos con el
+   mismo alto mínimo (≈ una tarjeta de recomendación con su paginador), así que calcular no
+   hace crecer y encoger la página. Una tarjeta más alta (columna estrecha) puede superarlo. */
+.smart-rec-slot {
+  min-height: 20rem;
+}
+
+.smart-rec-empty-box.smart-rec-slot,
+.sd-empty-state.smart-rec-slot {
+  justify-content: center;
+}
+
+.smart-rec-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-3);
+}
+
 /* Selector de deck de referencia: dos botones conmutadores sobre el papel */
 .smart-rec-controls {
   display: flex;

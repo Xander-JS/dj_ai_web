@@ -18,6 +18,7 @@ import { loadTrackWithFeedback, readLibraryWithFeedback } from '../../../service
 import { isEditableTarget, SHORTCUTS_PASSTHROUGH_ATTRIBUTE } from '../../../services/keyboard/keyboardShortcuts';
 import type { DeckId, PlaybackState } from '../../../types/deck';
 import type { Track } from '../../../types/track';
+import { INPUT_MAX_LENGTH } from '../../../config/constants';
 import './ScreenLoadMenu.css';
 
 /** Lo único que el menú necesita de cada deck (sin el tiempo, que cambia en cada tic). */
@@ -237,6 +238,7 @@ export const ScreenLoadMenu: React.FC<ScreenLoadMenuProps> = React.memo(({ scree
             <input
               ref={searchRef}
               type="text"
+              maxLength={INPUT_MAX_LENGTH}
               className="screen-menu__search"
               placeholder={t('mixer.screen.search')}
               aria-label={t('mixer.screen.search')}

@@ -113,6 +113,7 @@
 /* Zona desplazable de la categoría: alto de la columna y barra al borde de la columna,
    así la vista conserva su ancho máximo */
 .sd-settings__view-scroll {
+  position: relative;
   align-self: stretch;
   min-width: 0;
   overflow-y: auto;
@@ -243,6 +244,24 @@
   font-size: var(--sd-text-note);
   font-weight: var(--sd-weight-medium);
   color: var(--sd-ink);
+}
+
+/* Configuración: contenedores con fondo transparente (los 7 submódulos y los bloques
+   de contenido). Los controles y vistas previas conservan su color. Solo bg. */
+.sd-settings__view-body .sd-panel,
+.sd-settings-readout {
+  background-color: transparent;
+}
+
+.sd-settings__console-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sd-gap-2);
+  width: 100%;
+}
+
+.sd-settings__console-notice {
+  max-width: 36rem;
 }
 
 /* Fader de tolerancia de SYNC con su lectura grande */
@@ -380,6 +399,185 @@
   background-color: var(--sd-accent);
 }
 
+/* Contenedor de las muestras de fondo: como las muestras toman la intensidad del tema vigente
+   (muy claras en claro, casi negras en oscuro), se funden con el panel. El contenedor pinta un
+   fondo que contrasta con esa intensidad —oscuro en tema claro, claro en tema oscuro— e invierte
+   la tinta del texto para que las etiquetas y el aro de selección sigan siendo legibles. */
+.sd-page-bg-field {
+  padding: var(--sd-gap-3);
+  border-radius: var(--sd-radius-inset);
+}
+
+:root[data-theme='light'] .sd-page-bg-field {
+  background-color: var(--sd-inverse-surface);
+  --sd-ink: var(--sd-inverse-ink);
+  --sd-ink-soft: var(--sd-inverse-ink-soft);
+  /* El hueco del aro de selección adopta el color del contenedor */
+  --sd-paper: var(--sd-inverse-surface);
+}
+
+:root[data-theme='dark'] .sd-page-bg-field {
+  background-color: var(--sd-field-paper);
+  --sd-ink: var(--sd-field-ink);
+  --sd-ink-soft: var(--sd-field-ink-soft);
+  --sd-paper: var(--sd-field-paper);
+}
+
+/* Muestra del fondo de página: reproduce el mismo tono e intensidad del fondo real, por tema.
+   Los tonos (--sd-page-bg-hue) los fija [data-page-bg] en tokens.css; cada muestra lleva el suyo. */
+.sd-page-bg-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: #f4efe9;
+}
+
+.sd-page-bg-swatch[data-page-bg]:not([data-page-bg='default']) {
+  background-color: hsl(var(--sd-page-bg-hue) 30% 93.5%);
+}
+
+.sd-page-bg-swatch[data-theme='dark'] {
+  background-color: hsl(240 10% 6%);
+}
+
+.sd-page-bg-swatch[data-theme='dark'][data-page-bg]:not([data-page-bg='default']) {
+  background-color: hsl(var(--sd-page-bg-hue) 18% 7.5%);
+}
+
+/* Maqueta de la consola: misma huella que las demás muestras; cada diseño se dibuja con su
+   propio lenguaje (plano de póster vs. hardware oscuro) */
+.sd-console-preview {
+  display: flex;
+  align-items: stretch;
+  gap: 5px;
+  width: 11.5rem;
+  height: 7.25rem;
+  padding: 8px;
+}
+
+.sd-console-preview__deck {
+  display: flex;
+  flex: 1.25;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 7px;
+}
+
+.sd-console-preview__jog {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+}
+
+.sd-console-preview__knobs {
+  display: flex;
+  gap: 4px;
+}
+
+.sd-console-preview__knobs i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.sd-console-preview__mixer {
+  display: flex;
+  flex: 0.9;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 5px;
+  border-radius: 7px;
+}
+
+.sd-console-preview__faders {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  height: 2.4rem;
+}
+
+.sd-console-preview__faders i {
+  width: 4px;
+  border-radius: var(--sd-radius-pill);
+}
+
+.sd-console-preview__xfader {
+  height: 4px;
+  border-radius: var(--sd-radius-pill);
+}
+
+/* ---- Diseño "system": papel, tinta, un acento; filos finos, sin sombras ---- */
+.sd-console-preview--system {
+  background-color: var(--sd-surface);
+}
+
+.sd-console-preview--system .sd-console-preview__deck,
+.sd-console-preview--system .sd-console-preview__mixer {
+  background-color: var(--sd-paper);
+  border: 1px solid color-mix(in srgb, var(--sd-ink) 14%, transparent);
+}
+
+.sd-console-preview--system .sd-console-preview__jog {
+  border: 2px solid var(--sd-ink);
+  background-color: var(--sd-paper);
+}
+
+.sd-console-preview--system .sd-console-preview__deck[data-side='a'] .sd-console-preview__jog {
+  border-color: var(--sd-accent);
+}
+
+.sd-console-preview--system .sd-console-preview__knobs i {
+  background-color: var(--sd-ink-soft);
+}
+
+.sd-console-preview--system .sd-console-preview__faders i {
+  background-color: color-mix(in srgb, var(--sd-ink) 18%, transparent);
+}
+
+.sd-console-preview--system .sd-console-preview__faders i:first-child {
+  background-color: var(--sd-accent);
+}
+
+.sd-console-preview--system .sd-console-preview__xfader {
+  background-color: color-mix(in srgb, var(--sd-ink) 18%, transparent);
+}
+
+/* ---- Diseño "classic": plástico negro, luces con halo (como la consola actual) ---- */
+.sd-console-preview--classic {
+  background: linear-gradient(180deg, hsl(225 6% 14%), hsl(225 7% 9%));
+}
+
+.sd-console-preview--classic .sd-console-preview__deck,
+.sd-console-preview--classic .sd-console-preview__mixer {
+  background-color: hsl(225 7% 11%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5), inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+
+.sd-console-preview--classic .sd-console-preview__jog {
+  background: radial-gradient(circle at 40% 35%, hsl(220 6% 46%), hsl(225 7% 12%) 70%);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+}
+
+.sd-console-preview--classic .sd-console-preview__knobs i {
+  background-color: hsl(225 6% 30%);
+}
+
+.sd-console-preview--classic .sd-console-preview__faders i {
+  background-color: hsl(225 12% 5%);
+}
+
+.sd-console-preview--classic .sd-console-preview__faders i:first-child {
+  background-color: var(--sd-accent);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--sd-accent) 80%, transparent);
+}
+
+.sd-console-preview--classic .sd-console-preview__xfader {
+  background-color: hsl(225 12% 5%);
+}
+
 /* Movimiento: qué cubre la preferencia, como lista; crece con cada animación nueva */
 .sd-settings__motion {
   display: flex;
@@ -426,35 +624,6 @@
 
 .sd-shortcuts.is-disabled .sd-shortcut-decks {
   opacity: 0.55;
-}
-
-.sd-keycaps {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-/* Tecla: papel con el canto inferior marcado (recorrido de la tecla), legible en ambos temas */
-.sd-keycap {
-  display: inline-grid;
-  place-items: center;
-  min-width: 2rem;
-  height: 2rem;
-  padding: 0 0.5rem 3px;
-  border-radius: 0.5rem;
-  background-color: var(--sd-paper);
-  box-shadow: inset 0 -3px 0 var(--sd-ink-soft);
-  color: var(--sd-ink);
-  font-family: var(--sd-font);
-  font-size: var(--sd-text-note);
-  font-weight: var(--sd-weight-medium);
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.sd-keycap--strong {
-  box-shadow: inset 0 -3px 0 var(--sd-ink);
-  font-weight: var(--sd-weight-black);
 }
 
 .sd-shortcut-decks {
@@ -754,11 +923,8 @@
 .sd-disc-preview {
   display: grid;
   place-items: center;
-  width: 11.5rem;
-  height: 7.25rem;
-  background:
-    radial-gradient(circle at 50% 50%, var(--sd-paper) 0 30%, transparent 60%),
-    var(--sd-surface);
+  width: 7.5rem;
+  height: 7.5rem;
 }
 
 /* Plato cuadrado: discImageStyle centra cada disco en él sin deformarlo */
@@ -767,12 +933,14 @@
   width: 6.25rem;
   aspect-ratio: 1;
   border-radius: 50%;
+  overflow: hidden;
   box-shadow: 0 6px 16px -6px rgb(0 0 0 / 0.5);
 }
 
 .sd-disc-preview__platter img {
   position: absolute;
   max-width: none;
+  height: auto;
   pointer-events: none;
 }
 

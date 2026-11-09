@@ -86,7 +86,8 @@
   --sd-cell-pad-x: 0.75rem;
 
   /* CONTROLS */
-  --sd-control-height-sm: 2.25rem; /* tablas y barras densas de la consola */
+  --sd-control-height-sm: 2.25rem;
+  /* tablas y barras densas de la consola */
   --sd-control-height: 2.75rem;
   --sd-control-height-lg: 3.75rem;
   --sd-focus-width: 3px;
@@ -99,8 +100,19 @@
   --sd-duration-slow: 700ms;
 
   /* COLOR — modo claro (predeterminado) */
-  --sd-paper: #ffffff;
+  /* Fondo del CUERPO/página (body). Solo pinta el área de contenido, nunca los módulos. */
+  --sd-page-bg: #dedcd3;
+  /* Blanco pastel cálido de los MÓDULOS (cabecera, barra lateral, tarjetas, consola…).
+     Independiente del fondo de página: cambia --sd-page-bg sin afectar a los módulos. */
+  --sd-paper: #f7f6f2;
   --sd-surface: #f3f3f1;
+  /* Barra de navegación SUPERIOR: verde salvia de la banda de Inicio. */
+  --sd-topbar-bg: var(--sd-field-sage);
+  /* Barra de REPRODUCCIÓN inferior: tinte CLARO del acento elegido (mismo tono mezclado con blanco),
+     para que los textos en negro resalten encima. El acento pleno queda para pilotos y rellenos. */
+  --sd-player-bg: color-mix(in srgb, var(--sd-accent) 55%, #ffffff);
+  /* Redondeo de las esquinas de ambas barras (superior y reproductor). Súbelo o bájalo aquí. */
+  --sd-bar-radius: 1.25rem;
   --sd-ink: #000000;
   --sd-ink-soft: #545454;
   /* Naranja de la identidad: fijo en Home/Login/Sign Up y predeterminado del acento de la consola */
@@ -125,6 +137,10 @@
   --sd-field-ink-soft: #2b2b2b;
   --sd-focus: #000000;
   --sd-selection: #f0ff1c;
+  /* Consola (reskin plano): la pista B toma un tono frío fijo frente al acento cálido de la
+     pista A, para que ambos decks se lean como dos (convención A/B). Mismo valor en ambos temas,
+     como los campos; admite tinta negra encima con AA. */
+  --sd-console-deck-b: #1fc8e3;
   /* Velo bajo los diálogos: oscurece sin desenfocar */
   --sd-scrim: rgb(0 0 0 / 0.5);
 }
@@ -144,7 +160,8 @@ html[data-scroll-mode='document'] {
 /* Ámbito de tema anidado: un elemento con data-theme="light" vuelve a los valores claros
    aunque el documento esté en oscuro (vistas previas del selector de tema en Ajustes) */
 [data-theme='light'] {
-  --sd-paper: #ffffff;
+  --sd-page-bg: #f4efe9;
+  --sd-paper: #f7f6f2;
   --sd-surface: #f3f3f1;
   --sd-ink: #000000;
   --sd-ink-soft: #545454;
@@ -206,30 +223,149 @@ html[data-scroll-mode='document'] {
    heredan el valor intermedio, así que ningún componente necesita su propia transición.
    .desktop-layout consume --sd-density-transition junto a sus filas en DesktopLayout.css,
    que también anima las alturas de cabecera y barra y apaga todo con movimiento reducido. */
-@property --sd-gap-1 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-gap-2 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-gap-3 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-gap-4 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-gap-5 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-gap-6 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-margin { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-panel-padding { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-row-min-height { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-row-pad-y { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-row-gap { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-cell-pad-x { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-control-height-sm { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-control-height { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --sd-control-height-lg { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --space-2 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --space-3 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --space-4 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --space-5 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --space-6 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --space-8 { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --size-sm { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --size-md { syntax: '<length>'; inherits: true; initial-value: 0px; }
-@property --size-lg { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --sd-gap-1 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-gap-2 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-gap-3 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-gap-4 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-gap-5 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-gap-6 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-margin {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-panel-padding {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-row-min-height {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-row-pad-y {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-row-gap {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-cell-pad-x {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-control-height-sm {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-control-height {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --sd-control-height-lg {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --space-2 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --space-3 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --space-4 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --space-5 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --space-6 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --space-8 {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --size-sm {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --size-md {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --size-lg {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
 
 :root {
   transition:
@@ -274,6 +410,70 @@ html[data-scroll-mode='document'] {
 }
 
 /* ==========================================================================
+   Cambio de tema e idioma (viewTransition.ts). Tema: fundido de toda la página, así
+   fondo, texto y superficies cambian a la vez. Idioma: la barra se funde y el contenido
+   entra con una subida corta. Con movimiento reducido solo queda el fundido.
+   ========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--sd-ease-out);
+}
+
+:root[data-view-transition='language'] .sd-landing__main {
+  view-transition-name: sd-page-content;
+}
+
+::view-transition-old(sd-page-content) {
+  animation: sd-vt-fade-out var(--sd-duration-fast) ease-in both;
+}
+
+::view-transition-new(sd-page-content) {
+  animation: sd-vt-fade-rise 320ms var(--sd-ease-out) both;
+}
+
+/* El grupo no se desplaza: solo cambia el texto dentro del mismo marco */
+::view-transition-group(sd-page-content) {
+  animation-duration: 0s;
+}
+
+/* La transición de color propia de la página se apaga: el fundido ya la sustituye */
+:root[data-view-transition] .sd-landing {
+  transition: none;
+}
+
+@keyframes sd-vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sd-vt-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--sd-duration-base);
+  }
+
+  ::view-transition-new(sd-page-content) {
+    animation-name: sd-vt-fade-in;
+  }
+
+  @keyframes sd-vt-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+/* ==========================================================================
    Acento elegido en Ajustes → Apariencia (data-accent en <html>, appearance.ts).
    Mismo valor en ambos temas, como los campos. Todos admiten tinta negra encima
    con AA (≥ 5.4:1); el hover sube un paso de saturación, como el naranja.
@@ -313,6 +513,38 @@ html[data-scroll-mode='document'] {
 [data-accent='amber'] {
   --sd-accent: #ffb21e;
   --sd-accent-hover: #ff9f00;
+}
+
+/* Si el acento elegido ya es azulado (la pista A sería fría), la pista B pasa a ámbar para que
+   los dos decks sigan contrastando cálido/frío en lugar de fundirse en el mismo azul-cian. */
+[data-accent='blue'],
+[data-accent='cyan'] {
+  --sd-console-deck-b: #ffb21e;
+}
+
+/* ==========================================================================
+   Fondo GENERAL de la página elegido en Ajustes → Apariencia (data-page-bg en <html>,
+   appearance.ts). Solo cambia el TONO del fondo de la página; la luminosidad y la saturación
+   quedan fijas a la intensidad de referencia de cada tema (claro: papel cálido ~L 93 %;
+   oscuro: casi negro ~L 7 %), así nunca se ve ni muy claro ni muy oscuro. No afecta a los
+   módulos (cabecera, barra lateral, tarjetas, consola), que conservan --sd-paper.
+   `default` mantiene el papel original de cada tema.
+   ========================================================================== */
+[data-page-bg='rose'] { --sd-page-bg-hue: 350; }
+[data-page-bg='fuchsia'] { --sd-page-bg-hue: 320; }
+[data-page-bg='sage'] { --sd-page-bg-hue: 140; }
+[data-page-bg='teal'] { --sd-page-bg-hue: 190; }
+[data-page-bg='blue'] { --sd-page-bg-hue: 222; }
+[data-page-bg='violet'] { --sd-page-bg-hue: 265; }
+
+/* Tema claro: el tono tiñe --sd-page-bg (que alimenta --bg-base en index.css) a la luminosidad de referencia */
+:root[data-page-bg]:not([data-page-bg='default']) {
+  --sd-page-bg: hsl(var(--sd-page-bg-hue) 30% 93.5%);
+}
+
+/* Tema oscuro: el fondo base no pasa por --sd-page-bg, así que el tono se aplica sobre --bg-base */
+:root[data-theme='dark'][data-page-bg]:not([data-page-bg='default']) {
+  --bg-base: hsl(var(--sd-page-bg-hue) 18% 7.5%);
 }
 
 /* ==========================================================================

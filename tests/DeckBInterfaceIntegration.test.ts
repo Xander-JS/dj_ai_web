@@ -325,6 +325,45 @@ describe('Fase 20 Etapa 4 — Integración Real de la Interfaz de Deck B', () =>
     }
   });
 
+  test('Abortar una carga automática durante la decodificación conserva el deck anterior', async () => {
+    const oldFile = new File([new Uint8Array(60)], 'previous.wav', { type: 'audio/wav' });
+    const oldTrack = createTrackFromFile(oldFile, 60);
+    await djStore.loadTrackToDeck('A', oldTrack);
+    const nextFile = new File([new Uint8Array(90)], 'next.wav', { type: 'audio/wav' });
+    const nextTrack = createTrackFromFile(nextFile, 90);
+    const original = audioEngine.decodeAudioData.bind(audioEngine);
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    audioEngine.decodeAudioData = async buffer => { entered(); await gate; return original(buffer); };
+    const controller = new AbortController();
+    try {
+      const pending = djStore.loadTrackToDeck('A', nextTrack, controller.signal);
+      await waiting;
+      controller.abort(); release();
+      assert.equal(await pending, false);
+      assert.equal(djStore.getSnapshot().deckA.track?.id, oldTrack.id);
+      assert.equal(audioEngine.getDeckDuration('A'), 60);
+    } finally { release(); audioEngine.decodeAudioData = original; }
+  });
+
+  test('Abortar PLAY mientras el contexto reanuda impide un arranque tardío', async () => {
+    const file = new File([new Uint8Array(60)], 'cancel-play.wav', { type: 'audio/wav' });
+    await djStore.loadTrackToDeck('A', createTrackFromFile(file, 60));
+    const original = audioEngine.resume.bind(audioEngine);
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    audioEngine.resume = () => gate;
+    const controller = new AbortController();
+    try {
+      const pending = djStore.playDeck('A', controller.signal);
+      controller.abort(); release(); await pending;
+      assert.equal(djStore.getSnapshot().deckA.playbackState, 'stopped');
+      assert.equal(audioEngine.isDeckPlaying('A'), false);
+    } finally { release(); audioEngine.resume = original; }
+  });
+
   test('Acciones de transporte en Deck B (Play, Pause, Stop, Seek, Pitch) funcionan con aislamiento', async () => {
     const fileB = new File([new Uint8Array(200)], 'transport_test.wav', { type: 'audio/wav' });
     const trackB = createTrackFromFile(fileB, 200.0);

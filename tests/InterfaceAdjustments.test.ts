@@ -8,22 +8,25 @@ import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { ToastStore, TOAST_DURATION_MS } from '../src/services/notifications/toastService.ts';
+import { ToastStore, TOAST_DURATION_MS, TOAST_STAGGER_MS } from '../src/services/notifications/toastService.ts';
 
 const read = (path: string) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 describe('Toasts', () => {
-  it('apila el más reciente arriba y se retira solo tras la duración', () => {
+  it('apila el más reciente arriba, escalona las entradas y se retira solo tras la duración', () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const store = new ToastStore();
       store.show('success', 'uno');
       store.show('error', 'dos');
+      // El segundo espera su turno en lugar de entrar a la vez
+      assert.deepEqual(store.getSnapshot().map((toast) => toast.text), ['uno']);
+      mock.timers.tick(TOAST_STAGGER_MS);
       assert.deepEqual(store.getSnapshot().map((toast) => toast.text), ['dos', 'uno']);
 
-      mock.timers.tick(TOAST_DURATION_MS - 1);
-      assert.equal(store.getSnapshot().length, 2);
-      mock.timers.tick(1);
+      mock.timers.tick(TOAST_DURATION_MS - TOAST_STAGGER_MS);
+      assert.deepEqual(store.getSnapshot().map((toast) => toast.text), ['dos']);
+      mock.timers.tick(TOAST_STAGGER_MS);
       assert.equal(store.getSnapshot().length, 0);
     } finally {
       mock.timers.reset();
@@ -37,6 +40,7 @@ describe('Toasts', () => {
       let calls = 0;
       store.subscribe(() => calls++);
       for (const text of ['a', 'b', 'c', 'd']) store.show('info', text);
+      for (let i = 0; i < 3; i++) mock.timers.tick(TOAST_STAGGER_MS);
       assert.deepEqual(store.getSnapshot().map((toast) => toast.text), ['d', 'c', 'b']);
       assert.equal(calls, 4);
 
@@ -46,6 +50,66 @@ describe('Toasts', () => {
     } finally {
       mock.timers.reset();
     }
+  });
+
+  it('agrupa avisos repetidos en uno solo con contador que se actualiza en el sitio', () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const store = new ToastStore();
+      store.show('success', 'Análisis completado');
+      const [first] = store.getSnapshot();
+      store.show('success', 'Análisis completado');
+      store.show('success', 'Análisis completado');
+      assert.equal(store.getSnapshot().length, 1);
+      assert.equal(store.getSnapshot()[0].id, first.id);
+      assert.equal(store.getSnapshot()[0].text, 'Análisis completado (3)');
+
+      // Cada repetición reinicia la cuenta atrás
+      mock.timers.tick(TOAST_DURATION_MS - 1);
+      store.show('success', 'Análisis completado');
+      mock.timers.tick(TOAST_DURATION_MS - 1);
+      assert.equal(store.getSnapshot()[0].text, 'Análisis completado (4)');
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it('con función de texto y contador explícito compone singular y plural', () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const store = new ToastStore();
+      const text = (count: number) => (count === 1 ? 'Track deleted' : `Tracks deleted (${count})`);
+      store.show('success', text, { group: 'deleted' });
+      assert.equal(store.getSnapshot()[0].text, 'Track deleted');
+      store.show('success', text, { group: 'deleted' });
+      assert.equal(store.getSnapshot()[0].text, 'Tracks deleted (2)');
+      store.show('success', text, { group: 'deleted', count: 10 });
+      assert.equal(store.getSnapshot()[0].text, 'Tracks deleted (10)');
+      assert.equal(store.getSnapshot().length, 1);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it('un aviso en cola también absorbe sus repeticiones', () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const store = new ToastStore();
+      store.show('info', 'importado');
+      store.show('success', 'analizado');
+      store.show('success', 'analizado');
+      mock.timers.tick(TOAST_STAGGER_MS);
+      assert.deepEqual(store.getSnapshot().map((toast) => toast.text), ['analizado (2)', 'importado']);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it('la biblioteca no muestra avisos en línea: borrados y análisis van a los toasts agrupados', () => {
+    const library = read('src/pages/Library.tsx');
+    assert.doesNotMatch(library, /setFeedback|<Notice/);
+    assert.match(library, /group: 'library-deleted'/);
+    assert.match(library, /group: 'library-analysis-done', count: batch\.done/);
   });
 
   it('Inicio confirma las cargas con toasts en lugar de avisos en línea', () => {
@@ -82,15 +146,17 @@ describe('Playlists — Play/Pausa', () => {
 });
 
 describe('Marco global de la aplicación', () => {
-  it('cabecera, área de trabajo y barra comparten un marco centrado del 92 %', () => {
-    assert.match(read('src/index.css'), /--layout-frame-width: max\(92vw, min\(100vw - 2 \* var\(--layout-gutter\), 80rem\)\)/);
+  it('cabecera, área de trabajo y barra ocupan todo el ancho de la ventana', () => {
+    assert.doesNotMatch(read('src/index.css'), /--layout-frame-width/);
     const css = read('src/layouts/DesktopLayout.css');
-    assert.match(css, /width: var\(--layout-frame-width\);\s+margin-inline: auto;/);
-    assert.doesNotMatch(css, /width: 100vw/);
+    assert.match(css, /\.desktop-layout \{[^}]*width: 100%;/);
+    assert.doesNotMatch(css, /margin-inline: auto/);
   });
 
-  it('Home, Login y Registro usan el mismo marco que la consola', () => {
-    assert.match(read('src/components/templates/LandingTemplate.css'), /\.sd-landing \{[^}]*width: var\(--layout-frame-width\);[^}]*margin-inline: auto;/);
+  it('Home, Login y Registro ocupan todo el ancho, como la consola', () => {
+    const css = read('src/components/templates/LandingTemplate.css');
+    assert.match(css, /\.sd-landing \{[^}]*width: 100%;/);
+    assert.doesNotMatch(css, /layout-frame-width|margin-inline: auto/);
   });
 
   it('las secciones no reducen su ancho por su cuenta', () => {
@@ -98,8 +164,10 @@ describe('Marco global de la aplicación', () => {
     assert.doesNotMatch(read('src/pages/Mixer.css'), /--layout-content-inset/);
   });
 
-  it('los avisos fijos se alinean con el borde del marco', () => {
-    assert.match(read('src/components/molecules/ToastViewport.css'), /right: calc\(\(100vw - var\(--layout-frame-width, 100vw\)\) \/ 2/);
+  it('los avisos fijos se alinean con el borde derecho de la ventana', () => {
+    const css = read('src/components/molecules/ToastViewport.css');
+    assert.match(css, /right: var\(--sd-gap-4\);/);
+    assert.doesNotMatch(css, /layout-frame-width/);
   });
 });
 
@@ -150,5 +218,46 @@ describe('Sesiones — captura e historial', () => {
 
   it('separa más las sesiones guardadas con el sistema de espaciado', () => {
     assert.match(read('src/pages/Sessions.css'), /\.sd-sessions-history__list \{[^}]*gap: var\(--sd-gap-1\);/);
+  });
+});
+
+describe('Ruta raíz', () => {
+  it('`/` siempre muestra la presentación, con o sin sesión', () => {
+    const landing = read('src/pages/Landing.tsx');
+    assert.doesNotMatch(landing, /<Navigate/);
+    assert.match(read('src/App.tsx'), /<Route path="\/" element=\{<Landing \/>\} \/>/);
+  });
+});
+
+describe('Presentación — cambio de tema e idioma', () => {
+  it('ambos cambios pasan por una View Transition', () => {
+    const navbar = read('src/components/organisms/LandingNavbar.tsx');
+    assert.match(navbar, /withViewTransition\('language'/);
+    assert.match(navbar, /withViewTransition\('theme'/);
+  });
+
+  it('respeta la preferencia de animaciones y el movimiento reducido', () => {
+    assert.match(read('src/design-system/viewTransition.ts'), /settingsStore\.getSnapshot\(\)\.animations/);
+    const tokens = read('src/design-system/tokens.css');
+    assert.match(tokens, /@media \(prefers-reduced-motion: reduce\) \{\s+::view-transition-old\(root\)/);
+    assert.match(tokens, /::view-transition-new\(sd-page-content\)/);
+  });
+});
+
+describe('Longitud máxima de los campos de texto', () => {
+  it('una sola constante compartida, aplicada por los átomos de entrada', async () => {
+    const { INPUT_MAX_LENGTH } = await import('../src/config/constants.ts');
+    assert.equal(INPUT_MAX_LENGTH, 100);
+    for (const path of ['src/components/atoms/TextField.tsx', 'src/components/ui/Input.tsx']) {
+      const source = read(path);
+      assert.match(source, /maxLength = INPUT_MAX_LENGTH/);
+      assert.match(source, /maxLength=\{maxLength\}/);
+    }
+  });
+
+  it('la búsqueda superior no fija su propio límite', () => {
+    const header = read('src/layouts/Header.tsx');
+    assert.match(header, /<TextField/);
+    assert.doesNotMatch(header, /maxLength=\{\d+\}/);
   });
 });

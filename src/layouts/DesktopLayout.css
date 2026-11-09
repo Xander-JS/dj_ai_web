@@ -301,10 +301,17 @@
   line-height: 1;
 }
 
-.header-search-container {
+/* El formulario lleva el tamaño flexible en la cabecera; el campo lo rellena */
+.header-search-form {
+  display: flex;
   flex: 1;
   max-width: 26rem;
   margin: 0 var(--sd-gap-5);
+}
+
+.header-search-container {
+  flex: 1;
+  min-width: 0;
 }
 
 .header-search-container .sd-text-field__input {
@@ -403,8 +410,11 @@
     white-space: nowrap;
   }
 
-  .header-search-container {
+  .header-search-form {
     margin: 0;
+  }
+
+  .header-search-container {
     min-width: 0;
   }
 

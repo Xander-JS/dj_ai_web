@@ -283,6 +283,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), geminiDevApiPlugin(apiKey, provider)],
     server: {
+      proxy: { "/api/ai/mix-plan": "http://127.0.0.1:8000" },
       port: 5173,
       strictPort: true, // Si el 5173 está ocupado, arroja error en vez de saltar al 5174, 5175...
     },

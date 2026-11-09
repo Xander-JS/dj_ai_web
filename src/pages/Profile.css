@@ -9,6 +9,12 @@
   gap: var(--sd-gap-4);
 }
 
+/* Las dos tarjetas del perfil: solo fondo transparente */
+.sd-panel.sd-profile__edit,
+.sd-panel.sd-profile__device {
+  background-color: transparent;
+}
+
 /* Sin cuenta solo queda el bloque del dispositivo: ocupa el ancho */
 .sd-profile__device:only-child {
   grid-column: 1 / -1;

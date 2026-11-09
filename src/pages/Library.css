@@ -23,8 +23,13 @@
     transform var(--sd-duration-base) var(--sd-ease-out);
 }
 
+/* Estado normal: sigue el acento elegido en Ajustes → Estilos (en vez del salvia fijo) */
+.sd-library-dropzone.sd-field-sage {
+  background-color: var(--sd-accent);
+}
+
 .sd-library-dropzone:hover {
-  background-color: color-mix(in srgb, var(--sd-field-sage) 85%, var(--sd-field-ink));
+  background-color: color-mix(in srgb, var(--sd-accent) 85%, var(--sd-field-ink));
 }
 
 .sd-library-dropzone.is-active {
@@ -71,6 +76,12 @@
   flex: 0 1 22rem;
 }
 
+/* Fondo transparente y borde gris translúcido de 1px (negro en hover/foco) */
+.sd-library-toolbar__search .sd-text-field__input {
+  background-color: transparent;
+  border: 2px solid color-mix(in srgb, var(--sd-ink) 30%, transparent);
+}
+
 .sd-library-toolbar__filters {
   display: flex;
   align-items: center;
@@ -78,7 +89,13 @@
   flex-wrap: wrap;
 }
 
-/* Foco: solo se oscurece el borde existente, sin el contorno adicional superpuesto */
+/* Riel de los filtros (Todas / Mis Archivos / Subidas por enlace): sin fondo */
+.sd-library-toolbar__filters .sd-segmented {
+  background-color: transparent;
+}
+
+/* Hover y foco: borde negro para resaltar, sin contorno superpuesto */
+.sd-library-toolbar__search .sd-text-field__input:hover:not(:disabled),
 .sd-library-toolbar__search .sd-text-field__input:focus,
 .sd-library-toolbar__search .sd-text-field__input:focus-visible {
   border-color: var(--sd-ink);
@@ -94,7 +111,7 @@
   min-height: 3.25rem;
   padding: 0.5rem 0.5rem 0.5rem 1.25rem;
   border-radius: var(--sd-radius-inset);
-  background-color: var(--sd-surface);
+  background-color: transparent;
   --sd-ghost-hover: var(--sd-paper);
   --sd-field-bg: var(--sd-paper);
 }
@@ -225,6 +242,13 @@
   padding: 0 0.5rem;
 }
 
+/* Badges de superficie: sin fondo y texto resaltado con la tipografía de cuerpo */
+.sd-tag--surface.sd-library-track__tag {
+  background-color: transparent;
+  font-size: var(--sd-text-body);
+  color: var(--sd-ink);
+}
+
 .sd-library-track__artist {
   flex-shrink: 1;
   min-width: 3rem;
@@ -239,7 +263,7 @@
   position: sticky;
   right: 0;
   z-index: 1;
-  background-color: var(--sd-paper);
+  background-color: transparent;
 }
 
 .sd-library-table th.sd-table__actions {
@@ -249,6 +273,19 @@
 .sd-library-table th,
 .sd-library-table td {
   padding-inline: min(0.625rem, var(--sd-cell-pad-x));
+}
+
+/* Fila de cabecera: sin fondo y con el estilo tipográfico de los títulos */
+.sd-library-table thead tr,
+.sd-library-table th {
+  background-color: transparent;
+}
+
+.sd-library-table th {
+  color: var(--sd-ink);
+  font-weight: var(--sd-weight-black);
+  letter-spacing: var(--sd-tracking-display);
+  text-transform: uppercase;
 }
 
 .sd-library-table__file {
@@ -312,6 +349,7 @@
   min-height: 1.5rem;
   padding: 0 0.5rem;
   font-weight: var(--sd-weight-black);
+  background-color: transparent;
 }
 
 .sd-energy {

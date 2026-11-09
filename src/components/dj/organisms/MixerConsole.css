@@ -31,7 +31,7 @@
 }
 
 /* Líneas divisorias finas, sin cajas: el MASTER las dibuja a ambos lados */
-.mixer-console__columns > .mixer-master {
+.mixer-console__columns>.mixer-master {
   border-inline: 1px solid var(--console-divider);
 }
 
@@ -42,7 +42,9 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  width: 100%;
   min-height: 22px;
+  padding-bottom: clamp(15px, 1.8cqi, 10px);
 }
 
 .mixer-console .mixer-channel__name,
@@ -54,4 +56,3 @@
   line-height: 1;
   white-space: nowrap;
 }
-

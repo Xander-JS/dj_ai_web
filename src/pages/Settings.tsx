@@ -353,7 +353,13 @@ export const Settings: React.FC = () => {
                     <ChoiceTiles<ThemeMode>
                       label={t('settings.theme_title')}
                       value={settings.theme}
-                      onChange={(theme) => updateSettings({ theme })}
+                      onChange={(theme) => {
+                        if (theme === 'light' && settings.consoleDesign === 'classic') {
+                          updateSettings({ theme, consoleDesign: 'system' });
+                        } else {
+                          updateSettings({ theme });
+                        }
+                      }}
                       options={(['light', 'dark'] as const).map((theme) => ({
                         value: theme,
                         label: t(`settings.theme_option.${theme}`),
@@ -367,17 +373,39 @@ export const Settings: React.FC = () => {
                   title={t('settings.console_design_title')}
                   description={t('settings.console_design_desc')}
                   control={(
-                    <ChoiceTiles<ConsoleDesign>
-                      label={t('settings.console_design_title')}
-                      value={settings.consoleDesign}
-                      onChange={(consoleDesign) => updateSettings({ consoleDesign })}
-                      options={CONSOLE_DESIGNS.map((design) => ({
-                        value: design,
-                        label: t(`settings.console_design_option.${design}`),
-                        hint: design === DEFAULT_SETTINGS.consoleDesign ? t('settings.console_design_default') : undefined,
-                        preview: <ConsoleDesignPreview design={design} />,
-                      }))}
-                    />
+                    <div className="sd-settings__console-block">
+                      <ChoiceTiles<ConsoleDesign>
+                        label={t('settings.console_design_title')}
+                        value={settings.consoleDesign}
+                        onChange={(consoleDesign) => {
+                          if (consoleDesign === 'classic' && settings.theme !== 'dark') {
+                            return;
+                          }
+                          updateSettings({ consoleDesign });
+                        }}
+                        options={CONSOLE_DESIGNS.map((design) => {
+                          const isClassic = design === 'classic';
+                          const isDarkOnly = isClassic && settings.theme !== 'dark';
+                          return {
+                            value: design,
+                            label: t(`settings.console_design_option.${design}`),
+                            hint: isDarkOnly
+                              ? t('settings.console_design_dark_only')
+                              : design === DEFAULT_SETTINGS.consoleDesign
+                                ? t('settings.console_design_default')
+                                : undefined,
+                            disabled: isDarkOnly,
+                            disabledReason: isDarkOnly ? t('settings.console_design_dark_only_notice') : undefined,
+                            preview: <ConsoleDesignPreview design={design} />,
+                          };
+                        })}
+                      />
+                      {settings.theme !== 'dark' && (
+                        <Notice tone="info" className="sd-settings__console-notice">
+                          {t('settings.console_design_dark_only_notice')}
+                        </Notice>
+                      )}
+                    </div>
                   )}
                 />
                 <SettingRow

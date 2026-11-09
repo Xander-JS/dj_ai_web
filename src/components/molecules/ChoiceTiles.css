@@ -41,6 +41,23 @@
   box-shadow: 0 0 0 3px var(--sd-ink);
 }
 
+.sd-choice-tile.is-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.sd-choice-tile.is-disabled input {
+  pointer-events: none;
+}
+
+.sd-choice-tile.is-disabled:hover .sd-choice-tile__preview {
+  box-shadow: 0 0 0 2px transparent;
+}
+
+.sd-choice-tile.is-disabled:active .sd-choice-tile__preview {
+  transform: none;
+}
+
 .sd-choice-tile:has(:focus-visible) .sd-choice-tile__preview {
   outline: var(--sd-focus-width) solid var(--sd-focus);
   outline-offset: 4px;

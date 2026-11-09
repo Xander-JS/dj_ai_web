@@ -11,6 +11,10 @@ export interface ChoiceTile<T extends string> {
   preview?: ReactNode;
   /** Nota breve bajo la etiqueta (p. ej. «Predeterminado») */
   hint?: ReactNode;
+  /** Si la opción está deshabilitada (no seleccionable) */
+  disabled?: boolean;
+  /** Motivo por el que la opción está deshabilitada (se muestra en title accesible) */
+  disabledReason?: string;
 }
 
 export interface ChoiceTilesProps<T extends string> {
@@ -34,15 +38,25 @@ export function ChoiceTiles<T extends string>({ value, options, label, onChange,
       <legend className="sd-visually-hidden">{label}</legend>
       {options.map((option) => {
         const checked = option.value === value;
+        const disabled = Boolean(option.disabled);
         return (
-          <label key={option.value} className={clsx('sd-choice-tile', checked && 'is-checked')}>
+          <label
+            key={option.value}
+            className={clsx('sd-choice-tile', checked && 'is-checked', disabled && 'is-disabled')}
+            title={disabled ? option.disabledReason : undefined}
+          >
             <input
               type="radio"
               name={name}
               value={option.value}
               checked={checked}
+              disabled={disabled}
               className="sd-visually-hidden"
-              onChange={() => onChange(option.value)}
+              onChange={() => {
+                if (!disabled) {
+                  onChange(option.value);
+                }
+              }}
             />
             {option.preview && (
               <span className="sd-choice-tile__preview" aria-hidden="true">

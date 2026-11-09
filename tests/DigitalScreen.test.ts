@@ -115,6 +115,14 @@ describe('Pantalla digital — botonera y vistas', () => {
     assert.equal(store.getSnapshot().gridEnabled, false);
   });
 
+  it('GRID controla las dos formas de onda y su dibujo de pulsos y compases', () => {
+    const screen = read('src/components/dj/organisms/DigitalScreen.tsx');
+    const waveform = read('src/components/dj/molecules/ScreenWaveform.tsx');
+    assert.equal(screen.match(/<ScreenWaveform deck=\{deck[AB]\} gridEnabled=\{screen\.gridEnabled\}/g)?.length, 2);
+    assert.match(waveform, /grid: gridEnabled \? getBarGrid\(deck\.track, getAnalyzedBpm\(deck\.track\)\) : null/);
+    assert.match(waveform, /if \(view\.grid\) \{[\s\S]*beatGrid[\s\S]*firstBarAtOrAfter\(view\.grid/);
+  });
+
   it('al desmontarse vuelve a la vista normal y conserva GRID', () => {
     const { store } = clockedStore();
     const detach = store.attach();

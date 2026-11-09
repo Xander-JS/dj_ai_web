@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import { PlayerQueue, shuffled, type PlayerTransport } from '../src/services/player/playerQueue.ts';
+import { stopAllAudioPlayback } from '../src/services/player/playerService.ts';
+import { djStore } from '../src/store/useDJStore.ts';
 import {
   DEFAULT_NAVIGATION_BINDINGS,
   createShortcutHandlers,
@@ -522,5 +524,17 @@ describe('Traducciones', () => {
       assert.equal(typeof get(es, path), 'string', `es:${path}`);
       assert.equal(typeof get(en, path), 'string', `en:${path}`);
     }
+  });
+});
+
+describe('Cese de reproducción de audio al cerrar sesión', () => {
+  it('stopAllAudioPlayback pausa ambos decks de DJ y cancela preescuchas activas', () => {
+    djStore.loadTrackToDeck('A', track('t-signout-1'));
+    assert.doesNotThrow(() => {
+      stopAllAudioPlayback();
+    });
+    const snapshot = djStore.getSnapshot();
+    assert.notEqual(snapshot.deckA.playbackState, 'playing');
+    assert.notEqual(snapshot.deckB.playbackState, 'playing');
   });
 });

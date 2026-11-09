@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { 
   Search, CheckSquare, Square, MinusSquare,
@@ -195,8 +195,19 @@ export const Library: React.FC = () => {
   const { seedTrackIds, toggleSeed, removeSeed, swapSeeds, clearSeeds } = useSeedStore();
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // La búsqueda global de la cabecera llega como ?q=; inicia y sincroniza el término de esta vista
+  const [searchParams] = useSearchParams();
+  const queryParam = searchParams.get('q') ?? '';
+
   const [filter, setFilter] = useState<SourceFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(queryParam);
+  // Si la cabecera cambia el ?q= (también al vaciarlo), se adopta durante el render (sin efecto).
+  // Escribir en el buscador propio no toca la URL, así que no se pisa lo tecleado aquí.
+  const [prevQueryParam, setPrevQueryParam] = useState(queryParam);
+  if (queryParam !== prevQueryParam) {
+    setPrevQueryParam(queryParam);
+    setSearchQuery(queryParam);
+  }
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
 
   const [localTracks, setLocalTracks] = useState<Track[]>([]);

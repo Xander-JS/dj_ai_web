@@ -139,11 +139,11 @@
   --color-error: hsl(348, 80%, 50%);
 
   /* Backgrounds & Surfaces (Light) */
-  --bg-base: hsl(var(--hue-neutral), 10%, 97%);
-  --bg-surface: hsl(0, 0%, 100%);
+  --bg-base: var(--sd-page-bg, #f7f6f2);
+  --bg-surface: var(--sd-page-bg, #f7f6f2);
   --bg-surface-hover: hsl(var(--hue-neutral), 15%, 94%);
   --bg-surface-active: hsl(var(--hue-neutral), 15%, 90%);
-  --bg-elevated: hsl(0, 0%, 100%);
+  --bg-elevated: var(--sd-page-bg, #f7f6f2);
   
   /* Text & Content (Light) */
   --text-primary: hsl(var(--hue-neutral), 20%, 10%);

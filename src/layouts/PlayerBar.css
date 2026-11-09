@@ -4,10 +4,18 @@
    rejilla.
    ========================================================================== */
 .sd-player {
-  --sd-player-edge: color-mix(in srgb, var(--sd-ink) 10%, transparent);
-  /* Los controles fantasma suben a papel sobre la superficie del panel */
-  --sd-ghost-hover: var(--sd-paper);
-  --sd-progress-track: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+  /* El fondo es un tinte CLARO del acento (--sd-player-bg) igual en ambos temas; por eso la barra
+     se trata como un campo claro: la tinta pasa a negra para que los textos resalten, el foco va
+     en negro y los controles fantasma oscurecen al pasar el cursor. */
+  --sd-ink: var(--sd-field-ink);
+  --sd-ink-soft: var(--sd-field-ink-soft);
+  --sd-focus: var(--sd-field-ink);
+  --sd-player-edge: color-mix(in srgb, var(--sd-ink) 14%, transparent);
+  --sd-ghost-hover: color-mix(in srgb, var(--sd-ink) 8%, transparent);
+  /* Las dos líneas (tracks de tiempo y volumen) toman el Fondo de página elegido por el usuario;
+     el negro queda como color de remarcado: el relleno/progreso del fader. */
+  --sd-progress-track: var(--sd-page-bg);
+  --sd-indicator: var(--sd-ink);
 
   position: relative;
   isolation: isolate;
@@ -18,8 +26,8 @@
   width: 100%;
   height: 100%;
   padding: 0 var(--sd-gap-4) 0 var(--sd-gap-2);
-  border-radius: var(--sd-radius-panel);
-  background-color: var(--sd-surface);
+  border-radius: var(--sd-bar-radius);
+  background-color: var(--sd-player-bg);
   box-shadow: inset 0 0 0 1px var(--sd-player-edge);
   color: var(--sd-ink);
   font-family: var(--sd-font);

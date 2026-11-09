@@ -117,7 +117,9 @@
 }
 
 @keyframes mixerNavCue {
-  0%, 45% {
+
+  0%,
+  45% {
     background-color: var(--color-primary-500);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-500) 35%, transparent);
     color: #fff;
@@ -149,7 +151,10 @@
 /* Barra superior y lateral: papel del Design System v2, sin filetes; separan por espacio */
 .layout-header {
   grid-area: header;
-  background-color: var(--sd-paper);
+  /* Barra flotante como el reproductor: insertada por los lados (no ocupa todo el ancho) y redondeada */
+  margin: var(--sd-gap-1) var(--sd-gap-3);
+  background-color: transparent;
+  border-radius: var(--sd-bar-radius);
   display: flex;
   align-items: center;
   padding: 0 var(--sd-gap-4);
@@ -159,9 +164,22 @@
   transition: background-color var(--sd-duration-base) var(--sd-ease-out);
 }
 
+/* En ambas barras el fondo salvia es claro siempre; en modo oscuro forzamos tinta negra
+   (y superficies claras) para que texto e íconos se lean. */
+[data-theme='dark'] .layout-header,
+[data-theme='dark'] .sd-player {
+  --sd-ink: #000000;
+  --sd-ink-soft: #2b2b2b;
+  --sd-paper: #f7f6f2;
+  --sd-surface: #f3f3f1;
+  --sd-ghost-hover: rgb(0 0 0 / 0.08);
+  color: var(--sd-ink);
+}
+
 .layout-sidebar {
   grid-area: sidebar;
-  background-color: var(--sd-paper);
+  /* Contenedor transparente: usa el fondo global de página. El hijo .sidebar-nav (animado) no se toca. */
+  background-color: transparent;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -184,7 +202,8 @@
 
 .layout-player {
   grid-area: player;
-  background-color: var(--sd-paper);
+  /* Transparente: la barra redondeada (.sd-player) flota sobre el fondo de página, igual que el header */
+  background-color: transparent;
   display: flex;
   align-items: stretch;
   padding: var(--sd-gap-1) var(--sd-gap-3);
@@ -282,7 +301,22 @@
 }
 
 .header-search-container .sd-text-field__input {
-  height: var(--sd-control-height);
+  height: 2.25rem;
+  /* Mismo redondeado que las barras (no la píldora por defecto) y más holgura horizontal */
+  border-radius: var(--sd-bar-radius);
+  padding-left: 3rem;
+  padding-right: 1.5rem;
+  /* Fondo transparente; borde gris translúcido por defecto (resalta a negro en hover/foco) */
+  background-color: transparent;
+  border-color: color-mix(in srgb, var(--sd-ink) 30%, transparent);
+}
+
+/* Hover y foco: borde negro para resaltar, sin outline */
+.header-search-container .sd-text-field__input:hover:not(:disabled),
+.header-search-container .sd-text-field__input:focus,
+.header-search-container .sd-text-field__input:focus-visible {
+  border-color: var(--sd-ink);
+  outline: none;
 }
 
 /* Sin la «x» nativa del campo de búsqueda: la píldora queda limpia */

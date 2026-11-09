@@ -61,7 +61,7 @@
 
   /* Forma de onda ampliada de la pantalla digital (canvas): lo ya reproducido se atenúa */
   --screen-wave-played-opacity: 0.38;
-  --screen-wave-bar-line: hsl(0 0% 100% / 0.14);
+  --screen-wave-bar-line: hsl(0 0% 100% / 0.3);
   --screen-wave-playhead-width: 2px;
   --screen-wave-marker-width: 1px;
   --screen-wave-cue-width: 2px;

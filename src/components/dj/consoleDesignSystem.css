@@ -353,7 +353,7 @@
     --screen-ink-faint: color-mix(in srgb, var(--sd-ink) 38%, transparent);
     --screen-line: color-mix(in srgb, var(--sd-ink) 12%, transparent);
     --screen-line-strong: color-mix(in srgb, var(--sd-ink) 22%, transparent);
-    --screen-wave-bar-line: color-mix(in srgb, var(--sd-ink) 14%, transparent);
+    --screen-wave-bar-line: color-mix(in srgb, var(--sd-ink) 30%, transparent);
     --screen-wave-tag-ink: #ffffff;
     --screen-wave-cue-tag-ink: #ffffff;
     background: var(--sd-surface);
@@ -423,7 +423,7 @@
     --screen-ink-faint: hsl(215 10% 42%);
     --screen-line: hsl(215 18% 16%);
     --screen-line-strong: hsl(215 16% 28%);
-    --screen-wave-bar-line: hsl(0 0% 100% / 0.14);
+    --screen-wave-bar-line: hsl(0 0% 100% / 0.3);
   }
 
   & .led-matrix {

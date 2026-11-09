@@ -42,6 +42,10 @@ export type JogDisc = 'a' | 'b' | 'c';
 export type WaveformZoom = 4 | 8 | 16;
 /** Diseño visual de la consola: `system` (identidad plana v2, predeterminado) o `classic` (hardware). */
 export type ConsoleDesign = 'system' | 'classic';
+/** Tono del fondo GENERAL de la página. Solo cambia el color; la luminosidad y la saturación quedan
+    fijas a la intensidad de referencia de cada tema (claro: papel cálido; oscuro: casi negro), para
+    que nunca se vea ni muy claro ni muy oscuro. `default` conserva el papel original. */
+export type PageBackground = 'default' | 'rose' | 'fuchsia' | 'sage' | 'teal' | 'blue' | 'violet';
 
 export interface AppSettings {
   theme: ThemeMode;
@@ -69,6 +73,8 @@ export interface AppSettings {
   jogDisc: JogDisc;
   /** Diseño visual de la consola; solo es apariencia, no afecta al motor ni al transporte. */
   consoleDesign: ConsoleDesign;
+  /** Tono del fondo general de la página; solo es apariencia, mantiene la intensidad de referencia. */
+  pageBackground: PageBackground;
   /** Reserva la futura disposición alternativa de la consola; todavía no cambia la interfaz. */
   experimentalInterface: boolean;
 }
@@ -90,6 +96,8 @@ export const ACCENT_HUES: Record<AccentColor, number> = {
 export const VISUALIZER_INTENSITIES: readonly VisualizerIntensity[] = ['subtle', 'balanced', 'vivid'];
 export const JOG_DISCS: readonly JogDisc[] = ['a', 'b', 'c'];
 export const CONSOLE_DESIGNS: readonly ConsoleDesign[] = ['system', 'classic'];
+/** Tonos de fondo disponibles; los valores HSL exactos viven en tokens.css bajo `[data-page-bg]`. */
+export const PAGE_BACKGROUNDS: readonly PageBackground[] = ['default', 'rose', 'fuchsia', 'sage', 'teal', 'blue', 'violet'];
 /** Mismo orden que el selector de la consola: CP, LIN, CUT. */
 export const CROSSFADER_CURVES: readonly CrossfaderCurve[] = ['constant-power', 'linear', 'cut'];
 
@@ -126,6 +134,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   visualizerIntensity: 'balanced',
   jogDisc: 'b',
   consoleDesign: 'system',
+  pageBackground: 'default',
   experimentalInterface: false,
 };
 
@@ -193,6 +202,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     visualizerIntensity: pick(source.visualizerIntensity, VISUALIZER_INTENSITIES, d.visualizerIntensity),
     jogDisc: pick(source.jogDisc, JOG_DISCS, d.jogDisc),
     consoleDesign,
+    pageBackground: pick(source.pageBackground, PAGE_BACKGROUNDS, d.pageBackground),
     experimentalInterface: typeof source.experimentalInterface === 'boolean' ? source.experimentalInterface : d.experimentalInterface,
   };
 }

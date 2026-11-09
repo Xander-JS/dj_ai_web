@@ -57,7 +57,7 @@
      en modo claro adopta un tono claro (#e2e6eb) para integrarse con la consola clara,
      y en modo oscuro baja a negro / casi negro (#121418). */
   --console-display: #e2e6eb;
-  --console-display-well: #d6dce3;
+  --console-display-well: #d5dbe2;
   --console-display-edge: color-mix(in srgb, var(--sd-ink) 18%, transparent);
   --console-led-matrix-dot: color-mix(in srgb, var(--sd-ink) 7%, transparent);
 
@@ -66,10 +66,18 @@
   --console-lcd-edge: var(--console-display-edge);
   --console-lcd-ink: var(--sd-ink);
 
+  /* Placa del mixer central: sincronizada con el well metálico claro de la consola */
+  --console-mixer-bg: var(--console-display-well);
+
   /* Ranuras, marcas y vúmetros: hueco plano de tinta */
-  --console-slot: color-mix(in srgb, var(--sd-ink) 12%, transparent);
+  --console-slot: color-mix(in srgb, var(--sd-ink) 10%, transparent);
   --console-tick: var(--sd-ink-soft);
-  --console-meter-bg: color-mix(in srgb, var(--sd-ink) 10%, transparent);
+  --console-meter-well: #111e;
+  --console-meter-bg: var(--console-meter-well);
+  --console-meter-scale-opacity: 0.35;
+
+
+
 
   /* -------------------------------------------------------------- CARCASA */
   & .dj-console__housing {
@@ -86,6 +94,10 @@
     border-radius: var(--sd-radius-inset);
     background: color-mix(in srgb, var(--console-tone) 7%, var(--sd-paper));
     box-shadow: none;
+  }
+
+  & .mixer-console {
+    background: var(--console-display-well);
   }
 
   /* --------------------------------------------------------------- TECLAS */
@@ -129,10 +141,11 @@
     color: var(--sd-ink-soft);
   }
 
-  /* Bisel del Auto Loop: campo hundido plano de la identidad, no el negro de hardware */
+  /* Bisel del Auto Loop: sin fondo gris contenedor */
   & .deck-loop__bezel {
-    background: var(--console-slot);
+    background: transparent;
     box-shadow: none;
+    padding: 0;
   }
 
   & .hw-button__cap.is-lit {
@@ -177,9 +190,9 @@
   }
 
   /* ----------------------------------------------- POTENCIÓMETROS (EQ/GAIN) */
-  /* Pomo de imagen → disco plano con línea indicadora; el arco de valor se conserva */
+  /* Pomo de imagen → disco plano con línea indicadora; el arco de valor se conserva concéntrico */
   & .console-knob__dial {
-    aspect-ratio: 1;
+    aspect-ratio: 1855 / 1623;
   }
 
   & .console-knob__scale,
@@ -194,6 +207,14 @@
     box-shadow: none;
   }
 
+  /* Los knobs de canal adoptan la identidad cromática de su respectiva pista (A / B) */
+  & .console-tone-a .console-knob__cap,
+  & .console-tone-b .console-knob__cap {
+    background: var(--console-tone);
+    border: 1px solid color-mix(in srgb, var(--console-tone) 60%, var(--sd-ink));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+  }
+
   & .console-knob__arc-track {
     stroke: color-mix(in srgb, var(--sd-ink) 16%, transparent);
   }
@@ -205,6 +226,11 @@
   & .console-knob__pointer::before {
     background: var(--sd-ink);
     box-shadow: none;
+  }
+
+  & .console-tone-a .console-knob__pointer::before,
+  & .console-tone-b .console-knob__pointer::before {
+    background: var(--sd-field-ink);
   }
 
   /* ------------------------------------------------------ FADERS Y PITCH */

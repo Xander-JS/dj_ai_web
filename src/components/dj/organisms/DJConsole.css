@@ -27,7 +27,7 @@
 .dj-console__housing {
   display: grid;
   /* ≈ 30 / 40 / 30 del ancho, como el boceto */
-  grid-template-columns: minmax(0, 30fr) minmax(420px, 40fr) minmax(0, 30fr);
+  grid-template-columns: minmax(0, 33fr) minmax(420px, 34fr) minmax(0, 33fr);
   column-gap: var(--layout-gutter);
   padding: 0 var(--layout-gutter) var(--space-2);
   border-radius: 18px;

@@ -29,7 +29,9 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--sd-margin);
-  background-color: var(--sd-paper);
+  /* Transparente para dejar ver el fondo de página (.layout-main = --bg-base/--sd-page-bg),
+     igual que el Mixer. Las tarjetas e hijos dentro conservan su propio --sd-paper. */
+  background-color: transparent;
   color: var(--sd-ink);
   font-family: var(--sd-font);
   font-weight: var(--sd-weight-regular);

@@ -17,7 +17,7 @@
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
-  cursor: help;
+  cursor: default;
   font-variant-numeric: tabular-nums;
 }
 
@@ -63,11 +63,11 @@
   width: max-content;
   max-width: 280px;
   padding: 6px 9px;
-  border: 1px solid hsl(0 0% 100% / 0.12);
+  border: 1px solid var(--console-tooltip-border, hsl(0 0% 100% / 0.12));
   border-radius: 4px;
-  background: hsl(225 8% 13%);
+  background: var(--console-tooltip-bg, hsl(225 8% 13%));
   box-shadow: 0 10px 24px -8px rgb(0 0 0 / 0.8);
-  color: var(--console-silkscreen);
+  color: var(--console-tooltip-ink, #f4f4f4);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: normal;

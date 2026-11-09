@@ -33,6 +33,10 @@
 
   --console-silkscreen: hsl(220 10% 92%);
   --console-silkscreen-dim: hsl(220 6% 66%);
+  /* Tooltip de avisos contextuales con alto contraste */
+  --console-tooltip-bg: hsl(225 10% 12%);
+  --console-tooltip-ink: hsl(220 15% 96%);
+  --console-tooltip-border: hsl(0 0% 100% / 0.14);
   --console-focus: hsl(195 90% 62%);
   --console-key-body: hsl(225 6% 13%);
   --console-key-edge: rgb(0 0 0 / 0.65);

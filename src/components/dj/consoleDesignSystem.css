@@ -39,6 +39,11 @@
   --console-silkscreen-dim: var(--sd-ink-soft);
   --console-focus: var(--sd-focus);
 
+  /* Tooltip de avisos contextuales con alto contraste mediante tinta invertida */
+  --console-tooltip-bg: var(--sd-inverse, #1d1d1d);
+  --console-tooltip-ink: var(--sd-inverse-ink, #f4f4f4);
+  --console-tooltip-border: color-mix(in srgb, var(--sd-inverse-ink, #fff) 14%, transparent);
+
   /* Teclas y cuerpos de control: campo plano con filo de tinta. La luz de las teclas sigue al
      tono del deck que las contiene (cálido en A, frío en B), no a un único naranja global: así
      cada control se enciende con la identidad de su pista y no todo es del mismo color. Fuera de

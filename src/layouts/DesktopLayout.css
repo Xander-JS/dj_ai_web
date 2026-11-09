@@ -164,15 +164,22 @@
   transition: background-color var(--sd-duration-base) var(--sd-ease-out);
 }
 
-/* En ambas barras el fondo salvia es claro siempre; en modo oscuro forzamos tinta negra
-   (y superficies claras) para que texto e íconos se lean. */
-[data-theme='dark'] .layout-header,
+/* El reproductor es una barra clara siempre (fondo salvia / tinte de acento); en modo oscuro
+   forzamos tinta negra y superficies claras para que texto e íconos se lean sobre ella. */
 [data-theme='dark'] .sd-player {
   --sd-ink: #000000;
   --sd-ink-soft: #2b2b2b;
   --sd-paper: #f7f6f2;
   --sd-surface: #f3f3f1;
   --sd-ghost-hover: rgb(0 0 0 / 0.08);
+  color: var(--sd-ink);
+}
+
+/* La barra superior es transparente sobre el fondo de página; en modo oscuro sus elementos usan
+   la tinta clara (color inverso) del tema para resaltar en blanco sobre el fondo oscuro. */
+[data-theme='dark'] .layout-header {
+  --sd-ink: #f4f4f4;
+  --sd-ink-soft: #b4b4b4;
   color: var(--sd-ink);
 }
 

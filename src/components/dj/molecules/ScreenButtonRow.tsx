@@ -87,7 +87,14 @@ export const ScreenButtonRow: React.FC<ScreenButtonRowProps> = ({
         <ConsoleLed on={recording} color="red" blink />
         {t('mixer.rec_label')}
       </ConsoleKey>
-      {status && <div className="screen-button-row__status">{status}</div>}
+      {status && (
+        <div className="screen-button-row__status">
+          {status}
+          <ConsoleKey className="screen-button-row__automatic">
+            {t('mixer.screen.automatic')}
+          </ConsoleKey>
+        </div>
+      )}
     </div>
   );
 };

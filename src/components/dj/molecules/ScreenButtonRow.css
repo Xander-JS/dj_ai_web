@@ -21,14 +21,15 @@
 /* STANDBY reubicado centrado sobre el Master, entre la pantalla digital y el mixer */
 .screen-button-row__status {
   position: absolute;
-  top: calc(100% + 14px);
+  top: calc(100% + 2px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 14px;
+  gap: 8px;
+  padding: 1px 6px;
   border-radius: 4px;
   background: var(--console-plate, hsl(225 12% 8%));
   border: 1px solid var(--console-plate-edge, hsl(0 0% 100% / 0.08));
@@ -40,4 +41,10 @@
   color: var(--console-silkscreen);
   font-size: 13.5px;
   letter-spacing: 0.14em;
+}
+
+.screen-button-row__status .screen-button-row__automatic {
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
 }

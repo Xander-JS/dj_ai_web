@@ -57,6 +57,7 @@ import {
   type JogDisc,
   type ThemeMode,
 } from '../store/useSettingsStore';
+import '../design-system/keycaps.css';
 import './Settings.css';
 
 type Tab = 'general' | 'appearance' | 'language' | 'audio' | 'playback' | 'shortcuts' | 'library';

@@ -44,6 +44,7 @@ import {
   BUFFER_SIZES,
   CROSSFADER_CURVES,
   JOG_DISCS,
+  PAGE_BACKGROUNDS,
   PITCH_RANGES,
   SYNC_RANGE_MAX,
   SYNC_RANGE_MIN,
@@ -55,6 +56,7 @@ import {
   type AppSettings,
   type ConsoleDesign,
   type JogDisc,
+  type PageBackground,
   type ThemeMode,
 } from '../store/useSettingsStore';
 import '../design-system/keycaps.css';
@@ -431,6 +433,29 @@ export const Settings: React.FC = () => {
                 />
                 <SettingRow
                   layout="stacked"
+                  title={t('settings.page_bg_title')}
+                  description={t('settings.page_bg_desc')}
+                  control={(
+                    // El contenedor contrasta con la intensidad de las muestras del tema vigente para resaltarlas
+                    <div className="sd-page-bg-field">
+                      <ChoiceTiles<PageBackground>
+                        variant="swatch"
+                        label={t('settings.page_bg_title')}
+                        value={settings.pageBackground}
+                        onChange={(pageBackground) => updateSettings({ pageBackground })}
+                        options={PAGE_BACKGROUNDS.map((bg) => ({
+                          value: bg,
+                          label: t(`settings.page_bg.${bg}`),
+                          hint: bg === DEFAULT_SETTINGS.pageBackground ? t('settings.accent_default') : undefined,
+                          // La muestra reproduce el fondo real al tema vigente (Settings.css)
+                          preview: <span className="sd-page-bg-swatch" data-page-bg={bg} data-theme={settings.theme} />,
+                        }))}
+                      />
+                    </div>
+                  )}
+                />
+                <SettingRow
+                  layout="stacked"
                   title={t('settings.disc_title')}
                   description={t('settings.disc_desc')}
                   control={(
@@ -685,6 +710,7 @@ function buildReadouts(
         { label: t('settings.readout.theme'), value: t(`settings.theme_option.${settings.theme}`) },
         { label: t('settings.readout.console'), value: t(`settings.console_design_option.${settings.consoleDesign}`) },
         { label: t('settings.readout.accent'), value: t(`settings.accent.${settings.accentColor}`) },
+        { label: t('settings.readout.background'), value: t(`settings.page_bg.${settings.pageBackground}`) },
         { label: t('settings.readout.density'), value: t(`settings.density.${settings.density}`) },
         { label: t('settings.readout.disc'), value: t('settings.disc_option', { n: JOG_DISCS.indexOf(settings.jogDisc) + 1 }) },
         { label: t('settings.readout.animations'), value: t(settings.animations ? 'settings.readout.on' : 'settings.readout.off') },

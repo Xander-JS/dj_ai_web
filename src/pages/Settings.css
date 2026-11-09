@@ -246,6 +246,13 @@
   color: var(--sd-ink);
 }
 
+/* Configuración: contenedores con fondo transparente (los 7 submódulos y los bloques
+   de contenido). Los controles y vistas previas conservan su color. Solo bg. */
+.sd-settings__view-body .sd-panel,
+.sd-settings-readout {
+  background-color: transparent;
+}
+
 .sd-settings__console-block {
   display: flex;
   flex-direction: column;
@@ -390,6 +397,51 @@
   width: 100%;
   height: 100%;
   background-color: var(--sd-accent);
+}
+
+/* Contenedor de las muestras de fondo: como las muestras toman la intensidad del tema vigente
+   (muy claras en claro, casi negras en oscuro), se funden con el panel. El contenedor pinta un
+   fondo que contrasta con esa intensidad —oscuro en tema claro, claro en tema oscuro— e invierte
+   la tinta del texto para que las etiquetas y el aro de selección sigan siendo legibles. */
+.sd-page-bg-field {
+  padding: var(--sd-gap-3);
+  border-radius: var(--sd-radius-inset);
+}
+
+:root[data-theme='light'] .sd-page-bg-field {
+  background-color: var(--sd-inverse-surface);
+  --sd-ink: var(--sd-inverse-ink);
+  --sd-ink-soft: var(--sd-inverse-ink-soft);
+  /* El hueco del aro de selección adopta el color del contenedor */
+  --sd-paper: var(--sd-inverse-surface);
+}
+
+:root[data-theme='dark'] .sd-page-bg-field {
+  background-color: var(--sd-field-paper);
+  --sd-ink: var(--sd-field-ink);
+  --sd-ink-soft: var(--sd-field-ink-soft);
+  --sd-paper: var(--sd-field-paper);
+}
+
+/* Muestra del fondo de página: reproduce el mismo tono e intensidad del fondo real, por tema.
+   Los tonos (--sd-page-bg-hue) los fija [data-page-bg] en tokens.css; cada muestra lleva el suyo. */
+.sd-page-bg-swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: #f4efe9;
+}
+
+.sd-page-bg-swatch[data-page-bg]:not([data-page-bg='default']) {
+  background-color: hsl(var(--sd-page-bg-hue) 30% 93.5%);
+}
+
+.sd-page-bg-swatch[data-theme='dark'] {
+  background-color: hsl(240 10% 6%);
+}
+
+.sd-page-bg-swatch[data-theme='dark'][data-page-bg]:not([data-page-bg='default']) {
+  background-color: hsl(var(--sd-page-bg-hue) 18% 7.5%);
 }
 
 /* Maqueta de la consola: misma huella que las demás muestras; cada diseño se dibuja con su

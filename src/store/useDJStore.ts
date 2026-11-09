@@ -11,6 +11,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { consoleActions } from '../services/console/consoleActions.ts';
 import type { BeatUnit, DownbeatOrigin, Track, TrackAnalysis, HotCue, TrackDownbeat } from '../types/track.ts';
 import type { DeckId, PhaseAlignmentState, BarSyncState, BarSyncStatus } from '../types/deck.ts';
 import type { ChannelEq, ChannelStripState, CrossfaderCurve, MixerState } from '../types/mixer';
@@ -702,7 +703,9 @@ class DJStore {
    * Carga una pista en el deck especificado recuperando su audio binario desde IndexedDB o respaldo.
    * Devuelve `true` si la pista quedó cargada y lista para reproducirse.
    */
-  public async loadTrackToDeck(deckId: DeckId, track: Track): Promise<boolean> {
+  public async loadTrackToDeck(deckId: DeckId, track: Track, signal?: AbortSignal): Promise<boolean> {
+    consoleActions.manual(`${deckId}.track`);
+    if (signal?.aborted) return false;
     const oppositeDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     const token = ++this.loadTokens[deckId];
 
@@ -755,7 +758,7 @@ class DJStore {
       // Ignorar si no está disponible
     }
 
-    if (token !== this.loadTokens[deckId]) return false;
+    if (signal?.aborted || token !== this.loadTokens[deckId]) return false;
 
     // 1. Obtener el blob de audio binario real
     let audioBlob: Blob | null = effectiveTrack.source.blob || effectiveTrack.source.file || null;
@@ -771,7 +774,7 @@ class DJStore {
       audioBlob = null;
     }
 
-    if (token !== this.loadTokens[deckId]) return false; // Carga descartada por una más reciente en este deck
+    if (signal?.aborted || token !== this.loadTokens[deckId]) return false; // Carga descartada por una más reciente en este deck
 
     if (!audioBlob) {
       return false;
@@ -786,7 +789,7 @@ class DJStore {
       // 3. Decodificar audio
       const audioBuffer = await audioEngine.decodeAudioData(arrayBuffer);
 
-      if (token !== this.loadTokens[deckId]) return false;
+      if (signal?.aborted || token !== this.loadTokens[deckId]) return false;
 
       // Commit only after the replacement is decoded. Until here, the current
       // track, transport, pitch and SYNC relationship remain untouched.
@@ -853,7 +856,7 @@ class DJStore {
 
       return true;
     } catch (err) {
-      if (token !== this.loadTokens[deckId]) return false;
+      if (signal?.aborted || token !== this.loadTokens[deckId]) return false;
       console.error(`[useDJStore] Error decodificando la pista en Deck ${deckId}:`, err);
       return false;
     }
@@ -870,7 +873,9 @@ class DJStore {
   /**
    * Inicia la reproducción real en el deck especificado.
    */
-  public async playDeck(deckId: DeckId): Promise<void> {
+  public async playDeck(deckId: DeckId, signal?: AbortSignal): Promise<void> {
+    consoleActions.manual(`${deckId}.transport`);
+    if (signal?.aborted) return;
     // PLAY durante un backspin lo corta y arranca desde donde llegó
     audioEngine.stopBackspin(deckId);
     const deckState = this.getDeckState(deckId);
@@ -887,6 +892,7 @@ class DJStore {
 
     try {
       await audioEngine.resume();
+      if (signal?.aborted || (signal && this.getDeckState(deckId) !== deckState)) return;
       // Un Slave preparado con BAR SYNC arranca en fase con el Master en el instante real
       // de lanzamiento; la posición preparada solo elige el compás.
       const isBarSyncPrepared = deckState.barSync?.status === 'armed' || deckState.barSync?.status === 'already_aligned';
@@ -943,6 +949,7 @@ class DJStore {
    * Pausa la reproducción del deck reteniendo el segundo exacto.
    */
   public pauseDeck(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.transport`);
     this.isCupPlaying[deckId] = false;
     this.cancelPhaseAlignment(deckId);
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
@@ -996,6 +1003,7 @@ class DJStore {
    * Detiene la reproducción del deck y regresa al inicio (0:00).
    */
   public stopDeck(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.transport`);
     this.isCupPlaying[deckId] = false;
     this.cancelPhaseAlignment(deckId);
     const otherDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
@@ -1039,6 +1047,7 @@ class DJStore {
    * Desplaza la posición de reproducción (Seek) en segundos para el deck indicado.
    */
   public seekDeck(deckId: DeckId, positionSeconds: number): void {
+    consoleActions.manual(`${deckId}.seek`);
     this.isCupPlaying[deckId] = false;
     this.cancelLoop(deckId);
     this.cancelPhaseAlignment(deckId);
@@ -1135,6 +1144,7 @@ class DJStore {
    * Si está pausado o detenido, reposiciona el cursor en el CUE sin reproducir.
    */
   public jumpToMainCue(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.seek`);
     const deck = this.getDeckState(deckId);
     if (!deck.track || deck.duration <= 0) return;
 
@@ -1186,6 +1196,7 @@ class DJStore {
    * - En pausa: fija el CUE en currentTime (si se desplazó) y activa reproducción CUP mientras se mantenga presionado.
    */
   public async handleCueDown(deckId: DeckId): Promise<void> {
+    consoleActions.manual(`${deckId}.cue`);
     // CUE durante un backspin lo corta y actúa desde donde llegó
     audioEngine.stopBackspin(deckId);
     this.cancelLoop(deckId);
@@ -1267,6 +1278,7 @@ class DJStore {
    * Si CUP estaba activo, detiene la reproducción y regresa a mainCue.
    */
   public handleCueUp(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.cue`);
     const wasPreviewHeld = this.cuePreviewHeld[deckId];
     this.cuePreviewHeld[deckId] = false;
     const deck = this.getDeckState(deckId);
@@ -1311,7 +1323,21 @@ class DJStore {
   /**
    * Guarda o actualiza un Hot Cue (1 a 8) en la posición indicada (o currentTime actual).
    */
-  public async setHotCue(deckId: DeckId, slotNumber: number, positionSeconds?: number): Promise<boolean> {
+  private cueWrites: Promise<unknown> = Promise.resolve();
+
+  public setHotCue(deckId: DeckId, slotNumber: number, positionSeconds?: number, onlyIfEmpty = false, signal?: AbortSignal): Promise<boolean> {
+    consoleActions.manual(`${deckId}.cue`);
+    const trackId = this.getDeckState(deckId).track?.id;
+    const write = this.cueWrites.then(() => {
+      const deck = this.getDeckState(deckId);
+      if (signal?.aborted || deck.track?.id !== trackId || (onlyIfEmpty && deck.hotCues.some(c => c.id === slotNumber))) return false;
+      return this.writeHotCue(deckId, slotNumber, positionSeconds);
+    });
+    this.cueWrites = write.catch(() => false);
+    return write;
+  }
+
+  private async writeHotCue(deckId: DeckId, slotNumber: number, positionSeconds?: number): Promise<boolean> {
     if (slotNumber < 1 || slotNumber > 8) return false;
     const deck = this.getDeckState(deckId);
     if (!deck.track || deck.duration <= 0) return false;
@@ -1350,6 +1376,7 @@ class DJStore {
    * Salta al Hot Cue indicado respetando el estado de reproducción o pausa actual.
    */
   public jumpToHotCue(deckId: DeckId, slotNumber: number): void {
+    consoleActions.manual(`${deckId}.seek`);
     const deck = this.getDeckState(deckId);
     if (!deck.track || deck.duration <= 0) return;
 
@@ -1362,7 +1389,16 @@ class DJStore {
   /**
    * Elimina un Hot Cue (1 a 8) de la pista y actualiza la persistencia.
    */
-  public async deleteHotCue(deckId: DeckId, slotNumber: number): Promise<boolean> {
+  public deleteHotCue(deckId: DeckId, slotNumber: number): Promise<boolean> {
+    consoleActions.manual(`${deckId}.cue`);
+    const trackId = this.getDeckState(deckId).track?.id;
+    const write = this.cueWrites.then(() => this.getDeckState(deckId).track?.id === trackId
+      ? this.removeHotCue(deckId, slotNumber) : false);
+    this.cueWrites = write.catch(() => false);
+    return write;
+  }
+
+  private async removeHotCue(deckId: DeckId, slotNumber: number): Promise<boolean> {
     if (slotNumber < 1 || slotNumber > 8) return false;
     const deck = this.getDeckState(deckId);
     if (!deck.track) return false;
@@ -1467,6 +1503,7 @@ class DJStore {
    * Si el deck modificado es el Master, propaga el nuevo tempo al Esclavo si está dentro de ±8%.
    */
   public setPitchDeck(deckId: DeckId, pitchValue: number): void {
+    consoleActions.manual(`${deckId}.pitch`);
     const clampedPitch = Math.max(0, Math.min(100, pitchValue));
     const rate = Number((1.0 + ((clampedPitch - 50) / 50) * this.pitchRange).toFixed(4));
     const deckState = this.getDeckState(deckId);
@@ -1574,6 +1611,7 @@ class DJStore {
    * Cancela inmediatamente cualquier micro-slew activo en el deck o en el esclavo dependiente.
    */
   public pitchBend(deckId: DeckId, direction: 'up' | 'down' | 'release'): void {
+    consoleActions.manual(`${deckId}.pitch`);
     const PITCH_BEND_PERCENT = 3.5;
     const bendPercent = direction === 'up'
       ? PITCH_BEND_PERCENT
@@ -1612,6 +1650,7 @@ class DJStore {
 
   /** Activa o desactiva KEY LOCK en el deck. No toca la velocidad ni SYNC. */
   public toggleKeyLock(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.keyLock`);
     const isKeyLocked = !this.getDeckState(deckId).isKeyLocked;
     audioEngine.setDeckKeyLock(deckId, isKeyLocked);
     this.setState({ [deckId === 'A' ? 'deckA' : 'deckB']: { ...this.getDeckState(deckId), isKeyLocked } });
@@ -1642,6 +1681,7 @@ class DJStore {
    *    Slave dependiente (isMaster: false, isSyncActive: true).
    */
   public syncDeck(deckId: DeckId): boolean {
+    consoleActions.manual(`${deckId}.sync`);
     let slaveDeckId: DeckId = deckId;
     let masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
     const deckA = this.getDeckState('A');
@@ -1785,6 +1825,7 @@ class DJStore {
    * - Alineación temporal de pulsos estimados mediante micro-slew.
    */
   public alignPhase(deckId: DeckId): boolean {
+    consoleActions.manual(`${deckId}.sync`);
     const slaveDeckId: DeckId = deckId;
     const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
 
@@ -2022,6 +2063,7 @@ class DJStore {
    * 9. Invalida operaciones obsoletas si la selección o el hash del archivo cambian concurrentemente.
    */
   public prepareBarSync(deckId: DeckId, toleranceSec?: number): BarSyncPlanResult {
+    consoleActions.manual(`${deckId}.bar`);
     this.cancelLoop(deckId);
     const slaveDeckId: DeckId = deckId;
     const masterDeckId: DeckId = deckId === 'A' ? 'B' : 'A';
@@ -2637,6 +2679,7 @@ class DJStore {
 
   /** Botón central del Auto Loop: activa A→B desde el playhead (o `position`) o lo quita. */
   public toggleLoop(deckId: DeckId, position?: number): void {
+    consoleActions.manual(`${deckId}.loop`);
     const deck = this.getDeckState(deckId);
     if (!deck.track || deck.duration <= 0 || deck.playbackState === 'loading' || deck.playbackState === 'error') return;
     if (deck.loop.region) {
@@ -2654,6 +2697,7 @@ class DJStore {
 
   /** − / +: divide o dobla la longitud; con el bucle activo mueve B y A queda fija. */
   public stepLoop(deckId: DeckId, direction: 1 | -1): void {
+    consoleActions.manual(`${deckId}.loop`);
     const deck = this.getDeckState(deckId);
     const beats = stepLoopBeats(deck.loop.beats, direction);
     if (beats === deck.loop.beats) return;
@@ -2694,6 +2738,7 @@ class DJStore {
    * BAR SYNC preparado y no toca los roles de SYNC. Al acabar, el deck queda en pausa donde llegó.
    */
   public backspin(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.transport`);
     const deck = this.getDeckState(deckId);
     if (deck.playbackState !== 'playing' || deck.isBackspinning) return;
     this.isCupPlaying[deckId] = false;
@@ -2725,6 +2770,7 @@ class DJStore {
    * Descarga la pista del deck indicado y libera sus recursos en memoria.
    */
   public unloadDeck(deckId: DeckId): void {
+    consoleActions.manual(`${deckId}.track`);
     const loadedTrack = this.getDeckState(deckId).track;
     this.cancelCup(deckId);
     this.cancelPhaseAlignment(deckId);
@@ -2784,6 +2830,7 @@ class DJStore {
    * Si el master está silenciado, actualiza el nivel nominal pero mantiene la salida física en 0.
    */
   public setMasterVolume(volume: number): void {
+    consoleActions.manual('master');
     const clamped = Math.max(0, Math.min(100, volume));
     try {
       audioEngine.setMasterVolume(this.state.isMasterMuted ? 0 : clamped);
@@ -2808,6 +2855,7 @@ class DJStore {
    * Alterna el silencio del volumen maestro conservando el nivel fijado.
    */
   public toggleMasterMute(): void {
+    consoleActions.manual('mute');
     const isMasterMuted = !this.state.isMasterMuted;
     try {
       audioEngine.setMasterVolume(isMasterMuted ? 0 : this.state.masterVolume);
@@ -2825,6 +2873,7 @@ class DJStore {
    * Ajusta la ganancia / trim de entrada del canal especificado (0 a 100, centro 50 = 1.0x).
    */
   public setChannelGain(deckId: DeckId, gain: number): void {
+    consoleActions.manual(`${deckId}.gain`);
     const clamped = Math.max(0, Math.min(100, gain));
     try {
       audioEngine.setChannelGain(deckId, clamped);
@@ -2854,6 +2903,7 @@ class DJStore {
    * Acepta escala de slider (0..100 con centro 50 = 0 dB) o valores en dB (-12..+12).
    */
   public setChannelEq(deckId: DeckId, band: keyof Omit<ChannelEq, 'filter'>, value: number): void {
+    consoleActions.manual(`${deckId}.${band}`);
     let sliderValue: number;
     let dbValue: number;
 
@@ -2892,6 +2942,7 @@ class DJStore {
    * Acepta escala de slider (0..100 con centro 50 = bypass) o valores bipolares (-100..+100).
    */
   public setChannelFilter(deckId: DeckId, value: number): void {
+    consoleActions.manual(`${deckId}.filter`);
     let sliderValue: number;
     let bipolarValue: number;
 
@@ -2929,6 +2980,7 @@ class DJStore {
    * Ajusta el fader lineal de volumen del canal (0 a 100).
    */
   public setChannelVolume(deckId: DeckId, volume: number): void {
+    consoleActions.manual(`${deckId}.volume`);
     const clamped = Math.max(0, Math.min(100, volume));
     try {
       audioEngine.setChannelVolume(deckId, clamped);
@@ -2957,6 +3009,7 @@ class DJStore {
    * Ajusta la posición del crossfader (0 a 100) y sincroniza con el motor usando la curva actual.
    */
   public setCrossfader(position: number): void {
+    consoleActions.manual('crossfader');
     const clamped = Math.max(0, Math.min(100, position));
     try {
       audioEngine.setCrossfader(clamped, this.state.mixer.crossfaderCurve);
@@ -2981,6 +3034,7 @@ class DJStore {
    * Modifica la curva de atenuación del crossfader y recalcula las ganancias con la posición actual.
    */
   public setCrossfaderCurve(curve: CrossfaderCurve): void {
+    consoleActions.manual('curve');
     try {
       audioEngine.setCrossfader(this.state.mixer.crossfader, curve);
     } catch {
@@ -3023,6 +3077,7 @@ class DJStore {
    * auriculares apagado, crossfader centrado y master al 100 % sin mute.
    */
   public resetMixerControls(): void {
+    consoleActions.manual('reset');
     const decks = ['A', 'B'] as const;
     for (const deckId of decks) {
       this.cuePreviewHeld[deckId] = false;

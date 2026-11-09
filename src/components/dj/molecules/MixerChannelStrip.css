@@ -1,6 +1,6 @@
 /* Columna de canal: cabecera, cinco pomos apilados, CUE y el fader con su vúmetro */
 .mixer-channel {
-  --knob-width-channel: var(--mixer-knob, 2.4rem);
+  --knob-width-channel: var(--mixer-channel-knob, clamp(3.0rem, 15cqi, 3.8rem));
 
   display: flex;
   flex-direction: column;
@@ -15,20 +15,44 @@
   padding: 2px;
 }
 
-.mixer-channel__knobs,
+.mixer-channel__knobs {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  justify-content: center;
+  column-gap: 17px;
+  row-gap: 27px;
+  width: 100%;
+}
+
 .mixer-channel__eq {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--mixer-gap, 8px) * 0.6);
+  display: contents;
+}
+
+.mixer-channel__filter,
+.mixer-channel__knobs> :last-child {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
+.mixer-channel__filter .console-knob__side--start {
+  right: calc(100% + 13px);
+}
+
+.mixer-channel__filter .console-knob__side--end {
+  left: calc(100% + 13px);
+}
+
+.mixer-channel__filter .console-knob__label {
+  margin-top: 6px;
 }
 
 .mixer-channel__cue {
   flex: none;
-  height: 22px;
-  min-height: 22px;
+  height: 24px;
+  min-height: 24px;
   padding: 0 10px;
-  font-size: 11px;
+  font-size: 13px;
+  margin-block: clamp(8px, 2.5cqi, 14px);
 }
 
 /* Fader centrado bajo los pomos; el vúmetro, pegado del lado del MASTER */
@@ -50,14 +74,15 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 14px;
   min-height: 0;
+  border-radius: 3px;
 }
 
 .mixer-channel--a .mixer-channel__meter {
-  left: calc(50% + 1.45rem);
+  left: calc(50% + 1.90rem);
 }
 
 .mixer-channel--b .mixer-channel__meter {
-  right: calc(50% + 1.45rem);
+  right: calc(50% + 1.90rem);
 }

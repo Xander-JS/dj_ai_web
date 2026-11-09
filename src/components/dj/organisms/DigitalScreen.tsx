@@ -68,9 +68,9 @@ export const DigitalScreen: React.FC = () => {
         ) : (
           <div className="digital-screen__normal">
             {renderIdent(deckA)}
-            <ScreenWaveform deck={deckA} onSeek={(position) => seekDeck('A', position)} />
+            <ScreenWaveform deck={deckA} gridEnabled={screen.gridEnabled} onSeek={(position) => seekDeck('A', position)} />
             {renderIdent(deckB)}
-            <ScreenWaveform deck={deckB} onSeek={(position) => seekDeck('B', position)} />
+            <ScreenWaveform deck={deckB} gridEnabled={screen.gridEnabled} onSeek={(position) => seekDeck('B', position)} />
             <div className="digital-screen__tech">
               <ScreenTechInfo deck={deckA} />
               <ScreenTechInfo deck={deckB} />

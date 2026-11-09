@@ -89,7 +89,7 @@
   --screen-ink-faint: hsl(215 12% 65%);
   --screen-line: hsl(215 15% 80%);
   --screen-line-strong: hsl(215 15% 65%);
-  --screen-wave-bar-line: rgba(0, 0, 0, 0.14);
+  --screen-wave-bar-line: rgba(0, 0, 0, 0.3);
 }
 
 [data-theme='light'] .digital-screen__display {

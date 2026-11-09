@@ -18,6 +18,7 @@ import './ScreenWaveform.css';
 
 export interface ScreenWaveformProps {
   deck: DeckStoreState;
+  gridEnabled: boolean;
   onSeek(positionSeconds: number): void;
 }
 
@@ -80,7 +81,7 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
  * desplaza con la posición real del motor. Arrastrar busca al soltar; ← / → buscan ±1 s
  * (con Shift, ±5 s) mientras tiene el foco.
  */
-export const ScreenWaveform: React.FC<ScreenWaveformProps> = ({ deck, onSeek }) => {
+export const ScreenWaveform: React.FC<ScreenWaveformProps> = ({ deck, gridEnabled, onSeek }) => {
   const { t } = useTranslation();
   const { deckId, duration, currentTime } = deck;
   const id = deckId.toLowerCase();
@@ -93,7 +94,7 @@ export const ScreenWaveform: React.FC<ScreenWaveformProps> = ({ deck, onSeek }) 
   useLayoutEffect(() => {
     viewRef.current = {
       deck,
-      grid: getBarGrid(deck.track, getAnalyzedBpm(deck.track)),
+      grid: gridEnabled ? getBarGrid(deck.track, getAnalyzedBpm(deck.track)) : null,
       detailKey: deck.track ? waveformDetailKey(deck.track.id, deck.track.fileMeta?.contentHash) : '',
     };
     zoomedWaveformLoop.invalidate();
@@ -198,8 +199,14 @@ export const ScreenWaveform: React.FC<ScreenWaveformProps> = ({ deck, onSeek }) 
       if (view.grid) {
         ctx.fillStyle = palette.barLine;
         const lineWidth = Math.max(1, Math.round(dpr));
+        const beatGrid = { origin: view.grid.origin, period: view.grid.period / track.downbeat!.confirmation!.beatsPerBar };
+        ctx.globalAlpha = 0.65;
+        for (let beat = firstBarAtOrAfter(beatGrid, Math.max(0, start)); beat <= Math.min(total, end); beat += beatGrid.period) {
+          ctx.fillRect(xAt(beat), 0, lineWidth, height);
+        }
+        ctx.globalAlpha = 1;
         for (let bar = firstBarAtOrAfter(view.grid, Math.max(0, start)); bar <= Math.min(total, end); bar += view.grid.period) {
-          ctx.fillRect(xAt(bar), 0, lineWidth, height);
+          ctx.fillRect(xAt(bar), 0, Math.max(1, Math.round(1.5 * dpr)), height);
         }
       }
 

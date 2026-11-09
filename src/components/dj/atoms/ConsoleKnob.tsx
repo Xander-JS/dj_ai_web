@@ -27,6 +27,7 @@ export interface ConsoleKnobProps {
   /** Canales: cuerpo anodizado y arco del color del deck. Master: aluminio y luz neutra. */
   tone: ConsoleTone;
   disabled?: boolean;
+  className?: string;
   onValueChange: (value: number) => void;
 }
 
@@ -81,6 +82,7 @@ export const ConsoleKnob: React.FC<ConsoleKnobProps> = ({
   size = 'channel',
   tone,
   disabled = false,
+  className,
   onValueChange,
   ...aria
 }) => {
@@ -120,7 +122,7 @@ export const ConsoleKnob: React.FC<ConsoleKnobProps> = ({
 
   return (
     <div
-      className={clsx('console-knob', `console-knob--${size}`, `console-tone-${tone}`, disabled && 'is-disabled')}
+      className={clsx('console-knob', `console-knob--${size}`, `console-tone-${tone}`, disabled && 'is-disabled', className)}
       style={{ '--knob-angle': `${angle - K.indicatorAngle}deg`, '--knob-pointer': `${angle}deg` } as React.CSSProperties}
     >
       <span className="console-knob__row">

@@ -14,8 +14,10 @@ export function applyAppearanceToRoot(
   root.setAttribute('data-density', settings.density);
   // data-accent selecciona los valores --sd-accent* de tokens.css (identidad v2)
   root.setAttribute('data-accent', settings.accentColor);
-  // data-console-design elige el reskin plano de la consola (consoleDesignSystem.css)
-  root.setAttribute('data-console-design', settings.consoleDesign);
+  // data-console-design elige el reskin plano de la consola (consoleDesignSystem.css).
+  // La consola Classic solo aplica en modo oscuro; en modo claro se usa siempre system.
+  const effectiveConsoleDesign = settings.theme === 'light' && settings.consoleDesign === 'classic' ? 'system' : settings.consoleDesign;
+  root.setAttribute('data-console-design', effectiveConsoleDesign);
   // Las animaciones opcionales se apagan desde CSS con :root[data-animations='off']
   root.setAttribute('data-animations', settings.animations === false ? 'off' : 'on');
   // Solo marca la preferencia; la disposición alternativa todavía no existe

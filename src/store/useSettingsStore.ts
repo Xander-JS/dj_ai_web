@@ -169,8 +169,12 @@ function pick<T>(value: unknown, allowed: readonly T[], fallback: T): T {
 export function sanitizeSettings(raw: unknown): AppSettings {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<Record<keyof AppSettings, unknown>>;
   const d = DEFAULT_SETTINGS;
+  const theme = pick(source.theme, ['light', 'dark'] as const, d.theme);
+  const rawConsoleDesign = pick(source.consoleDesign, CONSOLE_DESIGNS, d.consoleDesign);
+  // La consola Classic solo está permitida en modo oscuro al no contar con paleta adaptada para claro
+  const consoleDesign = theme === 'light' && rawConsoleDesign === 'classic' ? 'system' : rawConsoleDesign;
   return {
-    theme: pick(source.theme, ['light', 'dark'] as const, d.theme),
+    theme,
     accentColor: pick(source.accentColor, ACCENT_COLORS, d.accentColor),
     density: pick(source.density, ['standard', 'compact'] as const, d.density),
     language: pick(source.language, ['es', 'en'] as const, d.language),
@@ -188,7 +192,7 @@ export function sanitizeSettings(raw: unknown): AppSettings {
     animations: typeof source.animations === 'boolean' ? source.animations : d.animations,
     visualizerIntensity: pick(source.visualizerIntensity, VISUALIZER_INTENSITIES, d.visualizerIntensity),
     jogDisc: pick(source.jogDisc, JOG_DISCS, d.jogDisc),
-    consoleDesign: pick(source.consoleDesign, CONSOLE_DESIGNS, d.consoleDesign),
+    consoleDesign,
     experimentalInterface: typeof source.experimentalInterface === 'boolean' ? source.experimentalInterface : d.experimentalInterface,
   };
 }

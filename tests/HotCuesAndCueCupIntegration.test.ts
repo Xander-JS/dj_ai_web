@@ -144,6 +144,24 @@ describe('Fase 23.2 — Hot Cues y CUE Principal con CUP', () => {
   // ==========================================
   // 1. Guardar y activar los 8 Hot Cues
   // ==========================================
+  it('serializes automatic vacant-slot creation with manual cue edits without losing other slots', async () => {
+    const file = createTestAudioFile('concurrent-cues.mp3');
+    const track = createTrackFromFile(file, 200);
+    await indexedDBStorage.saveTrack(track, file);
+    await djStore.loadTrackToDeckA(track);
+    await Promise.all([
+      djStore.setHotCue('A', 5, 10, true),
+      djStore.setHotCue('A', 5, 25),
+      djStore.setHotCue('A', 6, 50, true),
+    ]);
+    assert.equal(await djStore.setHotCue('A', 5, 99, true), false);
+    const saved = await indexedDBStorage.getTrackCues(track.id);
+    assert.deepEqual(saved?.hotCues.map(c => [c.id,c.position]), [[5,25],[6,50]]);
+    assert.deepEqual(djStore.getSnapshot().deckA.hotCues.map(c => [c.id,c.position]), [[5,25],[6,50]]);
+    const controller = new AbortController(); controller.abort();
+    assert.equal(await djStore.setHotCue('A', 7, 70, true, controller.signal), false);
+  });
+
   it('1.1 Debe permitir guardar y activar de forma independiente cada uno de los 8 Hot Cues', async () => {
     const file = createTestAudioFile('track_eight_cues.mp3');
     const track = createTrackFromFile(file, 200.0);

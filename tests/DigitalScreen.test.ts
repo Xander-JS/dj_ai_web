@@ -426,7 +426,7 @@ describe('Pantalla digital — estructura, accesibilidad e i18n', () => {
     const row = read('src/components/dj/molecules/ScreenButtonRow.tsx');
     const order = ['screen-key-menu', 'screen-key-grid', "loadKey('A')", "loadKey('B')", 'screen-key-rec'].map((id) => row.indexOf(id));
     assert.ok(order.every((index, i) => index > 0 && (i === 0 || index > order[i - 1])), 'orden de la botonera');
-    assert.equal(row.match(/aria-pressed=/g)?.length, 4, 'MENU, GRID, LOAD (compartido) y REC');
+    assert.equal(row.match(/aria-pressed=/g)?.length, 5, 'MENU, GRID, LOAD (compartido), REC y AUTOMÁTICO');
     assert.match(row, /disabled=\{menuOpen\}/, 'GRID atenuado con el menú abierto');
     assert.match(row, /t\('mixer\.rec_stop'\) : t\('mixer\.rec_start'\)/);
   });

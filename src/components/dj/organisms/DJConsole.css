@@ -26,14 +26,9 @@
 
 .dj-console__housing {
   display: grid;
-  /* ≈ 35 / 30 / 35 del ancho, como el boceto */
-  grid-template-columns: minmax(0, 30fr) minmax(420, 40fr) minmax(0, 30fr);
-  grid-template-areas:
-    "top top top"
-    "deck-a mixer deck-b";
-  /* Gutter horizontal pleno entre decks y mixer; vertical recortado para ganar alto */
+  /* ≈ 30 / 40 / 30 del ancho, como el boceto */
+  grid-template-columns: minmax(0, 30fr) minmax(420px, 40fr) minmax(0, 30fr);
   column-gap: var(--layout-gutter);
-  row-gap: var(--space-2);
   padding: 0 var(--layout-gutter) var(--space-2);
   border-radius: 18px;
   background: var(--console-plastic);
@@ -44,60 +39,50 @@
     var(--console-housing-shadow);
 }
 
-/* Fila superior: DOWNBEAT & COMPÁS A · pantalla · DOWNBEAT & COMPÁS B */
-.dj-console__top {
-  grid-area: top;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-areas: "downbeat-a screen downbeat-b";
-  gap: var(--layout-gutter);
+.dj-console__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   min-width: 0;
 }
 
-/* Cada módulo baja hasta el borde inferior de la pantalla, justo sobre su deck; el display LED
-   del deck ocupa el hueco libre encima, a su mismo ancho */
-.dj-console__downbeat {
-  align-self: end;
-  display: flex;
-  flex-direction: column;
-  gap: var(--layout-gutter);
-  /* Separación del borde superior de la carcasa: el mismo margen interior que en sus otros lados */
+.dj-console__col--a,
+.dj-console__col--b {
   padding-top: var(--layout-gutter);
 }
 
-.dj-console__downbeat--a {
-  grid-area: downbeat-a;
+.dj-console__col--center {
+  padding-top: 0;
 }
 
-.dj-console__downbeat--b {
-  grid-area: downbeat-b;
+/* Cada módulo de downbeat baja sobre su deck; el display LED ocupa el hueco libre encima */
+.dj-console__downbeat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--layout-gutter);
 }
 
-/* La pantalla queda centrada sobre el mixer; los dos módulos DOWNBEAT & COMPÁS ocupan, a partes
-   iguales, todo el ancho que queda a sus lados. */
+.dj-console__deck {
+  flex: 1;
+  min-width: 0;
+}
+
+/* La pantalla queda centrada sobre el mixer; sobresale por encima del borde superior */
 .dj-console__screen {
-  grid-area: screen;
   position: relative;
-  justify-self: center;
+  align-self: center;
   /* ≈ 31 % del ancho, con un mínimo que deja leer la información técnica de ambos decks */
   width: clamp(27rem, 31.25cqi, 42rem);
   height: var(--console-screen-height);
   margin-top: calc(-1 * var(--console-screen-rise));
 }
 
-.dj-console__deck,
+/* El mixer ocupa todo el espacio sobrante bajo el indicador de la pantalla */
 .dj-console__mixer {
+  flex: 1;
+  margin-top: calc(26px + 4px);
   min-width: 0;
-}
-
-.dj-console__deck--a {
-  grid-area: deck-a;
-}
-
-.dj-console__deck--b {
-  grid-area: deck-b;
-}
-
-.dj-console__mixer {
-  grid-area: mixer;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }

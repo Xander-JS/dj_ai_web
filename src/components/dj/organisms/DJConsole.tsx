@@ -70,27 +70,31 @@ export const DJConsole: React.FC = () => {
         }
       >
         <div className="dj-console__housing">
-          <div className="dj-console__top">
+          <div className="dj-console__col dj-console__col--a">
             <div className="dj-console__downbeat dj-console__downbeat--a downbeat-panel-host">
               <DeckLedPanel deckName="A" />
               <DownbeatPanel deckName="A" />
             </div>
+            <div className="dj-console__deck dj-console__deck--a">
+              <Deck deckName="A" />
+            </div>
+          </div>
+          <div className="dj-console__col dj-console__col--center">
             <div className="dj-console__screen">
               <DigitalScreen />
             </div>
+            <div className="dj-console__mixer">
+              <MixerConsole />
+            </div>
+          </div>
+          <div className="dj-console__col dj-console__col--b">
             <div className="dj-console__downbeat dj-console__downbeat--b downbeat-panel-host">
               <DeckLedPanel deckName="B" />
               <DownbeatPanel deckName="B" />
             </div>
-          </div>
-          <div className="dj-console__deck dj-console__deck--a">
-            <Deck deckName="A" />
-          </div>
-          <div className="dj-console__mixer">
-            <MixerConsole />
-          </div>
-          <div className="dj-console__deck dj-console__deck--b">
-            <Deck deckName="B" />
+            <div className="dj-console__deck dj-console__deck--b">
+              <Deck deckName="B" />
+            </div>
           </div>
         </div>
       </div>

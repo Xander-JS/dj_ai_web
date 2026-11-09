@@ -212,6 +212,15 @@
     box-shadow: none;
   }
 
+  /* El botón circular del master toma el tono de fondo del housing (carcasa que contiene CH1, CH2 y Mixer),
+     reforzado con un tinte más intenso para resaltar */
+  & .console-tone-master .console-knob__cap,
+  & .console-knob--master .console-knob__cap {
+    background: color-mix(in srgb, var(--sd-ink) 24%, var(--console-plastic));
+    border: 1px solid color-mix(in srgb, var(--sd-ink) 35%, transparent);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+  }
+
   /* Los knobs de canal adoptan la identidad cromática de su respectiva pista (A / B) */
   & .console-tone-a .console-knob__cap,
   & .console-tone-b .console-knob__cap {

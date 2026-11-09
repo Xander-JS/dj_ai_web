@@ -58,7 +58,7 @@
   content: attr(data-tooltip);
   position: absolute;
   top: calc(100% + 6px);
-  left: 50%;
+  left: 0;
   z-index: 1000;
   width: max-content;
   max-width: 280px;
@@ -78,7 +78,7 @@
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
-  transform: translate(-50%, -2px);
+  transform: translateY(-2px);
   transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
 }
 
@@ -86,7 +86,7 @@
 .console-badge[data-tooltip]:not([data-tooltip=""]):focus-visible::after {
   opacity: 1;
   visibility: visible;
-  transform: translate(-50%, 0);
+  transform: translateY(0);
 }
 
 @media (prefers-reduced-motion: reduce) {

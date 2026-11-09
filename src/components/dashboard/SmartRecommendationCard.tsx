@@ -451,8 +451,8 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
               <p className="smart-rec-empty-hint" role="status">{t('dashboard.reference_analysis_required')}</p>
             )}
 
-            {/* Estados de Contenido: carga, invitación y resultados ocupan el mismo hueco
-                (.smart-rec-slot, alto mínimo común), así que pasar de uno a otro no mueve la página */}
+            {/* Estados de Contenido: carga y resultados ocupan el mismo hueco
+                (.smart-rec-slot, alto mínimo común), así que calcular no genera saltos */}
             {isCalculating && (
               <EmptyState
                 status="loading"
@@ -480,7 +480,7 @@ export const SmartRecommendationCard: React.FC<SmartRecommendationCardProps> = (
               !errorMsg &&
               referenceTrack &&
               recommendations.length === 0 && insufficientCandidateCount === 0 && (
-                <div className="smart-rec-empty-box smart-rec-slot">
+                <div className="smart-rec-empty-box">
                   <Icon icon={SlidersVertical} size="lg" />
                   <p>
                     {t('dashboard.current_track_info', {

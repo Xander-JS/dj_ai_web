@@ -819,6 +819,8 @@
       "classic": "Clásico"
     },
     "console_design_default": "Predeterminado",
+    "console_design_dark_only": "Solo disponible en modo oscuro",
+    "console_design_dark_only_notice": "La consola Clásica solo está optimizada para modo oscuro. Cambia el tema a Oscuro para activarla.",
     "language_desc": "Se aplica al momento a toda la aplicación.",
     "audio_mixer_title": "Mezcla",
     "audio_engine_title": "Motor de audio",

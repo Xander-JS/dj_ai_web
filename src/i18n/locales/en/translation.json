@@ -819,6 +819,8 @@
       "classic": "Classic"
     },
     "console_design_default": "Default",
+    "console_design_dark_only": "Dark mode only",
+    "console_design_dark_only_notice": "The Classic console is only optimized for dark mode. Switch your theme to Dark to enable it.",
     "language_desc": "Applies to the whole app straight away.",
     "audio_mixer_title": "Mixing",
     "audio_engine_title": "Audio engine",

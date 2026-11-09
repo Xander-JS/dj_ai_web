@@ -6,11 +6,11 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { audioEngine } from '../../audio';
-import { djStore } from '../../store/useDJStore';
-import { notificationCenter } from '../notifications/notificationCenter';
-import { PlayerQueue, type PlayerQueueState } from './playerQueue';
-import { recentPreview } from './recentPreview';
+import { audioEngine } from '../../audio/index.ts';
+import { djStore } from '../../store/useDJStore.ts';
+import { notificationCenter } from '../notifications/notificationCenter.ts';
+import { PlayerQueue, type PlayerQueueState } from './playerQueue.ts';
+import { recentPreview } from './recentPreview.ts';
 
 /** Deck que actúa como reproductor de la barra inferior. */
 export const PLAYER_DECK = 'A' as const;

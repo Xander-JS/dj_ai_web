@@ -6,9 +6,9 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { indexedDBStorage } from '../storage/IndexedDBStorage';
-import { djStore } from '../../store/useDJStore';
-import type { Track } from '../../types/track';
+import { indexedDBStorage } from '../storage/IndexedDBStorage.ts';
+import { djStore } from '../../store/useDJStore.ts';
+import type { Track } from '../../types/track.ts';
 
 export interface RecentPreviewState {
   trackId: string | null;

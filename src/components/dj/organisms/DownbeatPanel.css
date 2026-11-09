@@ -10,8 +10,8 @@
 }
 
 .downbeat-panel {
-  --downbeat-text-sm: 12px;
-  --downbeat-text-lcd: 14px;
+  --downbeat-text-sm: 14px;
+  --downbeat-text-lcd: 16px;
   --downbeat-zone-gap: 14px;
 
   display: flex;
@@ -45,7 +45,7 @@
 .downbeat-panel__title {
   margin: 0;
   color: var(--console-silkscreen);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: var(--font-weight-bold, 700);
   letter-spacing: 0.14em;
   line-height: 1;
@@ -95,11 +95,13 @@
 }
 
 /* Líneas divisorias verticales impresas entre zonas */
-.downbeat-panel__zone + .downbeat-panel__zone {
+.downbeat-panel__zone+.downbeat-panel__zone {
   border-inline-start: 1px solid var(--console-divider);
 }
 
-.downbeat-panel__zone--leds { grid-area: leds; }
+.downbeat-panel__zone--leds {
+  grid-area: leds;
+}
 
 .downbeat-panel__zone--meter {
   grid-area: meter;
@@ -203,4 +205,3 @@
     row-gap: 6px;
   }
 }
-

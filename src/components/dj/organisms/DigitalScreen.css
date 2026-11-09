@@ -14,11 +14,13 @@
   --screen-alert: hsl(356 90% 62%);
   --screen-playhead: hsl(356 92% 58%);
   --screen-pad: 8px;
-  --screen-text-xs: 9.5px;
-  --screen-text-sm: 11.5px;
-  --screen-text-md: 13px;
+  --screen-text-xs: 12px;
+  --screen-text-sm: 13.5px;
+  --screen-text-md: 15.5px;
+  --screen-key-height: 28px;
+}
 
-  position: relative;
+.digital-screen {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -74,7 +76,7 @@
 }
 
 /* El contador de grabación ocupa la esquina: el título del Deck A se trunca antes */
-.digital-screen__display.is-recording .digital-screen__normal > :first-child {
+.digital-screen__display.is-recording .digital-screen__normal> :first-child {
   padding-right: 64px;
 }
 

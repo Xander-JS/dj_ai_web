@@ -14,19 +14,19 @@ export interface LedMarker {
 export type LedMatrixContent =
   | { kind: 'text'; text: string; color: LedColor }
   | {
-      kind: 'overview';
-      color: LedColor;
-      /** Picos 0–1 del análisis; vacío o ausente = solo la línea base. */
-      peaks?: number[];
-      /** Fracción de la pista que cubren los picos (duración analizada / duración real). */
-      coverage: number;
-      /** Posición del playhead, 0–1; `null` sin pista. */
-      progress: number | null;
-      /** Marcadores en orden de dibujo (el último queda encima). */
-      markers: LedMarker[];
-      /** Región del Auto Loop (0–1): banda translúcida en el color del loop bajo la onda. */
-      region?: { from: number; to: number } | null;
-    };
+    kind: 'overview';
+    color: LedColor;
+    /** Picos 0–1 del análisis; vacío o ausente = solo la línea base. */
+    peaks?: number[];
+    /** Fracción de la pista que cubren los picos (duración analizada / duración real). */
+    coverage: number;
+    /** Posición del playhead, 0–1; `null` sin pista. */
+    progress: number | null;
+    /** Marcadores en orden de dibujo (el último queda encima). */
+    markers: LedMarker[];
+    /** Región del Auto Loop (0–1): banda translúcida en el color del loop bajo la onda. */
+    region?: { from: number; to: number } | null;
+  };
 
 export interface LedMatrixDisplayProps {
   content: LedMatrixContent;
@@ -42,7 +42,7 @@ const SCROLL_DOTS_PER_SEC = 70 / PITCH;
 const SCROLL_GAP = 24;
 const PAGE_MS = 2500;
 const TEXT_MARGIN = 1;
-const FONT = '700 12px system-ui, sans-serif';
+const FONT = '700 13px system-ui, sans-serif';
 const PLAYHEAD = '--console-led-red';
 const LOOP = '--console-loop';
 

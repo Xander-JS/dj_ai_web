@@ -6,6 +6,8 @@
 // histórico por usuario en memoria. En serverless puede haber varias instancias, así
 // que este límite es "best-effort" por instancia. Si hiciera falta un límite estricto
 // global, se migraría a Vercel KV / una tabla de Supabase.
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { IncomingMessage } from 'node:http';
 
 const MAX_REQUEST_BYTES = 16384;
 const CONTROLS = ['low', 'mid', 'high', 'filter', 'volume', 'gain', 'pitch', 'hotCue', 'loop', 'barSync'] as const;
@@ -212,30 +214,41 @@ async function generate(body: Input, authorization: string, signal: AbortSignal)
   }
 }
 
-function errorResponse(status: number, code: string): Response {
-  return new Response(JSON.stringify({ detail: code }), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
+// Leemos el cuerpo manualmente para acotar el tamaño exactamente a 16 KB.
+export const config = { api: { bodyParser: false } };
+
+async function readBody(req: IncomingMessage, limit: number): Promise<Buffer | null> {
+  const chunks: Buffer[] = [];
+  let length = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    length += buffer.length;
+    if (length > limit) return null;
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
 }
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== 'POST') return errorResponse(405, 'method_not_allowed');
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store');
 
-  const authorization = request.headers.get('authorization') ?? '';
-  if (!authorization.startsWith('Bearer ')) return errorResponse(401, 'session_required');
+  if (req.method !== 'POST') { res.status(405).json({ detail: 'method_not_allowed' }); return; }
 
-  const contentLength = Number(request.headers.get('content-length') ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) return errorResponse(413, 'request_too_large');
-  const raw = new Uint8Array(await request.arrayBuffer());
-  if (raw.byteLength > MAX_REQUEST_BYTES) return errorResponse(413, 'request_too_large');
+  const authorization = req.headers.authorization ?? '';
+  if (!authorization.startsWith('Bearer ')) { res.status(401).json({ detail: 'session_required' }); return; }
+
+  const contentLength = Number(req.headers['content-length'] ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) { res.status(413).json({ detail: 'request_too_large' }); return; }
+  const raw = await readBody(req, MAX_REQUEST_BYTES);
+  if (raw === null) { res.status(413).json({ detail: 'request_too_large' }); return; }
 
   let body: Input;
   try {
-    body = parseInput(JSON.parse(new TextDecoder().decode(raw)));
+    body = parseInput(JSON.parse(raw.toString('utf8')));
   } catch (error) {
-    if (error instanceof HttpError) return errorResponse(error.status, error.code);
-    return errorResponse(400, 'invalid_request');
+    if (error instanceof HttpError) { res.status(error.status).json({ detail: error.code }); return; }
+    res.status(400).json({ detail: 'invalid_request' });
+    return;
   }
 
   const controller = new AbortController();
@@ -243,14 +256,11 @@ export default async function handler(request: Request): Promise<Response> {
   try {
     const plan = await generate(body, authorization, controller.signal);
     // Equivale a plan.model_dump(exclude_none=True): deck ausente se omite.
-    return new Response(JSON.stringify({ plan }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
-    });
+    res.status(200).json({ plan });
   } catch (error) {
-    if (error instanceof HttpError) return errorResponse(error.status, error.code);
-    if (error instanceof Error && error.name === 'AbortError') return errorResponse(504, 'timeout');
-    return errorResponse(502, 'invalid_provider_response');
+    if (error instanceof HttpError) { res.status(error.status).json({ detail: error.code }); return; }
+    if (error instanceof Error && error.name === 'AbortError') { res.status(504).json({ detail: 'timeout' }); return; }
+    res.status(502).json({ detail: 'invalid_provider_response' });
   } finally {
     clearTimeout(timer);
   }

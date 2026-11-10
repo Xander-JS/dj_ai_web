@@ -281,6 +281,11 @@ export default defineConfig(({ mode }) => {
   const apiKey = deepseekKey || env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
   return {
+    build: {
+      // En escritorio los assets se cargan desde disco local, así que el peso del
+      // chunk no afecta: subimos el límite para silenciar el aviso de Vite.
+      chunkSizeWarningLimit: 1500,
+    },
     plugins: [react(), geminiDevApiPlugin(apiKey, provider)],
     server: {
       proxy: { "/api/ai/mix-plan": "http://127.0.0.1:8000" },

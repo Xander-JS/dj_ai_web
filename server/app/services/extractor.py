@@ -40,6 +40,11 @@ _INSPECT_OPTIONS = {
     "noplaylist": True,
     "skip_download": True,
     "format": "bestaudio/best",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["ios", "android", "mweb", "web"]
+        }
+    },
 }
 
 
@@ -95,6 +100,7 @@ async def open_audio_stream(video: VideoInfo) -> AsyncIterator[bytes]:
             sys.executable, "-m", "yt_dlp",
             "--quiet", "--no-warnings", "--no-playlist", "--no-part",
             "--no-cache-dir", "--no-progress",
+            "--extractor-args", "youtube:player-client=ios,android,mweb,web",
             "-f", "bestaudio/best",
             "-o", "-",
             video.url,

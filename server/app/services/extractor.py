@@ -40,11 +40,8 @@ _INSPECT_OPTIONS = {
     "noplaylist": True,
     "skip_download": True,
     "format": "bestaudio/best",
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["ios", "android", "mweb", "web"]
-        }
-    },
+    # Use yt-dlp's maintained clients and the Node runtime already used by the app.
+    "js_runtimes": {"node": {}},
 }
 
 
@@ -98,9 +95,10 @@ async def open_audio_stream(video: VideoInfo) -> AsyncIterator[bytes]:
     try:
         downloader = await asyncio.create_subprocess_exec(
             sys.executable, "-m", "yt_dlp",
+            "--ignore-config",
             "--quiet", "--no-warnings", "--no-playlist", "--no-part",
             "--no-cache-dir", "--no-progress",
-            "--extractor-args", "youtube:player-client=ios,android,mweb,web",
+            "--js-runtimes", "node",
             "-f", "bestaudio/best",
             "-o", "-",
             video.url,

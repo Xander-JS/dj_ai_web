@@ -100,4 +100,6 @@ Production: run `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1` fr
 
 Each activation plans a reference track at most once, with at most five candidates, eight adjustments and 700 output tokens. There are no automatic retries or periodic model calls. Stopping/unmounting aborts the client request; a disconnect cancels the backend task and closes the upstream connection. A request already accepted by the provider may still be billed. Calls that failed or were cancelled also count towards the backend quota.
 
+YouTube import requires ffmpeg and Node.js 22+ on the backend's PATH. Install/update the extractor and its JavaScript solver with `server/.venv/bin/python -m pip install --upgrade -r server/requirements.txt` from the repository root, then restart the backend. The service uses yt-dlp's default YouTube clients and explicitly enables Node for both inspection and streaming. See the [yt-dlp JavaScript setup guide](https://github.com/yt-dlp/yt-dlp/wiki/EJS).
+
 Tests: `cd server && .venv/bin/python -m unittest discover -s tests`, plus `npm test` at repository root. These use simulated provider responses and do not certify subjective musical quality or a live deployment.

@@ -1,4 +1,5 @@
 import type { Track } from '../../types/track.ts';
+import { apiUrl } from './apiBase.ts';
 export interface MixPlan {
   trackId: string;
   enterAfterBeats: number;
@@ -27,7 +28,7 @@ export async function requestMixPlan(reference: Track, candidates: Track[], sign
     bpm: t.analysis.bpm, camelot: t.analysis.camelot, energy: t.analysis.energy,
   } : {}) });
   try {
-    const response = await fetch('/api/ai/mix-plan', {
+    const response = await fetch(apiUrl('/api/ai/mix-plan'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
       body: JSON.stringify({ context, reference: metadata(reference), candidates: candidates.map(metadata) }),
       signal: AbortSignal.any([signal, controller.signal]),

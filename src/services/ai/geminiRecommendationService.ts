@@ -10,6 +10,7 @@
 
 import type { Track, MusicalKeyCamelot } from '../../types/track.ts';
 import { keyToCamelot } from '../../audio/analysis/camelotMapper.ts';
+import { apiUrl } from './apiBase.ts';
 import type {
   TrackCandidateMetadata,
   TrackRecommendation,
@@ -448,7 +449,7 @@ export async function getTrackRecommendations(
   const {
     mode = 'local',
     forceMock = false,
-    endpointUrl = '/api/ai/explanations',
+    endpointUrl = apiUrl('/api/ai/explanations'),
     timeoutMs = 15000,
     signal,
   } = options;
@@ -568,7 +569,7 @@ export async function getTrackRecommendationExplanations(
   recommendations: TrackRecommendation[],
   options: RecommendationExplanationOptions = {}
 ): Promise<AIExplanationResponse> {
-  const { endpointUrl = '/api/ai/explanations', timeoutMs = 15000, signal } = options;
+  const { endpointUrl = apiUrl('/api/ai/explanations'), timeoutMs = 15000, signal } = options;
   if (recommendations.length === 0) return { success: true, explanations: [] };
   if (signal?.aborted) {
     return { success: false, explanations: [], errorCode: 'cancelled' };
